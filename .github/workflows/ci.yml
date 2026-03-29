@@ -1,0 +1,185 @@
+---
+name: CI
+
+on:
+    pull_request:
+        branches:
+            - main
+    push:
+        branches:
+            - feature/**
+            - fix/**
+            - main
+            - release/**
+    workflow_dispatch:
+
+# Required for publish-unit-test-result-action and SonarCloud
+permissions:
+    checks: write
+    contents: write
+    pull-requests: write
+    statuses: write
+
+jobs:
+    config:
+        name: Build matrix config
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        outputs:
+            python-versions: ${{ steps.matrix.outputs.python-versions }}
+            latest-python: ${{ steps.matrix.outputs.latest-python }}
+        steps:
+            - id: matrix
+              shell: bash
+              run: |
+                  echo 'python-versions=["3.12","3.13","3.14"]' >> $GITHUB_OUTPUT
+                  echo 'latest-python=3.14' >> $GITHUB_OUTPUT
+
+    ruff:
+        name: Ruff (${{ matrix.python-version }})
+        needs: config
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        strategy:
+            fail-fast: false
+            matrix:
+                python-version: ${{ fromJson(needs.config.outputs.python-versions) }}
+        steps:
+            - uses: actions/checkout@v6
+
+            - name: Setup environment
+              uses: chrysa/github-actions/tool-setup@v1
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  extras: dev
+
+            - name: Ruff checks
+              uses: chrysa/github-actions/ruff-check@v1
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  latest-python: ${{ needs.config.outputs.latest-python }}
+                  sources: 'guideline_checker tests'
+
+    mypy:
+        name: Mypy (${{ matrix.python-version }})
+        needs: config
+        runs-on: ubuntu-latest
+        continue-on-error: true
+        timeout-minutes: 20
+        strategy:
+            fail-fast: false
+            matrix:
+                python-version: ${{ fromJson(needs.config.outputs.python-versions) }}
+        steps:
+            - uses: actions/checkout@v6
+
+            - name: Setup environment
+              uses: chrysa/github-actions/tool-setup@v1
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  extras: dev
+
+            - name: Mypy check
+              uses: chrysa/github-actions/mypy-check@v1
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  latest-python: ${{ needs.config.outputs.latest-python }}
+                  sources: 'guideline_checker'
+
+    test:
+        name: Test (${{ matrix.python-version }})
+        needs: config
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        strategy:
+            fail-fast: false
+            matrix:
+                python-version: ${{ fromJson(needs.config.outputs.python-versions) }}
+        steps:
+            - uses: actions/checkout@v6
+
+            - name: Setup environment
+              uses: chrysa/github-actions/tool-setup@v1
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  extras: dev
+
+            - name: Run tests
+              uses: chrysa/github-actions/run-tests@v1
+              with:
+                  python-version: ${{ matrix.python-version }}
+                  latest-python: ${{ needs.config.outputs.latest-python }}
+                  cov-module: guideline_checker
+
+    sonar:
+        name: SonarCloud analysis
+        needs: [config, ruff, test]
+        if: always()
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+
+            - name: SonarCloud scan
+              uses: chrysa/github-actions/sonar-scan@v1
+              with:
+                  latest-python: ${{ needs.config.outputs.latest-python }}
+                  sonar-token: ${{ secrets.SONAR_TOKEN }}
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  project-key: ${{ vars.SONAR_PROJECT_KEY }}
+                  organization: ${{ vars.SONAR_ORGANIZATION }}
+                  project-name: guideline-checker
+                  sources: guideline_checker
+                  tests: tests
+
+    release:
+        name: Tag release
+        needs: [ruff, test]
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+
+            - name: Compute version
+              id: gitversion
+              uses: chrysa/github-actions/gitversion@v1
+
+            - name: Check if tag exists
+              id: tag_check
+              shell: bash
+              run: |
+                  VERSION="v${{ steps.gitversion.outputs.majorMinorPatch }}"
+                  if git rev-parse --quiet --verify "refs/tags/$VERSION" > /dev/null 2>&1; then
+                      echo "exists=true" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "exists=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Generate CHANGELOG.md
+              if: steps.tag_check.outputs.exists == 'false'
+              uses: orhun/git-cliff-action@v4
+              with:
+                  config: cliff.toml
+                  args: --tag v${{ steps.gitversion.outputs.majorMinorPatch }}
+              env:
+                  OUTPUT: CHANGELOG.md
+                  GITHUB_REPO: ${{ github.repository }}
+
+            - name: Create tag
+              if: steps.tag_check.outputs.exists == 'false'
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  VERSION="v${{ steps.gitversion.outputs.majorMinorPatch }}"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git config user.name "github-actions[bot]"
+                  git add CHANGELOG.md
+                  git diff --staged --quiet || git commit -m "chore: update CHANGELOG.md for $VERSION"
+                  git tag "$VERSION"
+                  git push origin HEAD:main --tags
