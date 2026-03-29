@@ -1,0 +1,48 @@
+---
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+        interval: weekly
+        day: monday
+    open-pull-requests-limit: 5
+    labels:
+        - dependencies
+        - python
+    groups:
+        testing:
+            patterns:
+                - pytest*
+                - coverage*
+        linting:
+            patterns:
+                - ruff*
+                - mypy*
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+        interval: weekly
+        day: monday
+    open-pull-requests-limit: 5
+    labels:
+        - dependencies
+        - github-actions
+    groups:
+        actions-core:
+            patterns:
+                - actions/*
+        chrysa:
+            patterns:
+                - chrysa/*
+
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+        interval: weekly
+        day: monday
+    open-pull-requests-limit: 5
+    labels:
+        - dependencies
+        - pre-commit
