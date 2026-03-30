@@ -15,7 +15,7 @@ repos:
       - id: check-merge-conflict
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.8
+    rev: c53b915162b475dfc95c73f94219e6f87ace2fca
     hooks:
       - id: ruff
         args: [--fix]
@@ -29,7 +29,7 @@ repos:
         stages: [manual]
 
   - repo: https://github.com/chrysa/pre-commit-tools
-    rev: 0.1.0
+    rev: 0ed8a1e245262ff5233ddbd96c456a76fde375a3
     hooks:
       - id: python-print-detection
       - id: python-pprint-detection
