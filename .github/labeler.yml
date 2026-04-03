@@ -1,0 +1,39 @@
+# Auto-labeling rules for pull requests
+# See: https://github.com/actions/labeler
+
+ci:
+    - changed-files:
+          - any-glob-to-any-file:
+                - '.github/workflows/**'
+                - '.github/dependabot.yml'
+
+pre-commit:
+    - changed-files:
+          - any-glob-to-any-file:
+                - '.pre-commit-config.yaml'
+                - '.pre-commit-hooks.yaml'
+
+documentation:
+    - changed-files:
+          - any-glob-to-any-file:
+                - '*.md'
+                - 'docs/**'
+                - 'README*'
+
+dependencies:
+    - changed-files:
+          - any-glob-to-any-file:
+                - 'pyproject.toml'
+                - 'requirements*.txt'
+                - 'package.json'
+                - 'package-lock.json'
+
+configuration:
+    - changed-files:
+          - any-glob-to-any-file:
+                - '*.toml'
+                - '*.yml'
+                - '*.yaml'
+                - '*.json'
+                - '.env*'
+                - 'Makefile'
