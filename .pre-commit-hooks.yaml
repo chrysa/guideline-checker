@@ -3,9 +3,6 @@
   description: Check project files against .github/instructions/ rules and generate an HTML report
   entry: guideline-checker
   language: python
-  language_version: python3.12
-  args: [check, --fail-on, warning]
+  args: [check, --fail-on, error]
   pass_filenames: false
-  always_run: false
-  stages: [pre-push, manual]
-  additional_dependencies: []
+  always_run: true
