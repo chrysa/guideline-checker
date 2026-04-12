@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from guideline_checker.cli import build_parser, main
 
 
@@ -40,7 +42,7 @@ def test_build_parser_default_values() -> None:
     assert args.json is None
 
 
-def test_main_no_command(capsys) -> None:
+def test_main_no_command(capsys: pytest.CaptureFixture[str]) -> None:
     code = main([])
     assert code == 0
     captured = capsys.readouterr()
