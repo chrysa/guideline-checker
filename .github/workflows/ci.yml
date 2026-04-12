@@ -58,6 +58,7 @@ jobs:
               with:
                   python-version: ${{ matrix.python-version }}
                   latest-python: ${{ needs.config.outputs.latest-python }}
+                  config: ruff.toml
                   sources: 'guideline_checker tests'
 
     mypy:
@@ -84,6 +85,7 @@ jobs:
               with:
                   python-version: ${{ matrix.python-version }}
                   latest-python: ${{ needs.config.outputs.latest-python }}
+                  config-file: pyproject.toml
                   sources: 'guideline_checker'
 
     test:
