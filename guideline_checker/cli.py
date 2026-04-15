@@ -1,4 +1,5 @@
 """CLI entry point for guideline-checker."""
+
 from __future__ import annotations
 
 import argparse
@@ -75,18 +76,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.json:
         from guideline_checker.reporters.json_reporter import JsonReporter
+
         JsonReporter().write(results=results, output_path=args.json, root=root)
         print(f"[guideline-checker] JSON report written to: {args.json}")
 
     violation_count = sum(len(r.violations) for r in results)
-    error_count = sum(
-        sum(1 for v in r.violations if v.severity == "error") for r in results
-    )
-    warning_count = sum(
-        sum(1 for v in r.violations if v.severity == "warning") for r in results
-    )
+    error_count = sum(sum(1 for v in r.violations if v.severity == "error") for r in results)
+    warning_count = sum(sum(1 for v in r.violations if v.severity == "warning") for r in results)
 
-    print(f"[guideline-checker] {violation_count} violation(s) found ({error_count} error(s), {warning_count} warning(s)).")
+    print(
+        f"[guideline-checker] {violation_count} violation(s) found"
+        f" ({error_count} error(s), {warning_count} warning(s))."
+    )
 
     if args.fail_on == "never":
         return 0

@@ -25,7 +25,6 @@ repos:
     rev: v1.20.0
     hooks:
       - id: mypy
-        additional_dependencies: [types-pyyaml]
         stages: [manual]
 
   - repo: https://github.com/chrysa/pre-commit-tools
