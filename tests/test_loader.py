@@ -1,12 +1,12 @@
 """Tests for the instruction loader."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from guideline_checker.loader import InstructionFile, load_instructions
-
+from guideline_checker.loader import load_instructions
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 

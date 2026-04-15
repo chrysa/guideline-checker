@@ -51,19 +51,22 @@ For projects using `chrysa/pre-commit-tools`, add both repos to `.pre-commit-con
 
 ```
 guideline_checker/
-  checker.py      # Core check engine — runs rules against source files
-  cli.py          # CLI entry point (argparse) — check subcommand
-  hook.py         # Pre-commit hook entry point (delegates to cli.main)
-  loader.py       # Instruction file loader and parser
+  __init__.py           # Package version
+  checker.py            # Core check engine — runs rules against source files
+  cli.py                # CLI entry point (argparse) — check subcommand
+  hook.py               # Pre-commit hook entry point (delegates to cli.main)
+  loader.py             # Instruction file loader and parser
   reporters/
-    html.py       # HTML report generator (Jinja2)
-    json_reporter.py  # JSON report output
+    html.py             # HTML report generator (string templates)
+    json_reporter.py    # JSON report output
 .pre-commit-hooks.yaml  # Hook definition for pre-commit framework
 tests/
   test_checker.py       # Core engine tests
-  test_html_reporter.py # Reporter tests
-  test_loader.py        # Loader tests
+  test_cli.py           # CLI entry point tests
   test_hook.py          # Hook entry point tests
+  test_html_reporter.py # HTML reporter tests
+  test_json_reporter.py # JSON reporter tests
+  test_loader.py        # Loader tests
 ```
 
 ## Hook configuration

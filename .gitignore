@@ -191,6 +191,10 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# Generated reports
+guideline-report.html
+coverage.xml
+
 # PyPI configuration file
 .pypirc
 
