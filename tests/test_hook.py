@@ -1,7 +1,7 @@
 """Tests for the pre-commit hook entry point."""
+
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,9 +16,7 @@ def test_hook_calls_main_and_exits(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    with patch("sys.exit") as mock_exit, patch("sys.argv", ["guideline-checker", "check", "--root", str(tmp_path)]):
-        from guideline_checker.hook import main  # type: ignore[attr-defined]
-
+    with patch("sys.exit"), patch("sys.argv", ["guideline-checker", "check", "--root", str(tmp_path)]):
         # hook.py uses __main__ guard, so we test via cli.main directly
         from guideline_checker.cli import main as cli_main
 

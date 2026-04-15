@@ -1,4 +1,5 @@
 """Tests for the JSON reporter."""
+
 from __future__ import annotations
 
 import json

@@ -58,6 +58,7 @@ jobs:
               with:
                   python-version: ${{ matrix.python-version }}
                   latest-python: ${{ needs.config.outputs.latest-python }}
+                  config: ruff.toml
                   sources: 'guideline_checker tests'
 
     mypy:
@@ -84,6 +85,7 @@ jobs:
               with:
                   python-version: ${{ matrix.python-version }}
                   latest-python: ${{ needs.config.outputs.latest-python }}
+                  config-file: pyproject.toml
                   sources: 'guideline_checker'
 
     test:
@@ -128,8 +130,8 @@ jobs:
                   latest-python: ${{ needs.config.outputs.latest-python }}
                   sonar-token: ${{ secrets.SONAR_TOKEN }}
                   github-token: ${{ secrets.GITHUB_TOKEN }}
-                  project-key: ${{ vars.SONAR_PROJECT_KEY }}
-                  organization: ${{ vars.SONAR_ORGANIZATION }}
+                  project-key: ${{ vars.SONAR_PROJECT_KEY || 'chrysa_guideline-checker' }}
+                  organization: ${{ vars.SONAR_ORGANIZATION || 'chrysa' }}
                   project-name: guideline-checker
                   sources: guideline_checker
                   tests: tests

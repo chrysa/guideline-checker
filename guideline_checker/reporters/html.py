@@ -1,10 +1,11 @@
 """HTML report generator for guideline-checker results."""
+
 from __future__ import annotations
 
+from datetime import UTC
 from pathlib import Path
 
 from guideline_checker.checker import RuleResult, Violation
-
 
 _HTML_TEMPLATE = """\
 <!DOCTYPE html>
@@ -19,7 +20,8 @@ _HTML_TEMPLATE = """\
   header h1 {{ margin: 0; font-size: 1.5rem; }}
   header p {{ margin: 0.25rem 0 0; opacity: 0.75; font-size: 0.9rem; }}
   .summary {{ display: flex; gap: 1rem; padding: 1.5rem 2rem; flex-wrap: wrap; }}
-  .stat {{ background: white; border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem 1.5rem; min-width: 120px; text-align: center; }}
+  .stat {{ background: white; border: 1px solid #dee2e6; border-radius: 8px;
+    padding: 1rem 1.5rem; min-width: 120px; text-align: center; }}
   .stat .value {{ font-size: 2rem; font-weight: bold; }}
   .stat .label {{ font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.05em; }}
   .stat.error .value {{ color: #dc3545; }}
@@ -27,7 +29,8 @@ _HTML_TEMPLATE = """\
   .stat.info .value {{ color: #0d6efd; }}
   .stat.ok .value {{ color: #198754; }}
   .section {{ margin: 1rem 2rem; background: white; border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden; }}
-  .section-header {{ padding: 0.75rem 1.25rem; background: #e9ecef; display: flex; justify-content: space-between; align-items: center; }}
+  .section-header {{ padding: 0.75rem 1.25rem; background: #e9ecef;
+    display: flex; justify-content: space-between; align-items: center; }}
   .section-header h2 {{ margin: 0; font-size: 1rem; }}
   .section-meta {{ font-size: 0.8rem; color: #6c757d; }}
   .badge {{ display: inline-block; padding: 0.2em 0.6em; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }}
@@ -83,9 +86,9 @@ class HtmlReporter:
 
     def write(self, results: list[RuleResult], output_path: Path, root: Path) -> None:
         """Write the HTML report to output_path."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        generated_at = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        generated_at = datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M UTC")
         total_files = sum(r.files_checked for r in results)
         total_errors = sum(sum(1 for v in r.violations if v.severity == "error") for r in results)
         total_warnings = sum(sum(1 for v in r.violations if v.severity == "warning") for r in results)
@@ -162,10 +165,4 @@ class HtmlReporter:
 
 def _escape_html(text: str) -> str:
     """Escape special HTML characters."""
-    return (
-        text
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")

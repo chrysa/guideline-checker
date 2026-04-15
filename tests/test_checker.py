@@ -1,11 +1,12 @@
 """Tests for the checker engine."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from guideline_checker.checker import run_checks
+from guideline_checker.checker import _matches_pattern, run_checks
 
 
 @pytest.fixture()
@@ -87,3 +88,68 @@ description: "Python guidelines"
     )
     results = run_checks(root=root, instructions_dir=inst_dir)
     assert all(len(r.violations) == 0 for r in results)
+
+
+# --- _matches_pattern unit tests ---
+
+
+class TestMatchesPattern:
+    """Unit tests for _matches_pattern glob matching."""
+
+    def test_double_star_matches_nested_file(self, tmp_path: Path) -> None:
+        f = tmp_path / "src" / "app.py"
+        f.parent.mkdir()
+        f.touch()
+        assert _matches_pattern(f, tmp_path, "**/*.py") is True
+
+    def test_double_star_matches_root_level_file(self, tmp_path: Path) -> None:
+        f = tmp_path / "app.py"
+        f.touch()
+        assert _matches_pattern(f, tmp_path, "**/*.py") is True
+
+    def test_double_star_matches_deeply_nested(self, tmp_path: Path) -> None:
+        f = tmp_path / "a" / "b" / "c" / "deep.py"
+        f.parent.mkdir(parents=True)
+        f.touch()
+        assert _matches_pattern(f, tmp_path, "**/*.py") is True
+
+    def test_no_match_wrong_extension(self, tmp_path: Path) -> None:
+        f = tmp_path / "app.js"
+        f.touch()
+        assert _matches_pattern(f, tmp_path, "**/*.py") is False
+
+    def test_comma_separated_patterns(self, tmp_path: Path) -> None:
+        py = tmp_path / "app.py"
+        js = tmp_path / "app.js"
+        txt = tmp_path / "readme.txt"
+        py.touch()
+        js.touch()
+        txt.touch()
+        assert _matches_pattern(py, tmp_path, "**/*.py, **/*.js") is True
+        assert _matches_pattern(js, tmp_path, "**/*.py, **/*.js") is True
+        assert _matches_pattern(txt, tmp_path, "**/*.py, **/*.js") is False
+
+    def test_simple_filename_pattern(self, tmp_path: Path) -> None:
+        f = tmp_path / "Makefile"
+        f.touch()
+        assert _matches_pattern(f, tmp_path, "Makefile") is True
+
+    def test_directory_specific_pattern(self, tmp_path: Path) -> None:
+        f = tmp_path / "src" / "main.py"
+        f.parent.mkdir()
+        f.touch()
+        assert _matches_pattern(f, tmp_path, "src/*.py") is True
+
+    def test_file_outside_root_returns_false(self, tmp_path: Path) -> None:
+        other = tmp_path / "other"
+        other.mkdir()
+        f = other / "app.py"
+        f.touch()
+        root = tmp_path / "project"
+        root.mkdir()
+        assert _matches_pattern(f, root, "**/*.py") is False
+
+    def test_wildcard_all_pattern(self, tmp_path: Path) -> None:
+        f = tmp_path / "anything.txt"
+        f.touch()
+        assert _matches_pattern(f, tmp_path, "**/*") is True
