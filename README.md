@@ -13,10 +13,11 @@ A CLI tool that reads GitHub Copilot instruction files (`.instructions.md`) from
 ## Features
 
 - **Instruction-driven**: rules are loaded from `.instructions.md` files (`applyTo` + content)
-- **Multi-language support**: Python, TypeScript/JavaScript, YAML, Dockerfile, Makefile
+- **Pattern-based checking**: detects anti-patterns (print calls, bare excepts, console.log, etc.)
 - **HTML report**: color-coded, grouped by rule file, with file paths and line numbers
+- **JSON report**: machine-readable output for CI pipelines
 - **CI-friendly**: exits with code 1 if violations are found (configurable threshold)
-- **Pre-commit hook**: can run as a pre-commit hook on changed files only
+- **Pre-commit hook**: runs as a pre-commit hook on the entire project
 
 ---
 
@@ -87,40 +88,25 @@ The HTML report includes:
 
 ---
 
-## Configuration
-
-Create a `guideline-checker.toml` at the project root (optional):
-
-```toml
-[guideline-checker]
-instructions-dir = ".github/instructions"
-output = "guideline-report.html"
-fail-on = "error"   # "warning" | "error" | "never"
-exclude = ["**/node_modules/**", "**/.venv/**", "**/dist/**"]
-```
-
----
-
 ## Architecture
 
 ```
 guideline_checker/
+    __init__.py             # package version
     cli.py                  # argparse entry point (guideline-checker command)
     loader.py               # load and parse .instructions.md files
     checker.py              # match files against rules by applyTo pattern
+    hook.py                 # pre-commit hook entry point
     reporters/
-        html.py             # HTML report generator (Jinja2)
-        json.py             # JSON report generator (CI artifact)
-    rules/
-        python_linting.py   # Python-specific rule evaluators
-        typescript.py       # TypeScript/JS rule evaluators
-        yaml_check.py       # YAML/config rule evaluators
-    utils.py                # file path matching, glob utils
+        html.py             # HTML report generator
+        json_reporter.py    # JSON report generator (CI artifact)
 tests/
-    fixtures/               # sample .instructions.md files for tests
-    test_loader.py
-    test_checker.py
-    test_html_reporter.py
+    test_checker.py         # checker engine tests
+    test_cli.py             # CLI entry point tests
+    test_hook.py            # hook entry point tests
+    test_html_reporter.py   # HTML reporter tests
+    test_json_reporter.py   # JSON reporter tests
+    test_loader.py          # instruction loader tests
 ```
 
 ---
@@ -147,4 +133,3 @@ mypy guideline_checker
 ## License
 
 MIT -- see [LICENSE](LICENSE).
-Check project compliance against GitHub Copilot instruction rules and generate HTML reports

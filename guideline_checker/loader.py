@@ -1,10 +1,10 @@
 """Load and parse .instructions.md files from the instructions directory."""
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-
 
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 _APPLY_TO_RE = re.compile(r"^applyTo:\s*[\"']?(.+?)[\"']?\s*$", re.MULTILINE)
@@ -46,7 +46,7 @@ def _parse_instruction_file(path: Path) -> InstructionFile | None:
         desc_match = _DESCRIPTION_RE.search(frontmatter)
         if desc_match:
             description = desc_match.group(1).strip()
-        content = raw[fm_match.end():]
+        content = raw[fm_match.end() :]
     else:
         content = raw
         apply_match = _APPLY_TO_RE.search(raw)

@@ -1,4 +1,5 @@
 """Core checker: match files against instruction rules."""
+
 from __future__ import annotations
 
 import fnmatch
@@ -7,11 +8,19 @@ from pathlib import Path
 
 from guideline_checker.loader import InstructionFile, load_instructions
 
-
 IGNORE_DIRS = {
-    ".git", ".venv", "venv", "__pycache__", "node_modules",
-    "dist", "build", ".mypy_cache", ".ruff_cache", ".pytest_cache",
-    ".eggs", "*.egg-info",
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "node_modules",
+    "dist",
+    "build",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".pytest_cache",
+    ".eggs",
+    "*.egg-info",
 }
 
 
@@ -51,29 +60,32 @@ def run_checks(root: Path, instructions_dir: Path) -> list[RuleResult]:
 
 def _collect_files(root: Path) -> list[Path]:
     """Recursively collect all files, ignoring known irrelevant directories."""
-    files: list[Path] = []
-    for path in root.rglob("*"):
-        if path.is_file():
-            if not any(part in IGNORE_DIRS or part.endswith(".egg-info") for part in path.parts):
-                files.append(path)
-    return files
+    return [
+        path
+        for path in root.rglob("*")
+        if path.is_file() and not any(part in IGNORE_DIRS or part.endswith(".egg-info") for part in path.parts)
+    ]
 
 
 def _matches_pattern(file_path: Path, root: Path, pattern: str) -> bool:
-    """Check if a file path matches a glob pattern (relative to root)."""
+    """Check if a file path matches a glob pattern (relative to root).
+
+    Supports ``**`` recursive wildcards via :meth:`pathlib.PurePath.match`
+    with a fallback for root-level files (Python 3.12 compat).
+    Comma-separated patterns are treated as alternatives (match any).
+    """
     try:
         relative = file_path.relative_to(root)
     except ValueError:
         return False
-    rel_str = str(relative)
 
     patterns = [p.strip() for p in pattern.split(",") if p.strip()]
     for pat in patterns:
-        if fnmatch.fnmatch(rel_str, pat):
+        if relative.match(pat):
             return True
-        if fnmatch.fnmatch(file_path.name, pat):
-            return True
-        if fnmatch.fnmatch(rel_str, pat.lstrip("*/")):
+        # Python 3.12: PurePath.match("**/*.ext") won't match root-level
+        # files. Strip the leading **/ and try matching the filename.
+        if pat.startswith("**/") and fnmatch.fnmatch(file_path.name, pat[3:]):
             return True
     return False
 
