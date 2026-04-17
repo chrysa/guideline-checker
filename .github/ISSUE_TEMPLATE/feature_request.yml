@@ -22,6 +22,7 @@ assignees: ''
 - [ ]
 - [ ]
 
+<<<<<<< HEAD
 ## Milestone
 <!-- GitHub milestone this issue belongs to — e.g. M2-Core, M3-Next -->
 
@@ -32,6 +33,8 @@ assignees: ''
 <!-- Issues blocking this one. Format: chrysa/REPO#NUMBER or bare #NUMBER -->
 <!-- None -->
 
+=======
+>>>>>>> 97a61ef (chore: sync issue/PR templates from shared-standards)
 ## Out of scope
 <!-- What is explicitly NOT part of this issue -->
 
