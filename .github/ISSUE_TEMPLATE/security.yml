@@ -24,11 +24,14 @@ assignees: ''
 ## References
 <!-- CVE, GHSA, SonarCloud finding ID, etc. -->
 
+<<<<<<< HEAD
 ## Milestone
 <!-- GitHub milestone if part of a security hardening sprint -->
 
 ## Notion
 <!-- Notion page or task link if tracked — leave blank if none -->
 
+=======
+>>>>>>> 97a61ef (chore: sync issue/PR templates from shared-standards)
 ## Next step
 <!-- This issue should be covered by exactly 1 PR with `Closes #<this issue number>` -->

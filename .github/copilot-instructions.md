@@ -1,83 +1,67 @@
----
-# guideline-checker — Copilot Instructions
+# guideline-checker — GitHub Copilot Instructions
 
-## MANDATORY: Read Instructions Before Any Task
+## Mandatory Workflow
 
-Before working on this project, check relevant instruction files in `.github/instructions/`.
+1. Read `.github/instructions/*.instructions.md` when present.
+2. Read `CLAUDE.md` for repository context.
+3. Follow repository-local conventions before writing code.
 
-| File | Applies to |
-|---|---|
-| `.github/instructions/python_guidelines.instructions.md` | `**/*.py` |
-| `.github/instructions/typing.instructions.md` | `**/*.py` |
-| `.github/instructions/ruff_compliance.instructions.md` | `**/*.py` |
-| `.github/instructions/testing.instructions.md` | `tests/**/*.py` |
+## Project Context
 
----
+**Stack:** Python
+**Purpose:** [![CI](https://github.com/chrysa/guideline-checker/actions/workflows/ci.yml/badge.svg)](https://github.com/chrysa/guideline-checker/actions/workflows/ci.yml).
 
-## Project Overview
+## Engineering Rules
 
-`guideline-checker` is a **CLI tool** that:
-1. Reads `.instructions.md` files from `.github/instructions/`
-2. Validates codebase files against rules defined in those instructions
-3. Generates a **color-coded HTML compliance report**
-4. Can run in CI or as a pre-commit hook
+- Write in English: code, comments, docs, issues, PRs and commits.
+- Keep changes minimal and aligned with the existing style.
+- Do not add unrelated refactors or speculative improvements.
+- Prefer make targets when available instead of invoking tooling ad hoc.
+- Never commit secrets, credentials or environment-specific values.
 
-## Architecture
+## Automation & Industrialization (NON-NEGOTIABLE)
 
-```
-guideline_checker/
-    cli.py          # argparse entry point -- main() accepts argv
-    loader.py       # parse .instructions.md files (applyTo, description, rules)
-    checker.py      # match files to instructions, evaluate rules, produce Violation objects
-    reporters/
-        html.py     # HTML report (no external deps, pure stdlib + string templates)
-        json_reporter.py  # JSON report for CI artifacts
-tests/
-    test_loader.py
-    test_checker.py
-    test_html_reporter.py
-```
+- Projects must be **maximally automated and industrialized**.
+- Every repetitive task must be covered by one of: CI/CD pipeline, Makefile target, pre-commit hook, GitHub Actions workflow, or a bot/script.
+- Required automation baseline for any project:
+  - **CI/CD**: automated lint, type-check, tests, build on every push/PR.
+  - **Formatting**: auto-applied via pre-commit or CI (no manual `ruff`/`prettier` runs).
+  - **Releases**: automated versioning and changelog generation (e.g. `cliff`, `semantic-release`).
+  - **Dependency updates**: automated via Dependabot or Renovate.
+  - **Secret scanning**: automated on every commit (pre-commit hook + CI step).
+- When proposing or implementing a feature, always include the automation layer (tests, CI step, Makefile target) — not just the code.
+- Any manual step that could be automated is considered **technical debt** and must be tracked.
 
-## Key Constraints
+## Canonical Templates & Shared Tooling
 
-- **Python 3.12+** (target 3.14, retro-compat to 3.12)
-- **`from __future__ import annotations`** in every Python file
-- **Typed**: ALL public functions must have complete type annotations
-- **No external runtime deps** beyond `pyyaml` and `jinja2` (optional)
-- **`argv` pattern**: every `main()` accepts `argv: list[str] | None = None`
-- **ruff** — zero-tolerance (config in `pyproject.toml`)
-- **pytest** — 100% passing tests required before commit
-- **Single return point** per method/function
+### React applications
+- All new React apps **must** be bootstrapped from `Forge-Stack-Workshop/react-app-generator`.
+- Never scaffold from scratch or from `create-react-app`/`vite` directly.
 
-## Data Flow
+### Makefiles
+- All project Makefiles **must** extend or be derived from `Forge-Stack-Workshop/base-makefile`.
+- Do not duplicate targets that already exist in the base — inherit instead.
 
-```
-InstructionFile (loader.py)
-  └─► RuleResult (checker.py)
-        ├── instruction: InstructionFile
-        ├── violations: list[Violation]
-        └── files_checked: int
+### Pre-commit hooks
+- If a required hook is missing from `chrysa/pre-commit-tools`, **open an issue** on that repo describing the hook needed before proceeding.
+- In the requesting repo, open a matching issue/PR and mark it as dependent (`Depends on chrysa/pre-commit-tools#<N>`).
+- Do not implement a workaround locally — wait for the hook to land in the shared repo.
 
-Violation
-  ├── file: Path
-  ├── line_number: int
-  ├── line_content: str
-  ├── rule: str
-  └── severity: "error" | "warning" | "info"
-```
+### Issue resolution automation (desired workflow)
+- When a blocking issue is opened (e.g. missing hook, missing template), an agent should:
+  1. Analyse the issue and propose a solution on the upstream repo.
+  2. Once the solution is validated (human approval), automatically unblock the dependent issue/PR in the requesting repo.
+- This workflow is aspirational — track automation gaps as issues on the relevant repos.
 
-## CI/CD
+## Claude Interoperability
 
-- **GitHub Actions**: `.github/workflows/ci.yml` — ruff, mypy, test, sonar, release
-- **Matrix**: Python 3.12, 3.13, 3.14
-- **SonarCloud**: configured via `SONAR_TOKEN` and `SONAR_PROJECT_KEY` secrets/vars
-- **Versioning**: GitVersion (`GitVersion.yml`) + git-cliff (`cliff.toml`)
+- This repository is also prepared for Claude Code via `.claude/` and `CLAUDE.md`.
+- Claude skills are available under `.claude/skills/` for relevant tasks.
+- If a task has repository instructions, those instructions override generic defaults.
 
-## Pre-commit hook
+## Quality Thresholds
 
-```yaml
-- repo: https://github.com/chrysa/guideline-checker
-  rev: v1.0.0
-  hooks:
-    - id: guideline-check
-```
+- Max function length: 50 lines when practical.
+- Max file length: 500 lines when practical.
+- Max cyclomatic complexity: 10.
+- Lint warnings target: 0.
