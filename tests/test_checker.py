@@ -258,3 +258,76 @@ class TestBuildChecks:
 
     def test_unknown_rule_returns_empty(self) -> None:
         assert _build_checks("follow pep 8 conventions") == []
+
+    def test_no_pprint(self) -> None:
+        assert ("pprint(", "warning") in _build_checks("no pprint calls")
+
+    def test_no_console_log(self) -> None:
+        assert ("console.log(", "warning") in _build_checks("no console.log in code")
+
+    def test_no_console_debug(self) -> None:
+        assert ("console.debug(", "warning") in _build_checks("no console.debug allowed")
+
+    def test_no_xxx(self) -> None:
+        assert ("XXX", "warning") in _build_checks("no xxx markers")
+
+    def test_no_hack(self) -> None:
+        assert ("HACK", "warning") in _build_checks("no hack comments")
+
+    def test_no_bare_except(self) -> None:
+        assert ("except:", "error") in _build_checks("no bare except clauses")
+
+    def test_future_annotations(self) -> None:
+        checks = _build_checks("use from __future__ import annotations")
+        assert ("__future__", "info") in checks
+
+
+# --- file reading & comment handling ---
+
+
+def test_run_checks_skips_comment_lines(tmp_path: Path) -> None:
+    """Lines starting with # / // / * / ' should be treated as comments and skipped."""
+    root = tmp_path / "project"
+    root.mkdir()
+    inst_dir = root / ".github" / "instructions"
+    inst_dir.mkdir(parents=True)
+    (inst_dir / "r.instructions.md").write_text(
+        '---\napplyTo: "**/*.py"\ndescription: "R"\n---\n- No print() calls\n',
+        encoding="utf-8",
+    )
+    (root / "app.py").write_text(
+        "# print('this is a comment')\n// print('js comment')\nprint('real violation')\n",
+        encoding="utf-8",
+    )
+    results = run_checks(root=root, instructions_dir=inst_dir)
+    # Only the non-comment line should be flagged
+    assert len(results[0].violations) == 1
+    assert results[0].violations[0].line_number == 3
+
+
+def test_run_checks_handles_unreadable_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Files that can't be read should not crash the checker."""
+    from guideline_checker import checker as checker_mod
+
+    root = tmp_path / "project"
+    root.mkdir()
+    inst_dir = root / ".github" / "instructions"
+    inst_dir.mkdir(parents=True)
+    (inst_dir / "r.instructions.md").write_text(
+        '---\napplyTo: "**/*.py"\ndescription: "R"\n---\n- No print() calls\n',
+        encoding="utf-8",
+    )
+    (root / "bad.py").write_text('print("x")\n', encoding="utf-8")
+
+    original_read = Path.read_text
+
+    def fail_read(self: Path, *args: object, **kwargs: object) -> str:
+        if self.name == "bad.py":
+            raise OSError("simulated read failure")
+        return original_read(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "read_text", fail_read)
+    results = checker_mod.run_checks(root=root, instructions_dir=inst_dir)
+    # Should not raise; the bad file contributes 0 violations
+    assert len(results) == 1
+    assert results[0].violations == []

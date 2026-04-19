@@ -35,7 +35,8 @@ def _parse_instruction_file(path: Path) -> InstructionFile | None:
     raw = path.read_text(encoding="utf-8")
 
     apply_to = "**/*"
-    description = path.stem
+    # Default description: filename without any ".instructions" or ".md" suffix
+    description = path.name.removesuffix(".md").removesuffix(".instructions")
 
     fm_match = _FRONTMATTER_RE.match(raw)
     if fm_match:

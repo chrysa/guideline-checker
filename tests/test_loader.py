@@ -81,3 +81,44 @@ def test_load_instructions_empty_dir(tmp_path: Path) -> None:
     """Should return empty list for directory with no .instructions.md files."""
     result = load_instructions(tmp_path)
     assert result == []
+
+
+def test_load_instructions_no_frontmatter(tmp_path: Path) -> None:
+    """Should parse applyTo and description from raw content when no frontmatter block."""
+    inst_dir = tmp_path / "inst"
+    inst_dir.mkdir()
+    (inst_dir / "plain.instructions.md").write_text(
+        "description: Plain guidelines\napplyTo: **/*.md\n\n- Be concise\n- Use sentence case\n",
+        encoding="utf-8",
+    )
+    result = load_instructions(inst_dir)
+    assert len(result) == 1
+    assert result[0].apply_to == "**/*.md"
+    assert result[0].description == "Plain guidelines"
+
+
+def test_load_instructions_no_frontmatter_no_fields(tmp_path: Path) -> None:
+    """Should fall back to defaults when no frontmatter and no fields in content."""
+    inst_dir = tmp_path / "inst"
+    inst_dir.mkdir()
+    (inst_dir / "bare.instructions.md").write_text(
+        "# Just rules\n\n- Rule one that matters\n- Rule two also\n",
+        encoding="utf-8",
+    )
+    result = load_instructions(inst_dir)
+    assert len(result) == 1
+    assert result[0].apply_to == "**/*"  # default
+    assert result[0].description == "bare"  # stem fallback
+
+
+def test_load_instructions_ignores_short_rules(tmp_path: Path) -> None:
+    """Rules shorter than 10 characters should be filtered out."""
+    inst_dir = tmp_path / "inst"
+    inst_dir.mkdir()
+    (inst_dir / "rules.instructions.md").write_text(
+        "---\napplyTo: '**/*'\ndescription: 'Short'\n---\n- Ok\n- This rule is long enough\n",
+        encoding="utf-8",
+    )
+    result = load_instructions(inst_dir)
+    assert len(result) == 1
+    assert result[0].rules == ["This rule is long enough"]
