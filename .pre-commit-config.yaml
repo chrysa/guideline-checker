@@ -29,7 +29,7 @@ repos:
         stages: [manual]
 
   - repo: https://github.com/chrysa/pre-commit-tools
-    rev: e538371cdb5dff59d3b67ef5e63dae3dce8bfc37
+    rev: 63c9875f03bddbb21bbdda3fbb06dab9cf7bfaba
     hooks:
       - id: python-print-detection
       - id: python-pprint-detection
