@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.checker import _matches_pattern, run_checks
+from guideline_checker.checker import _build_checks, _matches_pattern, run_checks
 
 
 @pytest.fixture()
@@ -153,3 +153,108 @@ class TestMatchesPattern:
         f = tmp_path / "anything.txt"
         f.touch()
         assert _matches_pattern(f, tmp_path, "**/*") is True
+
+
+# --- excludes ---
+
+
+@pytest.fixture()
+def project_with_excludable_files(tmp_path: Path) -> tuple[Path, Path]:
+    """Create a project with files in multiple locations for exclude testing."""
+    root = tmp_path / "project"
+    root.mkdir()
+    inst_dir = root / ".github" / "instructions"
+    inst_dir.mkdir(parents=True)
+    (inst_dir / "python.instructions.md").write_text(
+        '---\napplyTo: "**/*.py"\ndescription: "Python"\n---\n- No print() calls\n',
+        encoding="utf-8",
+    )
+    (root / "src").mkdir()
+    (root / "src" / "main.py").write_text('print("hi")\n', encoding="utf-8")
+    (root / "tests").mkdir()
+    (root / "tests" / "test_main.py").write_text('print("test")\n', encoding="utf-8")
+    (root / "vendor").mkdir()
+    (root / "vendor" / "legacy.py").write_text('print("vendor")\n', encoding="utf-8")
+    return root, inst_dir
+
+
+def test_run_checks_without_excludes_finds_all(
+    project_with_excludable_files: tuple[Path, Path],
+) -> None:
+    root, inst_dir = project_with_excludable_files
+    results = run_checks(root=root, instructions_dir=inst_dir)
+    assert len(results) == 1
+    # 3 files with print() each
+    assert len(results[0].violations) == 3
+
+
+def test_run_checks_with_exclude_skips_tests(
+    project_with_excludable_files: tuple[Path, Path],
+) -> None:
+    root, inst_dir = project_with_excludable_files
+    results = run_checks(root=root, instructions_dir=inst_dir, excludes=["tests/**"])
+    files = {str(v.file.relative_to(root)) for v in results[0].violations}
+    assert "tests/test_main.py" not in files
+    assert "src/main.py" in files
+    assert "vendor/legacy.py" in files
+
+
+def test_run_checks_with_multiple_excludes(
+    project_with_excludable_files: tuple[Path, Path],
+) -> None:
+    root, inst_dir = project_with_excludable_files
+    results = run_checks(root=root, instructions_dir=inst_dir, excludes=["tests/**", "vendor/**"])
+    files = {str(v.file.relative_to(root)) for v in results[0].violations}
+    assert files == {"src/main.py"}
+
+
+def test_run_checks_exclude_single_file(
+    project_with_excludable_files: tuple[Path, Path],
+) -> None:
+    root, inst_dir = project_with_excludable_files
+    results = run_checks(root=root, instructions_dir=inst_dir, excludes=["vendor/legacy.py"])
+    files = {str(v.file.relative_to(root)) for v in results[0].violations}
+    assert "vendor/legacy.py" not in files
+
+
+# --- _build_checks unit tests ---
+
+
+class TestBuildChecks:
+    """Unit tests for _build_checks (rule text → pattern mapping)."""
+
+    def test_no_print_rule(self) -> None:
+        assert ("print(", "warning") in _build_checks("no print calls")
+
+    def test_no_console_warn(self) -> None:
+        assert ("console.warn(", "warning") in _build_checks("no console.warn")
+
+    def test_no_console_error(self) -> None:
+        assert ("console.error(", "warning") in _build_checks("no console.error")
+
+    def test_no_debugger(self) -> None:
+        assert ("debugger", "error") in _build_checks("no debugger statements")
+
+    def test_no_breakpoint(self) -> None:
+        checks = _build_checks("no breakpoint() calls")
+        assert ("breakpoint(", "error") in checks
+
+    def test_no_todo(self) -> None:
+        assert ("TODO", "info") in _build_checks("no todo comments")
+
+    def test_no_fixme(self) -> None:
+        assert ("FIXME", "warning") in _build_checks("no fixme markers")
+
+    def test_no_hardcoded_password(self) -> None:
+        checks = _build_checks("no hardcoded password")
+        patterns = [p for p, _ in checks]
+        assert "password =" in patterns
+        assert "password=" in patterns
+
+    def test_no_api_key(self) -> None:
+        checks = _build_checks("no api key in code")
+        patterns = [p for p, _ in checks]
+        assert "api_key =" in patterns
+
+    def test_unknown_rule_returns_empty(self) -> None:
+        assert _build_checks("follow pep 8 conventions") == []

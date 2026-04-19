@@ -49,6 +49,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Also write a JSON report to this path.",
     )
+    check_cmd.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        metavar="PATTERN",
+        help=(
+            "Glob pattern (relative to --root) to exclude from checks. "
+            "Repeat for multiple patterns. Example: --exclude 'tests/**' --exclude '**/*.min.js'."
+        ),
+    )
     return parser
 
 
@@ -67,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[guideline-checker] Instructions directory not found: {instructions_dir}", file=sys.stderr)
         return 1
 
-    results = run_checks(root=root, instructions_dir=instructions_dir)
+    results = run_checks(root=root, instructions_dir=instructions_dir, excludes=args.exclude)
 
     reporter = HtmlReporter()
     report_path: Path = args.output

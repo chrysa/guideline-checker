@@ -54,6 +54,9 @@ guideline-checker check --instructions .github/instructions/
 
 # Fail only if severity >= error (ignore warnings)
 guideline-checker check --fail-on error
+
+# Exclude files or directories (repeat --exclude for multiple patterns)
+guideline-checker check --exclude 'tests/**' --exclude '**/*.min.js'
 ```
 
 ### Pre-commit hook

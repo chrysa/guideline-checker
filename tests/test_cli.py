@@ -105,3 +105,43 @@ def test_main_check_custom_instructions_dir(tmp_path: Path) -> None:
     (root / "app.py").write_text("x = 1\n", encoding="utf-8")
     code = main(["check", "--root", str(root), "--instructions", str(custom_inst)])
     assert code == 0
+
+
+def test_main_check_exclude_option(tmp_path: Path) -> None:
+    root = _make_project(tmp_path, violation=True)
+    # The violation is in src/app.py - excluding src/** should eliminate all violations
+    code = main(["check", "--root", str(root), "--exclude", "src/**", "--fail-on", "warning"])
+    assert code == 0
+
+
+def test_main_check_exclude_multiple(tmp_path: Path) -> None:
+    root = _make_project(tmp_path, violation=True)
+    (root / "extra").mkdir()
+    (root / "extra" / "also.py").write_text('print("bad")\n', encoding="utf-8")
+    # Exclude both should pass even with --fail-on warning
+    code = main(
+        [
+            "check",
+            "--root",
+            str(root),
+            "--exclude",
+            "src/**",
+            "--exclude",
+            "extra/**",
+            "--fail-on",
+            "warning",
+        ]
+    )
+    assert code == 0
+
+
+def test_build_parser_exclude_default_is_empty() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["check"])
+    assert args.exclude == []
+
+
+def test_build_parser_exclude_accumulates() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["check", "--exclude", "a/**", "--exclude", "b/**"])
+    assert args.exclude == ["a/**", "b/**"]

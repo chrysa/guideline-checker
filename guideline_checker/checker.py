@@ -40,10 +40,19 @@ class RuleResult:
     files_checked: int = 0
 
 
-def run_checks(root: Path, instructions_dir: Path) -> list[RuleResult]:
-    """Check all files in root against all instruction files in instructions_dir."""
+def run_checks(
+    root: Path,
+    instructions_dir: Path,
+    excludes: list[str] | None = None,
+) -> list[RuleResult]:
+    """Check all files in root against all instruction files in instructions_dir.
+
+    :param root: Project root directory to scan.
+    :param instructions_dir: Directory containing .instructions.md files.
+    :param excludes: Optional glob patterns (relative to root) to skip.
+    """
     instructions = load_instructions(instructions_dir)
-    all_files = _collect_files(root)
+    all_files = _collect_files(root, excludes or [])
     results: list[RuleResult] = []
 
     for instruction in instructions:
@@ -58,13 +67,26 @@ def run_checks(root: Path, instructions_dir: Path) -> list[RuleResult]:
     return results
 
 
-def _collect_files(root: Path) -> list[Path]:
-    """Recursively collect all files, ignoring known irrelevant directories."""
+def _collect_files(root: Path, excludes: list[str]) -> list[Path]:
+    """Recursively collect all files, ignoring known irrelevant directories.
+
+    Files matching any of the ``excludes`` glob patterns (relative to root)
+    are skipped.
+    """
     return [
         path
         for path in root.rglob("*")
-        if path.is_file() and not any(part in IGNORE_DIRS or part.endswith(".egg-info") for part in path.parts)
+        if path.is_file()
+        and not any(part in IGNORE_DIRS or part.endswith(".egg-info") for part in path.parts)
+        and not _is_excluded(path, root, excludes)
     ]
+
+
+def _is_excluded(file_path: Path, root: Path, excludes: list[str]) -> bool:
+    """Return True if file_path matches any exclude pattern."""
+    if not excludes:
+        return False
+    return any(_matches_pattern(file_path, root, pat) for pat in excludes)
 
 
 def _matches_pattern(file_path: Path, root: Path, pattern: str) -> bool:
@@ -134,21 +156,51 @@ def _build_checks(rule_lower: str) -> list[tuple[str, str]]:
     """Build anti-pattern checks from rule text. Returns list of (pattern, severity)."""
     checks: list[tuple[str, str]] = []
 
+    # Python: print / pprint
     if "no print" in rule_lower or "print()" in rule_lower:
         checks.append(("print(", "warning"))
     if "no pprint" in rule_lower or "pprint()" in rule_lower:
         checks.append(("pprint(", "warning"))
+
+    # JavaScript/TypeScript console
     if "no console.log" in rule_lower:
         checks.append(("console.log(", "warning"))
     if "no console.debug" in rule_lower:
         checks.append(("console.debug(", "warning"))
-    if "type annotations" in rule_lower or "type hints" in rule_lower:
-        # Hard to check without AST, skip basic text check
-        pass
+    if "no console.warn" in rule_lower:
+        checks.append(("console.warn(", "warning"))
+    if "no console.error" in rule_lower:
+        checks.append(("console.error(", "warning"))
+
+    # Debugger statements
+    if "no debugger" in rule_lower:
+        checks.append(("debugger", "error"))
+    if "no breakpoint" in rule_lower or "breakpoint()" in rule_lower:
+        checks.append(("breakpoint(", "error"))
+
+    # TODO / FIXME comments
+    if "no todo" in rule_lower:
+        checks.append(("TODO", "info"))
+    if "no fixme" in rule_lower:
+        checks.append(("FIXME", "warning"))
+    if "no xxx" in rule_lower:
+        checks.append(("XXX", "warning"))
+    if "no hack" in rule_lower:
+        checks.append(("HACK", "warning"))
+
+    # Python-specific anti-patterns
     if "no bare except" in rule_lower or "bare `except`" in rule_lower:
         checks.append(("except:", "error"))
     if "from __future__ import annotations" in rule_lower:
         checks.append(("__future__", "info"))
+
+    # Secrets / credentials (basic heuristics, not security-grade)
+    if "no hardcoded password" in rule_lower or "no password" in rule_lower:
+        checks.append(("password =", "error"))
+        checks.append(("password=", "error"))
+    if "no hardcoded api key" in rule_lower or "no api key" in rule_lower:
+        checks.append(("api_key =", "error"))
+        checks.append(("apikey =", "error"))
 
     return checks
 
