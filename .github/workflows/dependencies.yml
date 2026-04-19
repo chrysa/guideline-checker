@@ -24,7 +24,7 @@ jobs:
               if: >-
                   contains(github.event.pull_request.body, 'depends on') ||
                   contains(github.event.pull_request.body, 'blocked by')
-              uses: actions/github-script@v8
+              uses: actions/github-script@v9
               with:
                   script: |
                       await github.rest.issues.addLabels({
