@@ -1,0 +1,52 @@
+{
+  "circuitBreaker": {
+    "cooldownMinutes": 15,
+    "enabled": true,
+    "maxConsecutiveFailures": 3
+  },
+  "description": "Configuration Claude Code locale · hooks + règles chrysa",
+  "frustrationDetection": {
+    "enabled": true,
+    "response": "suggest-break-or-rubber-duck",
+    "triggerPhrases": [
+      "pourquoi ça marche pas",
+      "encore",
+      "toujours pas",
+      "ça bug"
+    ]
+  },
+  "modelDebt": {
+    "currentModel": "claude-sonnet-4-6",
+    "scanPaths": [
+      ".claude/rules/",
+      "CLAUDE.md"
+    ]
+  },
+  "preCommit": {
+    "blockOnConsoleLog": true,
+    "blockOnSecrets": true,
+    "runQualityCheckBeforeCommit": true
+  },
+  "qualityThresholds": {
+    "python": {
+      "coverageMin": 85,
+      "docstringCoverageMin": 80,
+      "maxCyclomaticComplexity": 10,
+      "maxFileLines": 300,
+      "maxFunctionArgs": 5,
+      "maxFunctionLines": 40
+    },
+    "typescript": {
+      "coverageMin": 85,
+      "maxCyclomaticComplexity": 10,
+      "maxFileLines": 500,
+      "maxFunctionArgs": 4,
+      "maxFunctionLines": 50
+    }
+  },
+  "secretScanner": {
+    "allowlistFile": ".claude/secret-scanner-allowlist.json",
+    "enabled": true
+  },
+  "version": "1.0"
+}

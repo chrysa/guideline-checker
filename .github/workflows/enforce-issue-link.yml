@@ -1,0 +1,63 @@
+# .github/workflows/enforce-issue-link.yml
+# Vérifie qu'une PR contient une référence à une issue (Closes/Fixes/Refs #N).
+# Si absente, ajoute un commentaire automatique + status check failed.
+# Convention chrysa : toute PR doit être liée à une issue.
+
+name: Enforce issue link
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+  issues: read
+
+jobs:
+  check-link:
+    runs-on: ubuntu-latest
+    # Dependabot exempté (il crée des PRs auto)
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - name: Check for issue reference in PR body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            const labels = context.payload.pull_request.labels.map(l => l.name);
+
+            // Exception : label "hotfix" permet le bypass
+            if (labels.includes('hotfix')) {
+              console.log('Hotfix label → bypass issue link check');
+              return;
+            }
+
+            // Regex large pour Closes/Fixes/Refs/Part of + #N ou org/repo#N
+            const pattern = /(closes|fixes|resolves|refs?|part of)\s+(?:[\w-]+\/[\w-]+)?#\d+/i;
+
+            if (!pattern.test(body)) {
+              const msg = [
+                '🔗 **Convention chrysa** : cette PR doit référencer une issue.',
+                '',
+                'Ajouter dans la description :',
+                '- `Closes #N` — fermera l\'issue au merge',
+                '- `Fixes #N` — idem (pour bug)',
+                '- `Refs #N` — sans fermer',
+                '- `Part of #N` — pour une chaîne de PRs',
+                '',
+                'Si hotfix urgent sans issue préalable, ajouter le label `hotfix`.',
+                '',
+                'Pas d\'issue ouverte ? Créer avec :',
+                '```',
+                'gh issue create --repo ${{ github.repository }} --title "..." --body "..."',
+                '```'
+              ].join('\n');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: msg
+              });
+              core.setFailed('No issue reference found in PR body');
+            } else {
+              console.log('✅ Issue reference found');
+            }

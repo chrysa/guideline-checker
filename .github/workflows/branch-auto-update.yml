@@ -1,0 +1,29 @@
+# .github/workflows/branch-auto-update.yml
+# Auto-rebase les branches de feature quand main avance et qu'il n'y a pas de conflit
+# Réduit le travail manuel de rebase · économise les minutes CI (une seule run après rebase)
+
+name: Auto-update branches
+on:
+  push:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-prs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auto-update open PRs
+        uses: adRise/update-pr-branch@v0.8.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: ${{ github.ref_name }}
+          required_approval_count: 0
+          # Skip PRs flagguées "do-not-update" ou "wip"
+          required_passing_checks_count: 0

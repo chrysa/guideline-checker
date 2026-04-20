@@ -1,0 +1,35 @@
+# sync-labels.yml — synchronise .github/labels.yml → GitHub labels
+# Déclenché sur push de labels.yml + hebdo lundi 2h + manuel
+# Inspiré padam-av
+
+name: Sync GitHub Labels
+run-name: 🏷️ Sync labels from config
+
+on:
+  push:
+    branches: [develop, main, master]
+    paths:
+      - .github/labels.yml
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1'  # lundi 02h00 UTC
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: sync-labels-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync-labels:
+    name: Synchronize labels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: marocchino/create-labels@v1.3.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          config_file: .github/labels.yml
+          # delete_other_labels: true  # activer pour purger les labels non listés

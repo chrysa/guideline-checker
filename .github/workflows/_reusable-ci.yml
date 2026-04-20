@@ -1,0 +1,129 @@
+# _reusable-ci.yml — workflow réutilisable (workflow_call)
+# Appelé par ci-python.yml et ci-node.yml via uses: ./.github/workflows/_reusable-ci.yml
+#
+# Un seul fichier pour les jobs communs (quality · test · sonar · version)
+# Les repos passent le "stack" en input pour choisir les steps stack-spécifiques.
+
+name: Reusable CI
+on:
+  workflow_call:
+    inputs:
+      stack:
+        required: true
+        type: string
+        description: "python | node"
+      python-version:
+        required: false
+        type: string
+        default: "3.14"
+      node-version:
+        required: false
+        type: string
+        default: "20"
+      coverage-min:
+        required: false
+        type: number
+        default: 85
+    secrets:
+      SONAR_TOKEN:
+        required: false
+      RELEASE_TOKEN:
+        required: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ─── Python setup ───
+      - if: inputs.stack == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+
+      # ─── Node setup ───
+      - if: inputs.stack == 'node'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - if: inputs.stack == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+
+      - if: inputs.stack == 'python'
+        uses: pre-commit/action@v3.0.1
+
+      - if: inputs.stack == 'node'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm lint
+          pnpm run type-check 2>/dev/null || pnpm exec tsc --noEmit
+
+  test:
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - if: inputs.stack == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+      - if: inputs.stack == 'python'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" 2>/dev/null || pip install -r requirements.txt
+          pytest --cov --cov-report=xml --cov-fail-under=${{ inputs.coverage-min }}
+
+      - if: inputs.stack == 'node'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - if: inputs.stack == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+      - if: inputs.stack == 'node'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test -- --coverage
+
+  sonar:
+    runs-on: ubuntu-latest
+    needs: [quality, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: SonarSource/sonarcloud-github-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  version:
+    runs-on: ubuntu-latest
+    needs: [quality, test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gittools/actions/gitversion/setup@v3.0.0
+        with:
+          versionSpec: "5.x"
+      - uses: gittools/actions/gitversion/execute@v3.0.0
+        id: gv
+      - run: |
+          git tag "prd-${{ steps.gv.outputs.semVer }}"
+          git push origin "prd-${{ steps.gv.outputs.semVer }}"
