@@ -6,7 +6,7 @@
  * Also usable as a PreToolUse hook for Bash tool calls that hit external APIs.
  *
  * @module circuit-breaker
- * @tag @[claude-sonnet-4]
+ * @tag @[claude-sonnet-4-6]
  *
  * State file: ~/.claude/circuit-breaker-state.json
  * States: closed (normal) | open (blocked) | half-open (trial)

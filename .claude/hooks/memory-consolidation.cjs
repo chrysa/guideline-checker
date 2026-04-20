@@ -16,7 +16,7 @@
  *   --dir        Target directory (default: .claude in current working dir)
  *   --verbose    Print all scanned entries, not just changes
  *
- * @tag @[claude-sonnet-4]
+ * @tag @[claude-sonnet-4-6]
  */
 
 "use strict";

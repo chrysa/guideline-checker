@@ -1,95 +1,39 @@
 # CLAUDE.md — guideline-checker
 
-## Vision
+## Project
 
-Pre-commit hook and CLI tool for checking project compliance against GitHub Copilot
-instruction rules (`.github/instructions/*.instructions.md`). Generates HTML and JSON
-compliance reports with violation listings per rule file.
+**Name:** guideline-checker
+**Stack:** Python
+**Purpose:** [![CI](https://github.com/chrysa/guideline-checker/actions/workflows/ci.yml/badge.svg)](https://github.com/chrysa/guideline-checker/actions/workflows/ci.yml).
 
-## Usage
+## Working Rules
 
-### As a pre-commit hook
+- Language: English for code, comments, docs, issues and PRs.
+- Commits: Conventional Commits (`type(scope): description`).
+- Prefer repository make targets when a Makefile is available.
+- Read `.github/instructions/*.instructions.md` when present before starting task-specific work.
 
-Add to your `.pre-commit-config.yaml`:
+## Claude Compatibility
 
-```yaml
-- repo: https://github.com/chrysa/guideline-checker
-  rev: v0.1.0
-  hooks:
-    - id: guideline-check
-```
+- Claude Code hooks are configured in `.claude/settings.json`.
+- Shared hooks, thresholds and skills are vendored from `chrysa/shared-standards` into this repository.
+- Keep repository-specific overrides in this file and keep generic automation in `.claude/`.
 
-The hook runs `guideline-checker check --fail-on error` on the entire project.
-It expects instruction files in `.github/instructions/`.
+## Read Order
 
-### As a CLI tool
+1. `~/.claude/CLAUDE.md` (private user preferences)
+2. `CLAUDE.md` (this repository)
+3. `.github/copilot-instructions.md`
+4. `.github/instructions/*.instructions.md` when present
 
-```bash
-pip install guideline-checker
-guideline-checker check --root . --fail-on error
-guideline-checker check --root . --json report.json --output report.html
-```
+## Available Skills
 
-### Integration with chrysa/pre-commit-tools
+Local Claude skills in `.claude/skills/`:
+- `testing-pytest` for Python test work
+- `dockerfile-multistage` for Dockerfile authoring
+- `api-design` for REST and FastAPI/API design tasks
 
-For projects using `chrysa/pre-commit-tools`, add both repos to `.pre-commit-config.yaml`:
+## Repository Notes
 
-```yaml
-- repo: https://github.com/chrysa/pre-commit-tools
-  rev: <latest>
-  hooks:
-    - id: format-dockerfiles
-    # ... other hooks ...
-
-- repo: https://github.com/chrysa/guideline-checker
-  rev: v0.1.0
-  hooks:
-    - id: guideline-check
-```
-
-## Structure
-
-```
-guideline_checker/
-  __init__.py           # Package version
-  checker.py            # Core check engine — runs rules against source files
-  cli.py                # CLI entry point (argparse) — check subcommand
-  hook.py               # Pre-commit hook entry point (delegates to cli.main)
-  loader.py             # Instruction file loader and parser
-  reporters/
-    html.py             # HTML report generator (string templates)
-    json_reporter.py    # JSON report output
-.pre-commit-hooks.yaml  # Hook definition for pre-commit framework
-tests/
-  test_checker.py       # Core engine tests
-  test_cli.py           # CLI entry point tests
-  test_hook.py          # Hook entry point tests
-  test_html_reporter.py # HTML reporter tests
-  test_json_reporter.py # JSON reporter tests
-  test_loader.py        # Loader tests
-```
-
-## Hook configuration
-
-The `.pre-commit-hooks.yaml` defines:
-- `id: guideline-check`
-- `language: python` — installed in a virtualenv by pre-commit
-- `pass_filenames: false` — runs on the whole project, not individual files
-- `always_run: true` — runs even when no matching files are staged
-- `args: [check, --fail-on, error]` — fails on first error-level violation
-
-## Conventions
-
-- Python 3.12+
-- Ruff for linting and formatting
-- Mypy strict mode
-- Pytest + pytest-cov for tests
-- All code, comments, issues, PRs, and docs in English
-
-## Quickstart
-
-```bash
-pip install -e ".[dev]"
-pytest
-pre-commit run --all-files
-```
+- Add repository-specific architecture, operational constraints, or domain rules here when needed.
+- If this repository needs extra Claude skills, add them under `.claude/skills/`.

@@ -1,11 +1,23 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "github-copilot",
+  "model": "copilot-sonnet",
   "provider": {
-    "github-copilot": {
+    "copilot-sonnet": {
       "type": "copilot",
       "options": {
-        "model": "claude-sonnet-4-5"
+        "model": "claude-sonnet-4-6"
+      }
+    },
+    "copilot-haiku": {
+      "type": "copilot",
+      "options": {
+        "model": "claude-haiku-4-5"
+      }
+    },
+    "copilot-opus": {
+      "type": "copilot",
+      "options": {
+        "model": "claude-opus-4-6"
       }
     }
   },
@@ -33,8 +45,37 @@
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
       },
       "enabled": true
+    },
+    "filesystem": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${PROJECTS_ROOT}"
+      ],
+      "enabled": true
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "enabled": true
+    },
+    "memory": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "enabled": false,
+      "_comment": "Enable per-project for long-running agent sessions requiring cross-session memory"
     }
   },
-  "instructions": "You are an expert software engineer and ecosystem architect. Default to English in code, docs, and issues. Respect CLAUDE.md per repo. Use GitHub Copilot (latest Claude) as default model.",
-  "_comment_model": "Model auto-selected from latest Claude available via Copilot. Do not hardcode a version. Fallback: anthropic/claude-sonnet-4-5 if Copilot unavailable."
+  "instructions": "You are an expert software engineer and ecosystem architect. Default to English in code, docs, and issues. Respect CLAUDE.md per repo.\n\nModel routing:\n- @fast → copilot-haiku (boilerplate, linting, quick lookups)\n- @code → copilot-sonnet (default — code, PRs, reviews)\n- @best → copilot-opus (architecture, ADRs, complex decisions)",
+  "_comment_model": "Three named providers expose haiku/sonnet/opus. Use @fast/@code/@best prefix in messages. Default is copilot-sonnet. Override per repo via opencode.override.json."
 }

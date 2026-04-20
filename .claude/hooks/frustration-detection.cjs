@@ -8,7 +8,7 @@
  * Hook type: UserPromptSubmit
  * Does NOT block (exit 0 always). Injects context via stdout JSON.
  *
- * @tag @[claude-sonnet-4]
+ * @tag @[claude-sonnet-4-6]
  *
  * Logic:
  *   - Frustration markers → inject "be direct, short, resolution-oriented" context

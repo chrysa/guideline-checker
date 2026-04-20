@@ -10,7 +10,7 @@
  *
  * Thresholds are defined in .claude/thresholds.json (see example below).
  *
- * @tag @[claude-sonnet-4]
+ * @tag @[claude-sonnet-4-6]
  *
  * Default thresholds checked:
  *   - max_function_lines: 50

@@ -14,16 +14,16 @@
  *
  * Tagging convention in rules/prompts/skills/CLAUDE.md:
  *   @[claude-opus-4]
- *   @[claude-sonnet-4]
+ *   @[claude-sonnet-4-6]
  *   @[gpt-4o]
  *   @[gemini-2-flash]
  *   etc.
  *
  * Example:
- *   // This rule only applies when using @[claude-sonnet-4]
+ *   // This rule only applies when using @[claude-sonnet-4-6]
  *   - Keep responses under 200 words
  *
- * @tag @[claude-sonnet-4]
+ * @tag @[claude-sonnet-4-6]
  */
 
 "use strict";
@@ -117,7 +117,7 @@ function main() {
     process.stdout.write(
       "No @[MODEL_NAME] tags found.\n\n" +
         "To tag a rule as model-specific, add a comment like:\n" +
-        "  // @[claude-sonnet-4]\n" +
+        "  // @[claude-sonnet-4-6]\n" +
         "  # @[gpt-4o]\n"
     );
     return;

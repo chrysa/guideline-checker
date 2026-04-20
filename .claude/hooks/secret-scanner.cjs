@@ -8,7 +8,7 @@
  * Hook type: PreToolUse — target: Bash (git commit)
  * Exit code 2 blocks the action with the message on stdout.
  *
- * @tag @[claude-sonnet-4]
+ * @tag @[claude-sonnet-4-6]
  *
  * Configuration:
  *   SS_ALLOWLIST_FILE  - path to JSON allowlist (default: .claude/secret-scanner-allowlist.json)
