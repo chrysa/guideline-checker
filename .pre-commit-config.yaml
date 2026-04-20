@@ -36,3 +36,14 @@ repos:
       - id: python-unreachable-code
       - id: yaml-sorter
         exclude: ^\.github/workflows/
+
+  # ── chrysa · drift detection vs shared-standards templates (warn-only) ──
+  - repo: local
+    hooks:
+      - id: check-standards-sync
+        name: Vérifie sync templates shared-standards (warn-only)
+        entry: bash scripts/check-standards-sync.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        # Opt-in : --strict (bloque commit si drift) · --auto-update (écrase local)
