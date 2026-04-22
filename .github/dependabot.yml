@@ -1,48 +1,29 @@
----
 version: 2
 updates:
-  - package-ecosystem: pip
-    directory: /
+  - package-ecosystem: "github-actions"
+    directory: "/"
     schedule:
-        interval: weekly
-        day: monday
+      interval: "weekly"
     open-pull-requests-limit: 5
     labels:
-        - dependencies
-        - python
-    groups:
-        testing:
-            patterns:
-                - pytest*
-                - coverage*
-        linting:
-            patterns:
-                - ruff*
-                - mypy*
+      - "dependencies"
 
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-        interval: weekly
-        day: monday
-    open-pull-requests-limit: 5
-    labels:
-        - dependencies
-        - github-actions
-    groups:
-        actions-core:
-            patterns:
-                - actions/*
-        chrysa:
-            patterns:
-                - chrysa/*
+  # Uncomment the block appropriate for your project:
 
-  - package-ecosystem: pre-commit
-    directory: /
-    schedule:
-        interval: weekly
-        day: monday
-    open-pull-requests-limit: 5
-    labels:
-        - dependencies
-        - pre-commit
+  # Python
+  # - package-ecosystem: "pip"
+  #   directory: "/"
+  #   schedule:
+  #     interval: "weekly"
+  #   open-pull-requests-limit: 5
+  #   labels:
+  #     - "dependencies"
+
+  # Node / npm
+  # - package-ecosystem: "npm"
+  #   directory: "/"
+  #   schedule:
+  #     interval: "weekly"
+  #   open-pull-requests-limit: 5
+  #   labels:
+  #     - "dependencies"
