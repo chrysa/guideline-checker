@@ -1,20 +1,23 @@
----
-name: PR Labeler
-
-on:
-    pull_request_target:
-        types: [opened, reopened, synchronize]
-
-permissions:
-    contents: read
-    pull-requests: write
-
+true:
+  pull_request: null
+  workflow_call: null
+  workflow_dispatch: null
 jobs:
-    labeler:
-        runs-on: ubuntu-latest
-        name: Label PR
-
-        steps:
-            - uses: actions/labeler@v6
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+  labels:
+    name: Apply labels on pull request
+    runs-on: ubuntu-latest
+    steps:
+    - name: Get Code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      with:
+        persist-credentials: false
+    - env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b
+      with:
+        sync-labels: true
+name: Pull Request Labels
+permissions:
+  contents: read
+  pull-requests: write
+run-name: "\U0001F3F7\uFE0F apply labeler by ${{ github.actor }}"
