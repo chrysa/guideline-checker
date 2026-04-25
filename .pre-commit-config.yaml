@@ -5,7 +5,7 @@ fail_fast: false
 minimum_pre_commit_version: 4.1.0
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: f1dff44d3a9ae852957f34def96390f28719c232
+    rev: b89c5eef3ba3a74ecd506d968e63a8b80f697abf
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -13,23 +13,23 @@ repos:
       - id: check-toml
       - id: debug-statements
       - id: check-merge-conflict
+      - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: c60c980e561ed3e73101667fe8365c609d19a438
+    rev: v0.15.11
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.20.0
+    rev: v1.20.1
     hooks:
       - id: mypy
-        additional_dependencies: [types-pyyaml]
         stages: [manual]
 
   - repo: https://github.com/chrysa/pre-commit-tools
-    rev: 2f1ce66f6619df34ef9ac8e0737296add680d146
+    rev: 63c9875f03bddbb21bbdda3fbb06dab9cf7bfaba
     hooks:
       - id: python-print-detection
       - id: python-pprint-detection
