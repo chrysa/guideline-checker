@@ -6,6 +6,7 @@ on:
 
 jobs:
   branch-policy:
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Validate PR source branch naming
