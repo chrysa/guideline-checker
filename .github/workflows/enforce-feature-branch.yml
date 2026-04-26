@@ -12,6 +12,10 @@ jobs:
         shell: bash
         run: |
           branch="${{ github.head_ref }}"
+          if [[ "$branch" == dependabot/* ]]; then
+            echo "Dependabot branch — policy check skipped"
+            exit 0
+          fi
           pattern='^(feature|fix|chore|docs|refactor|test|ci|build|perf|hotfix)/[a-z0-9._-]+$'
           if [[ ! "$branch" =~ $pattern ]]; then
             echo "Invalid branch name: $branch"
