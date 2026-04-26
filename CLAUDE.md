@@ -81,7 +81,7 @@ The `.pre-commit-hooks.yaml` defines:
 - Ruff for linting and formatting
 - Mypy strict mode
 - Pytest + pytest-cov for tests
-- All code, comments, issues, PRs, and docs in English
+- Language: English — all code, comments, documentation, instructions, and configuration files must be in English.
 
 ## Quickstart
 
