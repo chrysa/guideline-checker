@@ -164,7 +164,7 @@ jobs:
 
             - name: Generate CHANGELOG.md
               if: steps.tag_check.outputs.exists == 'false'
-              uses: orhun/git-cliff-action@v4
+              uses: orhun/git-cliff-action@v4.7.1
               with:
                   config: cliff.toml
                   args: --tag v${{ steps.gitversion.outputs.majorMinorPatch }}
