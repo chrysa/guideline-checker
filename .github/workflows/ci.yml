@@ -32,8 +32,8 @@ jobs:
             - id: matrix
               shell: bash
               run: |
-                  echo 'python-versions=["3.12","3.13","3.14"]' >> $GITHUB_OUTPUT
-                  echo 'latest-python=3.14' >> $GITHUB_OUTPUT
+                  echo 'python-versions=["3.12","3.13","3.14"]' >> "$GITHUB_OUTPUT"
+                  echo 'latest-python=3.14' >> "$GITHUB_OUTPUT"
 
     ruff:
         name: Ruff (${{ matrix.python-version }})

@@ -10,8 +10,10 @@ jobs:
     steps:
       - name: Validate PR source branch naming
         shell: bash
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
         run: |
-          branch="${{ github.head_ref }}"
+          branch="$BRANCH_NAME"
           if [[ "$branch" == dependabot/* ]]; then
             echo "Dependabot branch — policy check skipped"
             exit 0

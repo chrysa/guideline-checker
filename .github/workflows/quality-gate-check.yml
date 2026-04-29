@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -48,7 +48,7 @@ jobs:
         id: quality-gate
         run: |
           make quality-gate-verify || exit_code=$?
-          exit ${exit_code:-0}
+          exit "${exit_code:-0}"
 
       - name: Report quality gate status
         if: always()
