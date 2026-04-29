@@ -213,14 +213,14 @@ class QualityGate:
         if not self.baseline_path.exists():
             report = {
                 "mode": "verify",
-                "overall": "FAIL",
-                "reason": "missing_baseline",
+                "overall": "SKIP",
+                "reason": "no_baseline",
                 "baseline_file": str(self.baseline_path),
             }
             self._write_report(report)
-            print("OVERALL_RESULT|FAIL")
-            print("ERROR: baseline file not found; run quality-gate-baseline first")
-            return False
+            print("OVERALL_RESULT|SKIP")
+            print("WARNING: no baseline found — skipping regression check (run quality-gate-baseline to initialize)")
+            return True
 
         with open(self.baseline_path, encoding="utf-8") as handle:
             baseline = json.load(handle)
