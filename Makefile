@@ -68,3 +68,11 @@ clean: ## Clean build artifacts
 	find . -type f -name "*.pyc" -delete
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf .pytest_cache .mypy_cache .ruff_cache dist build *.egg-info
+
+# ── Quality Gates ──────────────────────────────────────────────────────────────
+
+quality-gate-baseline: ## Record baseline metrics for regression detection
+	@python3 scripts/quality_gate.py baseline
+
+quality-gate-verify: ## Verify no regression since baseline
+	@python3 scripts/quality_gate.py verify
