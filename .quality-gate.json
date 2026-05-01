@@ -1,0 +1,17 @@
+{
+  "description": "Quality gate configuration for Python project",
+  "commands": {
+        "tests": "make test",
+        "coverage": "make test-cov",
+    "lint": "make lint",
+    "types": "make type-check",
+    "build": "make build"
+  },
+  "thresholds": {
+    "tests": {"type": "count", "operator": "≥"},
+    "coverage": {"type": "percentage", "operator": "≥"},
+    "lint": {"type": "count", "operator": "=", "value": 0},
+    "types": {"type": "count", "operator": "≤"},
+    "build": {"type": "exit_code", "operator": "=", "value": 0}
+  }
+}
