@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.checker import _matches_pattern, run_checks
+from guideline_checker.checker import PatternCheck, _line_matches, _matches_pattern, run_checks
 
 
 @pytest.fixture()
@@ -153,3 +153,94 @@ class TestMatchesPattern:
         f = tmp_path / "anything.txt"
         f.touch()
         assert _matches_pattern(f, tmp_path, "**/*") is True
+
+
+# --- _line_matches unit tests ---
+
+
+class TestLineMatches:
+    """Unit tests for the updated _line_matches function."""
+
+    def test_skips_comment_line_by_default(self) -> None:
+        assert _line_matches("    # print(debug)", "print(") is False
+
+    def test_matches_code_line(self) -> None:
+        assert _line_matches('    print("hello")', "print(") is True
+
+    def test_match_in_comments_enabled(self) -> None:
+        assert _line_matches("    # TODO: fix this", "TODO", match_in_comments=True) is True
+
+    def test_match_in_comments_disabled(self) -> None:
+        assert _line_matches("    # TODO: fix this", "TODO", match_in_comments=False) is False
+
+    def test_case_insensitive_match(self) -> None:
+        assert _line_matches("    except:", "EXCEPT:") is True
+
+    def test_skips_js_comment(self) -> None:
+        assert _line_matches("    // console.log(x)", "console.log(") is False
+
+
+# --- PatternCheck rule-engine v0.2 tests ---
+
+
+def _make_project(tmp_path: Path, filename: str, content: str, rule: str) -> tuple[Path, Path]:
+    root = tmp_path / "proj"
+    root.mkdir(exist_ok=True)
+    inst_dir = root / ".github" / "instructions"
+    inst_dir.mkdir(parents=True, exist_ok=True)
+    ext = Path(filename).suffix or ".py"
+    (inst_dir / "rules.instructions.md").write_text(
+        f"---\napplyTo: '**/*{ext}'\ndescription: 'test'\n---\n- {rule}\n",
+        encoding="utf-8",
+    )
+    (root / filename).write_text(content, encoding="utf-8")
+    return root, inst_dir
+
+
+class TestRuleEngineV02:
+    """Tests for the extended pattern-matching engine (v0.2)."""
+
+    def test_detects_eval(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", 'result = eval("1+1")\n', "No eval() calls")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("eval(" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_exec(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", 'exec("code")\n', "No exec() calls")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("exec(" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_wildcard_import(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", "from os import *\n", "No wildcard imports")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("import *" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_todo_in_comment(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", "x = 1  # TODO: fix this\n", "No TODO comments")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("TODO" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_fixme_in_comment(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", "# FIXME: broken\n", "No FIXME comments")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("FIXME" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_debugger_statement(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.js", "debugger;\n", "No debugger statements")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("debugger" in v.line_content for r in results for v in r.violations)
+
+    def test_no_false_positive_clean_code(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", "def clean() -> str:\n    return 'ok'\n", "No eval() calls")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert all(len(r.violations) == 0 for r in results)
+
+    def test_pattern_check_namedtuple(self) -> None:
+        pc = PatternCheck("print(", "warning")
+        assert pc.pattern == "print("
+        assert pc.severity == "warning"
+        assert pc.match_in_comments is False
+
+    def test_pattern_check_with_match_in_comments(self) -> None:
+        pc = PatternCheck("TODO", "warning", match_in_comments=True)
+        assert pc.match_in_comments is True
