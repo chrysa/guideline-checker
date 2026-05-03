@@ -1,0 +1,30 @@
+---
+name: pre-commit
+
+on:
+    pull_request:
+        branches:
+            - main
+            - develop
+    push:
+        branches:
+            - main
+            - develop
+            - "feat/**"
+            - "feature/**"
+            - "fix/**"
+
+permissions:
+    contents: read
+
+jobs:
+    pre-commit:
+        name: Run pre-commit hooks
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v6
+            - uses: actions/setup-python@v6
+              with:
+                  python-version: "3.14"
+            - uses: pre-commit/action@v3.0.1
