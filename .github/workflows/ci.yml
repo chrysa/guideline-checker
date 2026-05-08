@@ -16,7 +16,7 @@ on:
 # Required for publish-unit-test-result-action and SonarCloud
 permissions:
     checks: write
-    contents: write
+    contents: read
     pull-requests: write
     statuses: write
 
@@ -142,6 +142,8 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         runs-on: ubuntu-latest
         timeout-minutes: 15
+        permissions:
+            contents: write
         steps:
             - uses: actions/checkout@v6
               with:
