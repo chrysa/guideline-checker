@@ -51,9 +51,10 @@ jobs:
           SURVIVED=$(mutmut results 2>/dev/null | grep -c "^Survived" || echo 0)
           TOTAL=$((KILLED + SURVIVED))
           SCORE=$([ "$TOTAL" -eq 0 ] && echo 100 || echo $((KILLED * 100 / TOTAL)))
+          THRESHOLD="${{ env.MUTATION_THRESHOLD }}"
           mutmut results || true
-          echo "Mutation score: ${SCORE}% (threshold: ${{ env.MUTATION_THRESHOLD }}%)"
-          [ "$SCORE" -ge "${{ env.MUTATION_THRESHOLD }}" ] || exit 1
+          echo "Mutation score: ${SCORE}% (threshold: ${THRESHOLD}%)"
+          [ "$SCORE" -ge "$THRESHOLD" ] || exit 1
 
       - uses: actions/upload-artifact@v7
         if: always()

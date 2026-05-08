@@ -13,10 +13,6 @@ permissions:
   checks: write
   statuses: write
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   quality-gate:
     name: No-Regression Quality Gates
