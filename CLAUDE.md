@@ -86,12 +86,35 @@ The `.pre-commit-hooks.yaml` defines:
 - Pytest + pytest-cov for tests
 - All code, comments, issues, PRs, and docs in English
 
-## Quickstart
+## Local test procedure
+
+All checks must go through `make` targets. Never invoke `ruff`/`pytest`/`mypy` directly on the host outside of the make wrapper.
 
 ```bash
-pip install -e ".[dev]"
-pytest
-pre-commit run --all-files
+# 1. Install
+make install-dev
+
+# 2. Full quality check (lint + format + type-check)
+make lint && make format-check && make type-check
+
+# 3. Run tests
+make test                  # all tests
+make test-cov              # with coverage report
+
+# 4. Run all pre-commit hooks on every file
+make pre-commit
+
+# 5. Validate GitHub Actions workflows (requires actionlint)
+docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest
+
+# 6. Quality gate (no-regression check)
+make quality-gate-verify
+```
+
+### Regression gate (before every PR)
+```bash
+make lint && make test-cov && make quality-gate-verify
+# Coverage must stay >= 85%. Lint warnings must be 0.
 ```
 
 <!-- gitnexus:start -->
