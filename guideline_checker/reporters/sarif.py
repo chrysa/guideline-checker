@@ -31,7 +31,7 @@ class SarifReporter:
     def write(self, results: list[RuleResult], output_path: Path, root: Path) -> None:
         """Write the SARIF report to output_path."""
         rules = self._build_rules(results)
-        rule_index: dict[str, int] = {r["id"]: i for i, r in enumerate(rules)}
+        rule_index: dict[str, int] = {str(r["id"]): i for i, r in enumerate(rules)}
         runs = [
             {
                 "tool": {
