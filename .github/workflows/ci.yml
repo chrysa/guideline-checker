@@ -143,6 +143,25 @@ jobs:
                   sources: guideline_checker
                   tests: tests
 
+    guideline-check:
+        name: Guideline compliance check
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read
+            security-events: write
+        steps:
+            - uses: actions/checkout@v6
+
+            - name: Run guideline-checker
+              uses: ./
+              with:
+                  root: ${{ github.workspace }}
+                  fail-on: error
+                  sarif-output: guideline-results.sarif
+                  upload-sarif: 'true'
+                  python-version: '3.12'
+
     release:
         name: Tag release
         needs: [ruff, test]

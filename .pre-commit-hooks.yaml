@@ -1,8 +1,26 @@
 - id: guideline-check
   name: Guideline Compliance Check
-  description: Check project files against .github/instructions/ rules and generate an HTML report
+  description: >
+    Check project files against .github/instructions/ rules.
+    Exits with code 1 if any error-level violation is found.
+    Use --fail-on warning to also fail on warnings.
   entry: guideline-checker
   language: python
   args: [check, --fail-on, error]
   pass_filenames: false
   always_run: true
+  minimum_pre_commit_version: '3.0.0'
+  stages: [pre-commit, pre-push, manual]
+
+- id: guideline-check-warning
+  name: Guideline Compliance Check (warnings)
+  description: >
+    Like guideline-check but also fails on warnings.
+    Use as an optional, stricter variant.
+  entry: guideline-checker
+  language: python
+  args: [check, --fail-on, warning]
+  pass_filenames: false
+  always_run: true
+  minimum_pre_commit_version: '3.0.0'
+  stages: [manual]
