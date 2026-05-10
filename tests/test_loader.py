@@ -78,6 +78,86 @@ def test_load_instructions_rules(instructions_dir: Path) -> None:
 
 
 def test_load_instructions_empty_dir(tmp_path: Path) -> None:
+    """Should return empty list when no instruction files exist."""
+    empty_dir = tmp_path / "instructions"
+    empty_dir.mkdir()
+    result = load_instructions(empty_dir)
+    assert result == []
+
+
+def test_load_instructions_without_frontmatter(tmp_path: Path) -> None:
+    """Should parse files without YAML frontmatter, using inline applyTo."""
+    inst_dir = tmp_path / "instructions"
+    inst_dir.mkdir()
+    (inst_dir / "plain.instructions.md").write_text(
+        "applyTo: **/*.py\n\n- No print calls allowed\n- No bare except\n",
+        encoding="utf-8",
+    )
+    result = load_instructions(inst_dir)
+    assert len(result) == 1
+    assert result[0].apply_to == "**/*.py"
+    assert len(result[0].rules) == 2
+
+
+def test_load_instructions_no_apply_to_defaults_to_glob_all(tmp_path: Path) -> None:
+    """Files without applyTo should default to **/*."""
+    inst_dir = tmp_path / "instructions"
+    inst_dir.mkdir()
+    (inst_dir / "minimal.instructions.md").write_text(
+        "# Rules\n\n- No print calls\n",
+        encoding="utf-8",
+    )
+    result = load_instructions(inst_dir)
+    assert result[0].apply_to == "**/*"
+
+
+def test_load_instructions_no_description_defaults_to_stem(tmp_path: Path) -> None:
+    """Files without description field should use the file stem as description."""
+    inst_dir = tmp_path / "instructions"
+    inst_dir.mkdir()
+    (inst_dir / "my-rules.instructions.md").write_text(
+        "---\napplyTo: '**/*.py'\n---\n\n- No print calls\n",
+        encoding="utf-8",
+    )
+    result = load_instructions(inst_dir)
+    assert result[0].description == "my-rules.instructions"
+
+
+def test_load_instructions_without_frontmatter_no_apply_to(tmp_path: Path) -> None:
+    """Files without frontmatter and without applyTo line should default to **/*."""
+    inst_dir = tmp_path / "instructions"
+    inst_dir.mkdir()
+    (inst_dir / "nodesc.instructions.md").write_text(
+        "- No bare except clauses allowed in production\n",
+        encoding="utf-8",
+    )
+    result = load_instructions(inst_dir)
+    assert result[0].apply_to == "**/*"
+
+
+def test_load_instructions_without_frontmatter_with_description(tmp_path: Path) -> None:
+    """Files without frontmatter but with inline description line should parse it."""
+    inst_dir = tmp_path / "instructions"
+    inst_dir.mkdir()
+    (inst_dir / "inline.instructions.md").write_text(
+        "description: Inline description\napplyTo: **/*.ts\n\n- No console.log calls\n",
+        encoding="utf-8",
+    )
+    result = load_instructions(inst_dir)
+    assert result[0].description == "Inline description"
+
+
+def test_extract_rules_short_lines_are_skipped(tmp_path: Path) -> None:
+    """Rule lines shorter than 10 chars should be ignored."""
+    inst_dir = tmp_path / "instructions"
+    inst_dir.mkdir()
+    (inst_dir / "short.instructions.md").write_text(
+        "---\napplyTo: '**/*.py'\ndescription: 'short'\n---\n- short\n- This is a proper long rule sentence\n",
+        encoding="utf-8",
+    )
+    result = load_instructions(inst_dir)
+    assert len(result[0].rules) == 1
+    assert "proper" in result[0].rules[0]
     """Should return empty list for directory with no .instructions.md files."""
     result = load_instructions(tmp_path)
     assert result == []

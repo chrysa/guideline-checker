@@ -1,0 +1,90 @@
+author: chrysa
+branding:
+  color: blue
+  icon: check-circle
+description: 'Check project compliance against .github/instructions/ rules. Generates
+  SARIF (GitHub Code Scanning), Markdown, and HTML reports.
+
+  '
+inputs:
+  fail-on:
+    default: error
+    description: 'Severity threshold that causes the action to fail. Accepted values:
+      error | warning | never.
+
+      '
+    required: false
+  instructions:
+    default: ''
+    description: 'Path to the instructions directory. Defaults to <root>/.github/instructions.
+
+      '
+    required: false
+  python-version:
+    default: '3.12'
+    description: Python version used to install and run guideline-checker.
+    required: false
+  root:
+    default: ${{ github.workspace }}
+    description: Project root directory (defaults to repository root).
+    required: false
+  sarif-output:
+    default: guideline-results.sarif
+    description: Path to write the SARIF 2.1.0 report.
+    required: false
+  upload-sarif:
+    default: 'true'
+    description: Upload SARIF to GitHub Code Scanning (requires security-events write
+      permission).
+    required: false
+name: Guideline Checker
+outputs:
+  sarif-path:
+    description: Absolute path to the generated SARIF report.
+    value: ${{ steps.run.outputs.sarif-path }}
+  violations:
+    description: Total number of violations found.
+    value: ${{ steps.run.outputs.violations }}
+runs:
+  steps:
+  - name: Set up Python
+    uses: actions/setup-python@v5
+    with:
+      python-version: ${{ inputs.python-version }}
+  - name: Install guideline-checker
+    run: pip install --quiet "${{ github.action_path }}"
+    shell: bash
+  - env:
+      GC_FAIL_ON: ${{ inputs.fail-on }}
+      GC_INSTRUCTIONS: ${{ inputs.instructions }}
+      GC_ROOT: ${{ inputs.root }}
+      GC_SARIF: ${{ inputs.sarif-output }}
+    id: run
+    name: Run guideline-checker
+    run: "ARGS=(check --root \"$GC_ROOT\" --sarif \"$GC_SARIF\" --markdown guideline-report.md)\n\
+      \nif [[ -n \"$GC_INSTRUCTIONS\" ]]; then\n  ARGS+=(--instructions \"$GC_INSTRUCTIONS\"\
+      )\nfi\n\nARGS+=(--fail-on \"$GC_FAIL_ON\")\n\nset +e\nOUTPUT=$(guideline-checker\
+      \ \"${ARGS[@]}\" 2>&1)\nEXIT_CODE=$?\nset -e\n\necho \"$OUTPUT\"\n\nVIOLATIONS=$(echo\
+      \ \"$OUTPUT\" | grep -oP '\\d+(?= violation)' | head -1 || echo \"0\")\necho\
+      \ \"violations=${VIOLATIONS:-0}\" >> \"$GITHUB_OUTPUT\"\necho \"sarif-path=$(realpath\
+      \ \"$GC_SARIF\" 2>/dev/null || echo \"$GC_SARIF\")\" >> \"$GITHUB_OUTPUT\"\n\
+      \nexit $EXIT_CODE\n"
+    shell: bash
+  - if: ${{ inputs.upload-sarif == 'true' && !cancelled() }}
+    name: Upload SARIF to GitHub Code Scanning
+    uses: github/codeql-action/upload-sarif@v3
+    with:
+      category: guideline-checker
+      sarif_file: ${{ inputs.sarif-output }}
+  - if: ${{ !cancelled() }}
+    name: Upload Markdown report as artifact
+    uses: actions/upload-artifact@v4
+    with:
+      if-no-files-found: warn
+      name: guideline-report
+      path: 'guideline-report.md
+
+        ${{ inputs.sarif-output }}
+
+        '
+  using: composite
