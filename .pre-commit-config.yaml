@@ -8,8 +8,8 @@ repos:
   - id: end-of-file-fixer
   - args:
     - --unsafe
-    id: check-yaml
     exclude: ^\.github/ISSUE_TEMPLATE/
+    id: check-yaml
   - id: check-toml
   - id: debug-statements
   - id: check-merge-conflict
