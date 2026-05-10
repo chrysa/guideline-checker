@@ -60,8 +60,7 @@ test: ## Run tests
 	pytest tests -v
 
 test-cov: ## Run tests with coverage report
-	pytest tests -v --cov=$(PACKAGE_DIR) --cov-report=xml --cov-report=term-missing
-
+     pytest tests -v --cov=$(PACKAGE_DIR) --cov-report=xml --cov-report=term-missing --cov-fail-under=85
 # ─── Docker ───────────────────────────────────────────────────────────────────
 
 docker-build: ## Build all Docker stages
