@@ -105,3 +105,29 @@ def test_main_check_custom_instructions_dir(tmp_path: Path) -> None:
     (root / "app.py").write_text("x = 1\n", encoding="utf-8")
     code = main(["check", "--root", str(root), "--instructions", str(custom_inst)])
     assert code == 0
+
+
+def test_main_check_sarif_report_created(tmp_path: Path) -> None:
+    import json
+
+    root = _make_project(tmp_path, violation=True)
+    sarif_report = tmp_path / "report.sarif"
+    main(["check", "--root", str(root), "--sarif", str(sarif_report), "--fail-on", "never"])
+    assert sarif_report.exists()
+    data = json.loads(sarif_report.read_text(encoding="utf-8"))
+    assert data["version"] == "2.1.0"
+
+
+def test_main_check_markdown_report_created(tmp_path: Path) -> None:
+    root = _make_project(tmp_path, violation=True)
+    md_report = tmp_path / "report.md"
+    main(["check", "--root", str(root), "--markdown", str(md_report), "--fail-on", "never"])
+    assert md_report.exists()
+    content = md_report.read_text(encoding="utf-8")
+    assert "# Guideline Compliance Report" in content
+
+
+def test_main_check_fail_on_error_no_violations(tmp_path: Path) -> None:
+    root = _make_project(tmp_path, violation=False)
+    code = main(["check", "--root", str(root), "--fail-on", "error"])
+    assert code == 0

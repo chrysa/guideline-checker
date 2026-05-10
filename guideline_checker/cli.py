@@ -49,6 +49,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Also write a JSON report to this path.",
     )
+    check_cmd.add_argument(
+        "--sarif",
+        type=Path,
+        default=None,
+        help="Also write a SARIF 2.1.0 report (GitHub Code Scanning compatible).",
+    )
+    check_cmd.add_argument(
+        "--markdown",
+        type=Path,
+        default=None,
+        help="Also write a Markdown report to this path.",
+    )
     return parser
 
 
@@ -79,6 +91,18 @@ def main(argv: list[str] | None = None) -> int:
 
         JsonReporter().write(results=results, output_path=args.json, root=root)
         print(f"[guideline-checker] JSON report written to: {args.json}")
+
+    if args.sarif:
+        from guideline_checker.reporters.sarif import SarifReporter
+
+        SarifReporter().write(results=results, output_path=args.sarif, root=root)
+        print(f"[guideline-checker] SARIF report written to: {args.sarif}")
+
+    if args.markdown:
+        from guideline_checker.reporters.markdown import MarkdownReporter
+
+        MarkdownReporter().write(results=results, output_path=args.markdown, root=root)
+        print(f"[guideline-checker] Markdown report written to: {args.markdown}")
 
     violation_count = sum(len(r.violations) for r in results)
     error_count = sum(sum(1 for v in r.violations if v.severity == "error") for r in results)
