@@ -19,7 +19,7 @@ repos:
     - main
     id: no-commit-to-branch
   repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: 803469bde8523f208d030ce33f575d7bee0ba9bf
+  rev: v6.0.0
 - hooks:
   - args:
     - --fix
