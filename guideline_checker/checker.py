@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
@@ -23,6 +24,9 @@ IGNORE_DIRS = {
     ".eggs",
     "*.egg-info",
 }
+
+# Inline suppression marker — add this comment on any line to skip all rule checks
+DISABLE_COMMENT = "guideline: disable"
 
 
 class PatternCheck(NamedTuple):
@@ -119,10 +123,18 @@ def _evaluate_rule(file_path: Path, lines: list[str], rule: str) -> list[Violati
     violations: list[Violation] = []
     rule_lower = rule.lower()
 
+    # Length-based rules are handled separately (need the full file)
+    length_violations = _check_length_rules(file_path, lines, rule_lower)
+    if length_violations:
+        return length_violations
+
     # Detect common anti-patterns based on rule text
     checks = _build_checks(rule_lower)
 
     for lineno, line in enumerate(lines, start=1):
+        # Inline suppression: skip lines marked with the disable comment
+        if DISABLE_COMMENT in line:
+            continue
         for check in checks:
             if _line_matches(line, check.pattern, match_in_comments=check.match_in_comments):
                 violations.append(
@@ -149,7 +161,34 @@ def _build_checks(rule_lower: str) -> list[PatternCheck]:
     checks.extend(_annotation_checks(rule_lower))
     checks.extend(_hygiene_checks(rule_lower))
     checks.extend(_credential_checks(rule_lower))
+    checks.extend(_typescript_checks(rule_lower))
+    checks.extend(_python_strict_checks(rule_lower))
+    checks.extend(_security_checks(rule_lower))
     return checks
+
+
+def _check_length_rules(file_path: Path, lines: list[str], rule_lower: str) -> list[Violation]:
+    """Check file/function length rules that operate on the whole file."""
+    violations: list[Violation] = []
+
+    # Max file length: "max file length: N" or "max N lines per file"
+    match = re.search(r"max(?:imum)?\s+file\s+length[:\s]+(\d+)", rule_lower) or re.search(
+        r"max\s+(\d+)\s+lines?\s+per\s+file", rule_lower
+    )
+    if match:
+        limit = int(match.group(1))
+        if len(lines) > limit:
+            violations.append(
+                Violation(
+                    file=file_path,
+                    line_number=1,
+                    line_content=f"File has {len(lines)} lines (limit: {limit})",
+                    rule=f"max file length: {limit}",
+                    severity="warning",
+                )
+            )
+
+    return violations
 
 
 def _debug_output_checks(rule_lower: str) -> list[PatternCheck]:
@@ -218,6 +257,60 @@ def _credential_checks(rule_lower: str) -> list[PatternCheck]:
     return [
         PatternCheck(kw, "error") for kw in ("password =", "password=", "secret =", "secret=", "api_key =", "api_key=")
     ]
+
+
+def _typescript_checks(rule_lower: str) -> list[PatternCheck]:
+    """TypeScript / React anti-pattern checks."""
+    checks: list[PatternCheck] = []
+    if "no any" in rule_lower or "no `any`" in rule_lower or "avoid any" in rule_lower:
+        checks.append(PatternCheck(": any", "error"))
+        checks.append(PatternCheck("as any", "error"))
+    if "no ts-ignore" in rule_lower or "no @ts-ignore" in rule_lower:
+        checks.append(PatternCheck("@ts-ignore", "error", match_in_comments=True))
+    if "no ts-nocheck" in rule_lower or "no @ts-nocheck" in rule_lower:
+        checks.append(PatternCheck("@ts-nocheck", "error", match_in_comments=True))
+    if "no console.log" in rule_lower:
+        checks.append(PatternCheck("console.log(", "warning"))
+    if "no console.debug" in rule_lower:
+        checks.append(PatternCheck("console.debug(", "warning"))
+    if "no console.warn" in rule_lower:
+        checks.append(PatternCheck("console.warn(", "warning"))
+    if "no inline style" in rule_lower or "no inline styles" in rule_lower:
+        checks.append(PatternCheck("style={{", "warning"))
+    return checks
+
+
+def _python_strict_checks(rule_lower: str) -> list[PatternCheck]:
+    """Strict Python quality checks."""
+    checks: list[PatternCheck] = []
+    if "no global" in rule_lower and "global statement" in rule_lower:
+        checks.append(PatternCheck("global ", "error"))
+    if "no pass in except" in rule_lower or "no silent exception" in rule_lower:
+        checks.append(PatternCheck("except:", "error"))
+    if "no mutable default" in rule_lower:
+        checks.append(PatternCheck("=[]", "warning"))
+        checks.append(PatternCheck("={}", "warning"))
+    if "no type: ignore" in rule_lower or "no type:ignore" in rule_lower:
+        checks.append(PatternCheck("type: ignore", "error", match_in_comments=True))
+        checks.append(PatternCheck("type:ignore", "error", match_in_comments=True))
+    return checks
+
+
+def _security_checks(rule_lower: str) -> list[PatternCheck]:
+    """Security-oriented checks (OWASP-aligned)."""
+    checks: list[PatternCheck] = []
+    if "no hardcoded url" in rule_lower or "no hardcoded urls" in rule_lower:
+        checks.append(PatternCheck("http://", "warning"))
+        checks.append(PatternCheck("https://", "info"))
+    if "no hardcoded ip" in rule_lower:
+        checks.append(PatternCheck("127.0.0.1", "warning"))
+        checks.append(PatternCheck("0.0.0.0", "warning"))  # noqa: S104
+    if "no shell=true" in rule_lower or "no shell injection" in rule_lower:
+        checks.append(PatternCheck("shell=True", "error"))
+    if "no pickle" in rule_lower:
+        checks.append(PatternCheck("import pickle", "error"))
+        checks.append(PatternCheck("pickle.load", "error"))
+    return checks
 
 
 def _line_matches(line: str, pattern: str, *, match_in_comments: bool = False) -> bool:
