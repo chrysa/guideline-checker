@@ -11,7 +11,7 @@ Closes #<!-- issue number — required: 1 PR = 1 issue -->
 
 ## Changes
 <!-- List the concrete changes made -->
-- 
+-
 
 ## Dependencies
 <!-- List any PRs this depends on. Format: chrysa/REPO#NUMBER -->
