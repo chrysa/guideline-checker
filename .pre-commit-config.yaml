@@ -1,51 +1,64 @@
----
 default_language_version:
   python: python3.14
 fail_fast: false
 minimum_pre_commit_version: 4.1.0
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: 803469bde8523f208d030ce33f575d7bee0ba9bf
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-toml
-      - id: debug-statements
-      - id: check-merge-conflict
-      - id: detect-private-key
-      - id: no-commit-to-branch
-        args: [--branch, main]
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.0.0
-    hooks:
-      - id: mypy
-        stages: [manual]
-
-  - repo: https://github.com/chrysa/pre-commit-tools
-    rev: v0.1.1-63
-    hooks:
-      - id: python-print-detection
-      - id: python-pprint-detection
-      - id: python-unreachable-code
-      - id: yaml-sorter
-        exclude: ^\.github/workflows/
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.1
-    hooks:
-      - id: gitleaks
-
-  - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.4.0
-    hooks:
-      - id: conventional-pre-commit
-        stages: [commit-msg]
-        args: [feat, fix, docs, style, refactor, test, chore, perf, revert, ci]
+- hooks:
+  - id: trailing-whitespace
+  - id: end-of-file-fixer
+  - args:
+    - --unsafe
+    exclude: ^\.github/ISSUE_TEMPLATE/
+    id: check-yaml
+  - id: check-toml
+  - id: debug-statements
+  - id: check-merge-conflict
+  - id: detect-private-key
+  - args:
+    - --branch
+    - main
+    id: no-commit-to-branch
+  repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: 803469bde8523f208d030ce33f575d7bee0ba9bf
+- hooks:
+  - args:
+    - --fix
+    id: ruff
+  - id: ruff-format
+  repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.15.12
+- hooks:
+  - id: mypy
+    stages:
+    - manual
+  repo: https://github.com/pre-commit/mirrors-mypy
+  rev: v2.0.0
+- hooks:
+  - id: python-print-detection
+  - id: python-pprint-detection
+  - id: python-unreachable-code
+  - exclude: ^\.github/(workflows|ISSUE_TEMPLATE)/
+    id: yaml-sorter
+  repo: https://github.com/chrysa/pre-commit-tools
+  rev: v0.1.1-63
+- hooks:
+  - id: gitleaks
+  repo: https://github.com/gitleaks/gitleaks
+  rev: v8.30.1
+- hooks:
+  - args:
+    - feat
+    - fix
+    - docs
+    - style
+    - refactor
+    - test
+    - chore
+    - perf
+    - revert
+    - ci
+    id: conventional-pre-commit
+    stages:
+    - commit-msg
+  repo: https://github.com/compilerla/conventional-pre-commit
+  rev: v4.4.0
