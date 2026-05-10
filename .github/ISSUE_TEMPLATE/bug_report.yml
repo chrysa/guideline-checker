@@ -1,35 +1,61 @@
----
 name: Bug report
-about: Report something that is broken or not working as expected
+description: Report something that is broken or not working as expected
 title: 'fix: '
-labels: ['bug']
-assignees: ''
----
-
-## Severity
-<!-- Select one: Critical | High | Medium | Low -->
-
-## Description
-<!-- A clear and concise description of the bug -->
-
-## Steps to reproduce
-1.
-2.
-3.
-
-## Expected behavior
-<!-- What did you expect to happen? -->
-
-## Actual behavior
-<!-- What actually happened? -->
-
-## Environment
-- OS:
-- Python/Node version:
-- Relevant versions:
-
-## Additional context
-<!-- Logs, screenshots, SonarCloud findings, etc. -->
-
-## Next step
-<!-- Create a PR with `Closes #<this issue number>` once the fix is ready -->
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - OS:
+        - Python/Node version:
+        - Relevant versions:
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Logs, screenshots, SonarCloud findings, etc.

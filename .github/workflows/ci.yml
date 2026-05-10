@@ -7,10 +7,13 @@ on:
             - main
     push:
         branches:
-            - feature/**
-            - fix/**
             - main
-            - release/**
+            - "feat/**"
+            - "feature/**"
+            - "fix/**"
+            - "chore/**"
+            - "ci/**"
+            - "release/**"
     workflow_dispatch:
 
 # Required for publish-unit-test-result-action and SonarCloud
@@ -19,6 +22,10 @@ permissions:
     contents: read
     pull-requests: write
     statuses: write
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
 
 jobs:
     config:
@@ -59,7 +66,7 @@ jobs:
                   python-version: ${{ matrix.python-version }}
                   latest-python: ${{ needs.config.outputs.latest-python }}
                   config: ruff.toml
-                  sources: 'guideline_checker tests'
+                  sources: "guideline_checker tests"
 
     mypy:
         name: Mypy (${{ matrix.python-version }})
@@ -86,7 +93,7 @@ jobs:
                   python-version: ${{ matrix.python-version }}
                   latest-python: ${{ needs.config.outputs.latest-python }}
                   config-file: pyproject.toml
-                  sources: 'guideline_checker'
+                  sources: "guideline_checker"
 
     test:
         name: Test (${{ matrix.python-version }})

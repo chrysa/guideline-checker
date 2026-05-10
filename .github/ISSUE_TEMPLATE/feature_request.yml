@@ -1,32 +1,54 @@
----
 name: Feature request
-about: Propose a new feature or enhancement
+description: Propose a new feature or enhancement
 title: 'feat: '
-labels: ['enhancement']
-assignees: ''
----
-
-## Priority
-<!-- Select one: High | Medium | Low -->
-
-## Summary
-<!-- Brief description of the feature (1–2 sentences) -->
-
-## Motivation
-<!-- Why is this feature needed? What problem does it solve? -->
-
-## Proposed solution
-<!-- How should this be implemented? Stack, approach, constraints -->
-
-## Acceptance criteria
-- [ ]
-- [ ]
-
-## Out of scope
-<!-- What is explicitly NOT part of this issue -->
-
-## Additional context
-<!-- Links to Notion, mockups, related issues -->
-
-## Next step
-<!-- This issue should be covered by exactly 1 PR: `Closes #<this issue number>` -->
+labels:
+  - enhancement
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Brief description of the feature (1-2 sentences)
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why is this feature needed? What problem does it solve?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How should this be implemented? Stack, approach, constraints
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: What is explicitly NOT part of this issue
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links to Notion, mockups, related issues

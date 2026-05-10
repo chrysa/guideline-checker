@@ -1,0 +1,19 @@
+services:
+  lint:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: lint
+    environment:
+    - PYTHONDONTWRITEBYTECODE=1
+    - PYTHONUNBUFFERED=1
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    environment:
+    - PYTHONDONTWRITEBYTECODE=1
+    - PYTHONUNBUFFERED=1
+    volumes:
+    - ./coverage.xml:/app/coverage.xml
