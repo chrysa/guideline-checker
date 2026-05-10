@@ -95,3 +95,9 @@ quality-gate-verify: ## Verify no regression since baseline
 
 typecheck: ## Alias for type-check
 	$(MAKE) type-check
+
+dev: ## Start development environment (install in editable mode)
+	pip install -e .[dev]
+
+build: ## Build package (alias → docker-build)
+	$(MAKE) docker-build
