@@ -1,5 +1,5 @@
 ---
-applyTo: "**/*.py"
+applyTo: "guideline_checker/**/*.py"
 ---
 
 # Python coding standards for guideline-checker
