@@ -59,8 +59,22 @@ pre-commit: ## Run pre-commit on all files
 test: ## Run tests
 	pytest tests -v
 
-test-cov: ## Run tests with coverage
-	pytest tests -v --cov=$(PACKAGE_DIR) --cov-report=term-missing
+test-cov: ## Run tests with coverage report
+	pytest tests -v --cov=$(PACKAGE_DIR) --cov-report=xml --cov-report=term-missing
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+
+docker-build: ## Build all Docker stages
+	docker compose build
+
+docker-test: ## Run tests inside Docker container
+	docker compose run --rm test
+
+docker-lint: ## Run lint + type-check inside Docker container
+	docker compose run --rm lint
+
+docker-clean: ## Remove Docker images and containers for this project
+	docker compose down --rmi local --volumes --remove-orphans
 
 # ─── Cleanup ─────────────────────────────────────────────────────────────────
 
@@ -76,3 +90,8 @@ quality-gate-baseline: ## Record baseline metrics for regression detection
 
 quality-gate-verify: ## Verify no regression since baseline
 	@python3 scripts/quality_gate.py verify
+
+# ─── Compat aliases ───────────────────────────────────────────────────────────
+
+typecheck: ## Alias for type-check
+	$(MAKE) type-check

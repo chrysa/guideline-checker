@@ -1,29 +1,25 @@
-mode: ContinuousDeployment
-
 branches:
+  feature:
+    increment: Minor
+    regex: ^feature[/-].*$
+    source_branches:
+    - main
+    tag: alpha
+  fix:
+    increment: Patch
+    regex: ^fix[/-].*$
+    source_branches:
+    - main
+    tag: beta
   main:
-    tag: ''
     increment: Patch
     prevent_increment_of_merged_branch_version: false
-    regex: '^main$'
-
-  feature:
-    regex: '^feature[/-].*$'
-    tag: alpha
-    increment: Minor
-    source_branches:
-      - main
-
-  fix:
-    regex: '^fix[/-].*$'
-    tag: beta
-    increment: Patch
-    source_branches:
-      - main
-
+    regex: ^main$
+    tag: ''
   release:
-    regex: '^release[/-].*$'
-    tag: rc
     increment: Minor
+    regex: ^release[/-].*$
     source_branches:
-      - main
+    - main
+    tag: rc
+mode: ContinuousDeployment
