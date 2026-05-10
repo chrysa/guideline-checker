@@ -1,28 +1,48 @@
----
 name: Security vulnerability
-about: Report a security issue or vulnerability (do NOT disclose publicly)
+description: Report a security issue or vulnerability (do NOT disclose publicly)
 title: 'security: '
-labels: ['security']
-assignees: ''
----
-
-## Severity
-<!-- Select one: Critical | High | Medium | Low -->
-
-## Summary
-<!-- Brief description — do NOT include exploit details in public issues -->
-
-## Affected component
-<!-- File, endpoint, dependency, etc. -->
-
-## Impact
-<!-- What could an attacker do? -->
-
-## Suggested fix
-<!-- If known: patch, version bump, config change -->
-
-## References
-<!-- CVE, GHSA, SonarCloud finding ID, etc. -->
-
-## Next step
-<!-- This issue should be covered by exactly 1 PR with `Closes #<this issue number>` -->
+labels:
+  - security
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Brief description — do NOT include exploit details in public issues
+    validations:
+      required: true
+  - type: input
+    id: component
+    attributes:
+      label: Affected component
+      description: File, endpoint, dependency, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: What could an attacker do?
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: Suggested fix
+      description: If known, patch, version bump, config change
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: CVE, GHSA, SonarCloud finding ID, etc.
