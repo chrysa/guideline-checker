@@ -6,7 +6,7 @@ applyTo: "**/*.py"
 
 ## Imports
 - Standard library imports first, then third-party, then local — separated by blank lines.
-- No wildcard imports (`from module import *`).
+- Use explicit named imports only; avoid star imports.
 
 ## Functions
 - Maximum function length: 50 lines.
