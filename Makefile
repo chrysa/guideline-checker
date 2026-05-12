@@ -48,7 +48,7 @@ format: ## Run ruff formatter
 format-check: ## Check ruff formatting (no changes)
 	ruff format --check $(PACKAGE_DIR)
 
-type-check: ## Run mypy type checking
+typecheck: ## Run mypy type checking
 	mypy $(PACKAGE_DIR)
 
 pre-commit: ## Run pre-commit on all files
@@ -65,6 +65,12 @@ test-cov: ## Run tests with coverage report
 
 docker-build: ## Build all Docker stages
 	docker compose build
+
+docker-up: ## Start services with Docker Compose
+	docker compose up -d
+
+docker-down: ## Stop services
+	docker compose down
 
 docker-test: ## Run tests inside Docker container
 	docker compose run --rm test
@@ -92,8 +98,7 @@ quality-gate-verify: ## Verify no regression since baseline
 
 # ─── Compat aliases ───────────────────────────────────────────────────────────
 
-typecheck: ## Alias for type-check
-	$(MAKE) type-check
+type-check: typecheck ## Legacy alias
 
 dev: ## Start development environment (install in editable mode)
 	pip install -e .[dev]

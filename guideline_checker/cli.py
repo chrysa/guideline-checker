@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,6 +18,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
 
+    # ── init subcommand ──────────────────────────────────────────────────────
+    init_cmd = sub.add_parser("init", help="Scaffold default instruction files in a project.")
+    init_cmd.add_argument(
+        "--root",
+        type=Path,
+        default=Path("."),
+        help="Project root directory (default: current directory).",
+    )
+    init_cmd.add_argument(
+        "--instructions",
+        type=Path,
+        default=None,
+        help="Target instructions directory (default: <root>/.github/instructions).",
+    )
+    init_cmd.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Overwrite existing instruction files.",
+    )
+
+    # ── check subcommand ─────────────────────────────────────────────────────
     check_cmd = sub.add_parser("check", help="Run compliance checks and generate report.")
     check_cmd.add_argument(
         "--root",
@@ -61,25 +84,83 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Also write a Markdown report to this path.",
     )
+    check_cmd.add_argument(
+        "--diff",
+        action="store_true",
+        default=False,
+        help="Only check files modified in the current git working tree (git diff --name-only HEAD).",
+    )
     return parser
+
+
+def _get_diff_files(root: Path) -> list[Path] | None:
+    """Return list of files modified vs HEAD (staged + unstaged).
+
+    Returns None if git is unavailable or the directory is not a git repo.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=root,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            # Fallback: list staged files only (new repo with no HEAD)
+            result = subprocess.run(
+                ["git", "diff", "--name-only", "--cached"],
+                capture_output=True,
+                text=True,
+                cwd=root,
+                timeout=10,
+            )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    return [root / line for line in result.stdout.splitlines() if line.strip()]
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.command == "init":
+        from guideline_checker.init_cmd import run_init
+
+        root: Path = args.root.resolve()
+        instructions_dir: Path | None = args.instructions
+        return run_init(root=root, instructions_dir=instructions_dir, force=args.force)
+
     if args.command != "check":
         parser.print_help()
         return 0
 
-    root: Path = args.root.resolve()
-    instructions_dir: Path = args.instructions or root / ".github" / "instructions"
+    root = args.root.resolve()
+    instructions_dir = args.instructions or root / ".github" / "instructions"
 
     if not instructions_dir.exists():
         print(f"[guideline-checker] Instructions directory not found: {instructions_dir}", file=sys.stderr)
         return 1
 
-    results = run_checks(root=root, instructions_dir=instructions_dir)
+    # --diff: restrict to git-modified files
+    diff_files: list[Path] | None = None
+    if args.diff:
+        diff_files = _get_diff_files(root)
+        if diff_files is None:
+            print(
+                "[guideline-checker] --diff: git not available or not a git repo — checking all files.", file=sys.stderr
+            )
+        elif not diff_files:
+            print("[guideline-checker] --diff: no modified files found, nothing to check.")
+            return 0
+        else:
+            print(f"[guideline-checker] --diff: checking {len(diff_files)} modified file(s).")
+
+    results = run_checks(root=root, instructions_dir=instructions_dir, diff_files=diff_files)
 
     reporter = HtmlReporter()
     report_path: Path = args.output

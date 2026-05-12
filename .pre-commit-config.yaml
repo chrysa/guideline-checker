@@ -39,7 +39,7 @@ repos:
   - id: python-unreachable-code
   - exclude: ^\.github/(workflows|ISSUE_TEMPLATE)/
     id: yaml-sorter
-    exclude: '^\(\.github/workflows/|\.github/|GitVersion\.yml)'
+    exclude: '^(\.github/workflows/|\.github/|GitVersion\.yml)'
   repo: https://github.com/chrysa/pre-commit-tools
   rev: v0.1.1-73
 - hooks:
