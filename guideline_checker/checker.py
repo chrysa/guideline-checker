@@ -53,10 +53,17 @@ class RuleResult:
     files_checked: int = 0
 
 
-def run_checks(root: Path, instructions_dir: Path) -> list[RuleResult]:
-    """Check all files in root against all instruction files in instructions_dir."""
+def run_checks(root: Path, instructions_dir: Path, diff_files: list[Path] | None = None) -> list[RuleResult]:
+    """Check all files in root against all instruction files in instructions_dir.
+
+    Args:
+        root: Project root directory.
+        instructions_dir: Directory containing *.instructions.md files.
+        diff_files: When provided, restrict file scanning to this explicit list
+            (used by the ``--diff`` CLI flag to check only git-modified files).
+    """
     instructions = load_instructions(instructions_dir)
-    all_files = _collect_files(root)
+    all_files = diff_files if diff_files is not None else _collect_files(root)
     results: list[RuleResult] = []
 
     for instruction in instructions:
