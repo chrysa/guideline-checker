@@ -62,3 +62,41 @@ def test_html_reporter_pass_when_no_violations(tmp_path: Path) -> None:
     reporter.write(results=[result], output_path=output, root=tmp_path)
     content = output.read_text(encoding="utf-8")
     assert "PASS" in content
+
+
+def test_html_reporter_info_violation(tmp_path: Path) -> None:
+    """Violations with severity 'info' should render with badge-warning (only errors bump class)."""
+    instruction = _make_instruction(tmp_path)
+    violation = Violation(
+        file=tmp_path / "src" / "util.py",
+        line_number=2,
+        line_content="from __future__ import annotations",
+        rule="Use from __future__ import annotations",
+        severity="info",
+    )
+    result = RuleResult(instruction=instruction, violations=[violation], files_checked=1)
+    reporter = HtmlReporter()
+    output = tmp_path / "report.html"
+    reporter.write(results=[result], output_path=output, root=tmp_path)
+    content = output.read_text(encoding="utf-8")
+    assert "INFO" in content
+
+
+def test_html_reporter_violation_outside_root(tmp_path: Path) -> None:
+    """Violations whose file is outside root should use absolute path (fallback branch)."""
+    instruction = _make_instruction(tmp_path)
+    external = tmp_path.parent / "external_file.py"
+    external.write_text("print('hi')\n", encoding="utf-8")
+    violation = Violation(
+        file=external,
+        line_number=1,
+        line_content="print('hi')",
+        rule="No print() calls",
+        severity="warning",
+    )
+    result = RuleResult(instruction=instruction, violations=[violation], files_checked=1)
+    reporter = HtmlReporter()
+    output = tmp_path / "report.html"
+    reporter.write(results=[result], output_path=output, root=tmp_path)
+    content = output.read_text(encoding="utf-8")
+    assert "external_file.py" in content

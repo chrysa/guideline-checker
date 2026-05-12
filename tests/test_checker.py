@@ -244,3 +244,55 @@ class TestRuleEngineV02:
     def test_pattern_check_with_match_in_comments(self) -> None:
         pc = PatternCheck("TODO", "warning", match_in_comments=True)
         assert pc.match_in_comments is True
+
+    def test_detects_pprint(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", "pprint(data)\n", "No pprint() calls")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("pprint(" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_console_debug(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.js", "console.debug(x);\n", "No console.debug calls")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("console.debug(" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_hack_in_comment(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", "x = 1  # HACK: workaround\n", "No HACK comments")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("HACK" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_assert_outside_test(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", "assert x > 0\n", "No assert statements in production")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("assert " in v.line_content for r in results for v in r.violations)
+
+    def test_detects_hardcoded_password(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", 'password = "supersecret"\n', "No hardcoded password or secret")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("password" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_max_file_length_colon_syntax(self, tmp_path: Path) -> None:
+        """Cover the 'max file length: N' regex variant (distinct from 'max N lines per file')."""
+        root, inst = _make_project(tmp_path, "app.py", "\n".join(["x = 1"] * 600), "Max file length: 500")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert len(results[0].violations) == 1
+
+    def test_check_file_oserror_returns_empty(self, tmp_path: Path) -> None:
+        """_check_file should return [] when a file cannot be read (OSError)."""
+        from unittest.mock import patch
+
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        instr = InstructionFile(
+            path=tmp_path / "rules.instructions.md",
+            apply_to="**/*.py",
+            description="test",
+            content="- No print",
+            rules=["No print() calls"],
+        )
+        fake_file = tmp_path / "unreadable.py"
+        fake_file.touch()
+        # Patch at class level — instance-level patching is read-only in Python 3.14+
+        with patch.object(Path, "read_text", side_effect=OSError("permission denied")):
+            violations = _check_file(fake_file, instr)
+        assert violations == []
