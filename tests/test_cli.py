@@ -131,3 +131,10 @@ def test_main_check_fail_on_error_no_violations(tmp_path: Path) -> None:
     root = _make_project(tmp_path, violation=False)
     code = main(["check", "--root", str(root), "--fail-on", "error"])
     assert code == 0
+
+
+def test_main_check_fail_on_warning_with_warning_only(tmp_path: Path) -> None:
+    """fail-on=warning should exit 1 when there are warnings but no errors."""
+    root = _make_project(tmp_path, violation=True)  # print() → severity warning
+    code = main(["check", "--root", str(root), "--fail-on", "warning"])
+    assert code == 1

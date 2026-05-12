@@ -126,3 +126,15 @@ def test_sanitize_rule_id_allows_dots_slashes() -> None:
     result = _sanitize_rule_id("python.instructions/v2")
     assert "." in result
     assert "/" in result
+
+
+def test_sarif_get_version_fallback_on_import_error(tmp_path: Path) -> None:
+    """_get_version should return '0.0.0' if __version__ cannot be imported."""
+    import sys
+    from unittest.mock import patch
+
+    reporter = SarifReporter()
+    # Simulate ImportError when importing guideline_checker.__version__
+    with patch.dict(sys.modules, {"guideline_checker": None}):  # type: ignore[dict-item]
+        version = reporter._get_version()
+    assert version == "0.0.0"

@@ -244,3 +244,150 @@ class TestRuleEngineV02:
     def test_pattern_check_with_match_in_comments(self) -> None:
         pc = PatternCheck("TODO", "warning", match_in_comments=True)
         assert pc.match_in_comments is True
+
+    def test_detects_pprint(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", "pprint(data)\n", "No pprint() calls")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("pprint(" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_console_debug(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.js", "console.debug(x);\n", "No console.debug calls")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("console.debug(" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_hack_in_comment(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", "x = 1  # HACK: workaround\n", "No HACK comments")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("HACK" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_assert_outside_test(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", "assert x > 0\n", "No assert statements in production")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("assert " in v.line_content for r in results for v in r.violations)
+
+    def test_detects_hardcoded_password(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", 'password = "supersecret"\n', "No hardcoded password or secret")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("password" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_max_file_length_colon_syntax(self, tmp_path: Path) -> None:
+        """Cover the 'max file length: N' regex variant (distinct from 'max N lines per file')."""
+        root, inst = _make_project(tmp_path, "app.py", "\n".join(["x = 1"] * 600), "Max file length: 500")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert len(results[0].violations) == 1
+
+    def test_check_file_oserror_returns_empty(self, tmp_path: Path) -> None:
+        """_check_file should return [] when a file cannot be read (OSError)."""
+        from unittest.mock import patch
+
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        instr = InstructionFile(
+            path=tmp_path / "rules.instructions.md",
+            apply_to="**/*.py",
+            description="test",
+            content="- No print",
+            rules=["No print() calls"],
+        )
+        fake_file = tmp_path / "unreadable.py"
+        fake_file.touch()
+        # Patch at class level — instance-level patching is read-only in Python 3.14+
+        with patch.object(Path, "read_text", side_effect=OSError("permission denied")):
+            violations = _check_file(fake_file, instr)
+        assert violations == []
+
+    def test_debug_output_console_log_in_python_context(self, tmp_path: Path) -> None:
+        """_debug_output_checks: no console.log rule detected in non-TS file."""
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        instr = InstructionFile(
+            path=tmp_path / "python.instructions.md",
+            apply_to="**/*.py",
+            description="no console.log",
+            content="- No console.log calls",
+            rules=["No console.log calls"],
+        )
+        f = tmp_path / "bad.py"
+        f.write_text("x = console.log('hi')\n")
+        violations = _check_file(f, instr)
+        assert any("console.log" in v.line_content for v in violations)
+
+    def test_import_relative_import_check(self, tmp_path: Path) -> None:
+        """_import_checks: relative import detection."""
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        instr = InstructionFile(
+            path=tmp_path / "python.instructions.md",
+            apply_to="**/*.py",
+            description="no relative import",
+            content="- No relative import",
+            rules=["No relative import"],
+        )
+        f = tmp_path / "mod.py"
+        f.write_text("from . import utils\nfrom .. import base\n")
+        violations = _check_file(f, instr)
+        contents = [v.line_content for v in violations]
+        assert any("from . import" in c for c in contents)
+        assert any("from .. import" in c for c in contents)
+
+    def test_annotation_check_future_annotations(self, tmp_path: Path) -> None:
+        """_annotation_checks: __future__ import annotations rule."""
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        instr = InstructionFile(
+            path=tmp_path / "python.instructions.md",
+            apply_to="**/*.py",
+            description="future annotations",
+            content="- Always use from __future__ import annotations",
+            rules=["Always use from __future__ import annotations"],
+        )
+        f = tmp_path / "mod.py"
+        # File that does NOT use from __future__ import annotations (no __future__)
+        f.write_text("import os\n")
+        violations = _check_file(f, instr)
+        # Should NOT flag (pattern not found = no violation)
+        assert violations == []
+
+        # File that uses it — pattern found should not be a violation (info, triggers)
+        f2 = tmp_path / "good.py"
+        f2.write_text("from __future__ import annotations\nimport os\n")
+        violations2 = _check_file(f2, instr)
+        assert any("__future__" in v.line_content for v in violations2)
+
+    def test_typescript_console_debug_check(self, tmp_path: Path) -> None:
+        """_typescript_checks: no console.debug in TS files."""
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        instr = InstructionFile(
+            path=tmp_path / "typescript.instructions.md",
+            apply_to="**/*.ts",
+            description="no console.debug",
+            content="- No console.debug calls",
+            rules=["No console.debug calls"],
+        )
+        f = tmp_path / "util.ts"
+        f.write_text("console.debug('trace');\n")
+        violations = _check_file(f, instr)
+        assert any("console.debug" in v.line_content for v in violations)
+
+    def test_python_strict_no_pass_in_except(self, tmp_path: Path) -> None:
+        """_python_strict_checks: no pass in except / silent exception."""
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        instr = InstructionFile(
+            path=tmp_path / "python.instructions.md",
+            apply_to="**/*.py",
+            description="no silent exception",
+            content="- No pass in except / no silent exception",
+            rules=["No pass in except"],
+        )
+        f = tmp_path / "bad.py"
+        f.write_text("try:\n    pass\nexcept:\n    pass\n")
+        violations = _check_file(f, instr)
+        assert any("except:" in v.line_content for v in violations)

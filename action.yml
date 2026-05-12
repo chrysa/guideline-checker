@@ -21,7 +21,7 @@ inputs:
       '
     required: false
   python-version:
-    default: '3.12'
+    default: '3.14'
     description: Python version used to install and run guideline-checker.
     required: false
   root:
