@@ -14,8 +14,12 @@ A CLI tool that reads GitHub Copilot instruction files (`.instructions.md`) from
 
 - **Instruction-driven**: rules are loaded from `.instructions.md` files (`applyTo` + content)
 - **Pattern-based checking**: detects anti-patterns (print calls, bare excepts, console.log, etc.)
+- **`init` command**: scaffold default instruction files in any project
+- **`--diff` mode**: restrict scanning to git-changed files (fast incremental checks in pre-commit)
 - **HTML report**: color-coded, grouped by rule file, with file paths and line numbers
 - **JSON report**: machine-readable output for CI pipelines
+- **Markdown report**: human-readable summary for PR comments
+- **SARIF report**: upload to GitHub Code Scanning
 - **CI-friendly**: exits with code 1 if violations are found (configurable threshold)
 - **Pre-commit hook**: runs as a pre-commit hook on the entire project
 
@@ -40,14 +44,29 @@ pip install -e '.[dev]'
 ### CLI
 
 ```bash
+# Scaffold default instruction files in .github/instructions/
+guideline-checker init
+
+# Force-overwrite existing instruction files
+guideline-checker init --force
+
 # Check current directory against .github/instructions/
 guideline-checker check
+
+# Check only git-changed files (fast incremental mode)
+guideline-checker check --diff
 
 # Check a specific project root
 guideline-checker check --root /path/to/project
 
 # Output HTML report to a file
 guideline-checker check --output report.html
+
+# Output SARIF (for GitHub Code Scanning upload)
+guideline-checker check --sarif guideline-results.sarif
+
+# Output Markdown summary
+guideline-checker check --markdown guideline-summary.md
 
 # Use a custom instructions directory
 guideline-checker check --instructions .github/instructions/
@@ -56,14 +75,14 @@ guideline-checker check --instructions .github/instructions/
 guideline-checker check --fail-on error
 ```
 
-### Pre-commit hook
+### Pre-commit hook (incremental with `--diff`)
 
 ```yaml
 - repo: https://github.com/chrysa/guideline-checker
   rev: v1.0.0
   hooks:
     - id: guideline-check
-      args: [--fail-on, warning]
+      args: [--diff, --fail-on, warning]
 ```
 
 ### GitHub Actions
@@ -96,17 +115,23 @@ guideline_checker/
     cli.py                  # argparse entry point (guideline-checker command)
     loader.py               # load and parse .instructions.md files
     checker.py              # match files against rules by applyTo pattern
+    init_cmd.py             # init subcommand — scaffold default instruction files
     hook.py                 # pre-commit hook entry point
     reporters/
         html.py             # HTML report generator
         json_reporter.py    # JSON report generator (CI artifact)
+        markdown.py         # Markdown summary generator
+        sarif.py            # SARIF report generator (GitHub Code Scanning)
 tests/
     test_checker.py         # checker engine tests
     test_cli.py             # CLI entry point tests
+    test_diff_mode.py       # --diff git mode tests
     test_hook.py            # hook entry point tests
     test_html_reporter.py   # HTML reporter tests
+    test_init_cmd.py        # init subcommand tests
     test_json_reporter.py   # JSON reporter tests
     test_loader.py          # instruction loader tests
+    test_sarif_reporter.py  # SARIF reporter tests
 ```
 
 ---
