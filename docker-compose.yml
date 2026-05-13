@@ -17,3 +17,23 @@ services:
     - PYTHONUNBUFFERED=1
     volumes:
     - ./coverage.xml:/app/coverage.xml
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    environment:
+    - PYTHONDONTWRITEBYTECODE=1
+    - PYTHONUNBUFFERED=1
+    - SCAN_ROOT=/workspace
+    healthcheck:
+      interval: 30s
+      retries: 3
+      start_period: 15s
+      test: CMD curl -f http://localhost:8080/health
+      timeout: 10s
+    ports:
+    - 8080:8080
+    restart: unless-stopped
+    volumes:
+    - .:/workspace:ro

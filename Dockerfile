@@ -34,7 +34,42 @@ FROM test AS lint
 
 CMD ["sh", "-c", "ruff check guideline_checker && mypy guideline_checker"]
 
-# ── Stage 4: production — minimal CLI image ───────────────────────────────────
+# ── Stage 4: web — FastAPI dashboard ─────────────────────────────────────────
+FROM deps AS web-deps
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir ".[web]"
+
+FROM python:3.14-slim AS web
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    SCAN_ROOT=/workspace
+
+WORKDIR /app
+
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=web-deps /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
+COPY --from=web-deps /usr/local/bin /usr/local/bin
+COPY guideline_checker/ /app/guideline_checker/
+
+USER appuser
+
+EXPOSE 8080
+
+HEALTHCHECK CMD curl -f http://localhost:8080/health || exit 1
+
+CMD ["uvicorn", "guideline_checker.web.app:app", \
+     "--host", "0.0.0.0", "--port", "8080"]
+
+# ── Stage 5: production — minimal CLI image ───────────────────────────────────
 FROM python:3.14-slim AS production
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
