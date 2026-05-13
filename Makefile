@@ -81,6 +81,18 @@ docker-lint: ## Run lint + type-check inside Docker container
 docker-clean: ## Remove Docker images and containers for this project
 	docker compose down --rmi local --volumes --remove-orphans
 
+web-up: ## Start the web dashboard (containerised, port 8080)
+	docker compose up -d web
+
+web-down: ## Stop the web dashboard
+	docker compose stop web
+
+web-logs: ## Tail dashboard logs
+	docker compose logs -f web
+
+web-build: ## Build the web Docker image
+	docker compose build web
+
 # ─── Cleanup ─────────────────────────────────────────────────────────────────
 
 clean: ## Clean build artifacts
