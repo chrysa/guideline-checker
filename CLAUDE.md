@@ -1,5 +1,7 @@
 # CLAUDE.md — guideline-checker
 
+> **Claude Code**: also read `.github/copilot-instructions.md` and `.github/instructions/*.instructions.md` for code specifications.
+
 ## Vision
 
 Pre-commit hook and CLI tool for checking project compliance against GitHub Copilot

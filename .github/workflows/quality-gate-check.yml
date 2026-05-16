@@ -2,28 +2,13 @@
 name: Quality Gate Check
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches: [main]
-  push:
-    branches: [main]
-
-permissions:
-  contents: read
-  checks: write
-  statuses: write
+    pull_request:
+        branches: [main, master, develop]
+        types: [opened, reopened, synchronize]
+    push:
+        branches: [main, master]
 
 jobs:
-  quality-gate:
-    name: No-Regression Quality Gates
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: chrysa/github-actions/tool-setup@v1
-        with:
-          python-version: "3.14"
-          extras: dev
-
-      - run: make quality-gate-verify
+    call:
+        uses: chrysa/github-actions/.github/workflows/quality-gate-check.yml@main
+        secrets: inherit

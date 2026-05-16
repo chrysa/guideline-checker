@@ -1,34 +1,11 @@
+---
 name: Enforce Feature Branch Policy
 
 on:
-  pull_request:
-    types: [ opened, synchronize, reopened, ready_for_review ]
-
-permissions:
-  contents: read
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    pull_request:
+        types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
-  branch-policy:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Validate PR source branch naming
-        shell: bash
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          branch="$HEAD_REF"
-          if [[ "$branch" == dependabot/* ]]; then
-            echo "Dependabot branch — policy check skipped"
-            exit 0
-          fi
-          pattern='^(feat|feature|fix|chore|docs|refactor|test|ci|build|perf|hotfix)/[a-z0-9._-]+$'
-          if [[ ! "$branch" =~ $pattern ]]; then
-            echo "Invalid branch name: $branch"
-            echo "Expected: type/short-description (e.g. feature/add-auth-flow)"
-            exit 1
-          fi
+    call:
+        uses: chrysa/github-actions/.github/workflows/enforce-feature-branch.yml@main
+        secrets: inherit

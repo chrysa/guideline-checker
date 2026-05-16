@@ -2,63 +2,23 @@
 name: Mutation Testing
 
 on:
-  schedule:
-    - cron: "0 3 * * 1"
-  workflow_dispatch:
-    inputs:
-      paths:
-        description: "Comma-separated paths to mutate (default: guideline_checker)"
-        required: false
-        default: "guideline_checker"
-      threshold:
-        description: "Minimum mutation score (0–100)"
-        required: false
-        default: "70"
-
-env:
-  MUTATION_PATHS: ${{ github.event.inputs.paths || 'guideline_checker' }}
-  MUTATION_THRESHOLD: ${{ github.event.inputs.threshold || '70' }}
-
-permissions:
-  contents: read
+    schedule:
+        - cron: '0 3 * * 1'
+    workflow_dispatch:
+        inputs:
+            paths:
+                description: 'Comma-separated paths to mutate'
+                required: false
+                default: 'guideline_checker/'
+            threshold:
+                description: 'Minimum mutation score (0-100)'
+                required: false
+                default: '70'
 
 jobs:
-  mutation:
-    name: Mutmut
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: chrysa/github-actions/tool-setup@v1
+    call:
+        uses: chrysa/github-actions/.github/workflows/mutation-testing.yml@main
+        secrets: inherit
         with:
-          python-version: "3.14"
-          extras: dev
-
-      - run: pip install mutmut
-
-      - name: Run mutmut
-        run: |
-          mutmut run \
-            --paths-to-mutate "${{ env.MUTATION_PATHS }}" \
-            --runner "python -m pytest tests/ -x -q --no-header" \
-            --no-progress \
-            || true
-
-      - name: Check mutation score
-        run: |
-          KILLED=$(mutmut results 2>/dev/null | grep -c "^Killed" || echo 0)
-          SURVIVED=$(mutmut results 2>/dev/null | grep -c "^Survived" || echo 0)
-          TOTAL=$((KILLED + SURVIVED))
-          SCORE=$([ "$TOTAL" -eq 0 ] && echo 100 || echo $((KILLED * 100 / TOTAL)))
-          THRESHOLD="${{ env.MUTATION_THRESHOLD }}"
-          mutmut results || true
-          echo "Mutation score: ${SCORE}% (threshold: ${THRESHOLD}%)"
-          [ "$SCORE" -ge "$THRESHOLD" ] || exit 1
-
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: mutmut-results
-          path: .mutmut-cache
-          retention-days: 7
+            paths: ${{ inputs.paths || 'guideline_checker/' }}
+            threshold: ${{ inputs.threshold || '70' }}
