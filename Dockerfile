@@ -67,7 +67,7 @@ EXPOSE 8080
 HEALTHCHECK CMD curl -f http://localhost:8080/health || exit 1
 
 CMD ["uvicorn", "guideline_checker.web.app:app", \
-     "--host", "0.0.0.0", "--port", "8080"]
+    "--host", "0.0.0.0", "--port", "8080"]
 
 # ── Stage 5: production — minimal CLI image ───────────────────────────────────
 FROM python:3.14-slim AS production
