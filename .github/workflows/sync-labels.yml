@@ -13,4 +13,3 @@ on:
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/sync-labels.yml@main
-        secrets: inherit

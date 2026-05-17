@@ -14,4 +14,3 @@ on:
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/action-check.yml@main
-        secrets: inherit

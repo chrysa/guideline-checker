@@ -9,4 +9,3 @@ on:
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/auto-update-pre-commit.yml@main
-        secrets: inherit
