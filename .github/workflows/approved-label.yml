@@ -11,4 +11,3 @@ concurrency:
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/approved-label.yml@main
-        secrets: inherit

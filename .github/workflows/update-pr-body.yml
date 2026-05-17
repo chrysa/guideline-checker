@@ -8,4 +8,3 @@ on:
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/update-pr-body.yml@main
-        secrets: inherit

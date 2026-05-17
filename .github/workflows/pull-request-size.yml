@@ -7,4 +7,3 @@ on:
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/pull-request-size.yml@main
-        secrets: inherit

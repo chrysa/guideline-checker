@@ -11,4 +11,3 @@ on:
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/quality-gate-check.yml@main
-        secrets: inherit
