@@ -8,4 +8,3 @@ on:
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/enforce-feature-branch.yml@main
-        secrets: inherit

@@ -18,7 +18,6 @@ on:
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/mutation-testing.yml@main
-        secrets: inherit
         with:
             paths: ${{ inputs.paths || 'guideline_checker/' }}
             threshold: ${{ inputs.threshold || '70' }}

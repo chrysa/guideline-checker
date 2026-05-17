@@ -8,4 +8,3 @@ on:
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/auto-assign.yml@main
-        secrets: inherit
