@@ -53,8 +53,8 @@ jobs:
               with:
                   python-version: ${{ needs.config.outputs.latest-python }}
             - uses: pre-commit/action@v3.0.1
-            env:
-              SKIP: no-commit-to-branch
+              env:
+                SKIP: no-commit-to-branch
 
     ruff:
         name: Ruff (${{ matrix.python-version }})
