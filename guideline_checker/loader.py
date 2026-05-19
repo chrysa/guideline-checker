@@ -1,14 +1,27 @@
-"""Load and parse .instructions.md files from the instructions directory."""
+"""Load and parse instruction/guideline files from multiple sources."""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 _APPLY_TO_RE = re.compile(r"^applyTo:\s*[\"']?(.+?)[\"']?\s*$", re.MULTILINE)
 _DESCRIPTION_RE = re.compile(r"^description:\s*[\"']?(.+?)[\"']?\s*$", re.MULTILINE)
+_NUMBERED_RE = re.compile(r"^\d+\.\s+")
+_TABLE_SEP_RE = re.compile(r"^[-:]+$")
+_CONSTRAINT_KEYWORDS = frozenset(("must", "never", "always", "forbidden", "required", "non-negotiable", "mandatory"))
+
+
+class SourceType(StrEnum):
+    """Origin of an instruction/constraint file."""
+
+    COPILOT_INSTRUCTION = "copilot-instruction"  # .github/instructions/*.instructions.md
+    COPILOT_GLOBAL = "copilot"  # .github/copilot-instructions.md
+    CLAUDE = "claude"  # CLAUDE.md, .claude/CLAUDE.md
+    AGENTS = "agents"  # AGENTS.md, .claude/agents/*.md
 
 
 @dataclass
@@ -17,11 +30,12 @@ class InstructionFile:
     apply_to: str
     description: str
     content: str
+    source_type: SourceType = SourceType.COPILOT_INSTRUCTION
     rules: list[str] = field(default_factory=list)
 
 
 def load_instructions(instructions_dir: Path) -> list[InstructionFile]:
-    """Load all *.instructions.md files from a directory."""
+    """Load all *.instructions.md files from a directory (backward compatible)."""
     result: list[InstructionFile] = []
     for path in sorted(instructions_dir.glob("*.instructions.md")):
         instruction = _parse_instruction_file(path)
@@ -30,9 +44,84 @@ def load_instructions(instructions_dir: Path) -> list[InstructionFile]:
     return result
 
 
+def load_all_sources(root: Path) -> list[InstructionFile]:
+    """Discover and load all instruction sources from a project root.
+
+    Searches for:
+
+    - ``.github/instructions/*.instructions.md``  → :attr:`SourceType.COPILOT_INSTRUCTION`
+    - ``.github/copilot-instructions.md``         → :attr:`SourceType.COPILOT_GLOBAL`
+    - ``CLAUDE.md``, ``.claude/CLAUDE.md``        → :attr:`SourceType.CLAUDE`
+    - ``AGENTS.md``, ``.claude/agents/*.md``      → :attr:`SourceType.AGENTS`
+    """
+    sources: list[InstructionFile] = []
+
+    # 1. Copilot per-pattern instruction files
+    instructions_dir = root / ".github" / "instructions"
+    if instructions_dir.is_dir():
+        sources.extend(load_instructions(instructions_dir))
+
+    # 2. Global Copilot instructions
+    copilot_global = root / ".github" / "copilot-instructions.md"
+    if copilot_global.is_file():
+        inst = _parse_markdown_file(
+            copilot_global,
+            source_type=SourceType.COPILOT_GLOBAL,
+            description="GitHub Copilot — global instructions",
+        )
+        if inst:
+            sources.append(inst)
+
+    # 3. Claude instruction files
+    for claude_path in _find_claude_files(root):
+        inst = _parse_markdown_file(
+            claude_path,
+            source_type=SourceType.CLAUDE,
+            description=f"Claude — {claude_path.name}",
+        )
+        if inst:
+            sources.append(inst)
+
+    # 4. Agent definition files
+    for agents_path in _find_agents_files(root):
+        inst = _parse_markdown_file(
+            agents_path,
+            source_type=SourceType.AGENTS,
+            description=f"Agents — {agents_path.name}",
+        )
+        if inst:
+            sources.append(inst)
+
+    return sources
+
+
+def _find_claude_files(root: Path) -> list[Path]:
+    """Return CLAUDE.md and .claude/CLAUDE.md if they exist."""
+    candidates = [
+        root / "CLAUDE.md",
+        root / ".claude" / "CLAUDE.md",
+    ]
+    return [p for p in candidates if p.is_file()]
+
+
+def _find_agents_files(root: Path) -> list[Path]:
+    """Return AGENTS.md and all .claude/agents/*.md files."""
+    result: list[Path] = []
+    agents_md = root / "AGENTS.md"
+    if agents_md.is_file():
+        result.append(agents_md)
+    agents_dir = root / ".claude" / "agents"
+    if agents_dir.is_dir():
+        result.extend(sorted(agents_dir.glob("*.md")))
+    return result
+
+
 def _parse_instruction_file(path: Path) -> InstructionFile | None:
-    """Parse a single .instructions.md file."""
-    raw = path.read_text(encoding="utf-8")
+    """Parse a single .instructions.md file (with optional YAML frontmatter)."""
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
 
     apply_to = "**/*"
     description = path.stem
@@ -63,17 +152,71 @@ def _parse_instruction_file(path: Path) -> InstructionFile | None:
         apply_to=apply_to,
         description=description,
         content=content,
+        source_type=SourceType.COPILOT_INSTRUCTION,
         rules=rules,
     )
 
 
+def _parse_markdown_file(
+    path: Path,
+    *,
+    source_type: SourceType,
+    description: str,
+) -> InstructionFile | None:
+    """Parse a generic markdown instruction file (no frontmatter, no applyTo)."""
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+    rules = _extract_rules(content)
+
+    return InstructionFile(
+        path=path,
+        apply_to="**/*",
+        description=description,
+        content=content,
+        source_type=source_type,
+        rules=rules,
+    )
+
+
+def _strip_markdown(text: str) -> str:
+    """Remove inline markdown bold/italic/code markers."""
+    return re.sub(r"\*{1,2}|_{1,2}|`", "", text).strip()
+
+
 def _extract_rules(content: str) -> list[str]:
-    """Extract rule lines (lines starting with - or * that appear to be constraints)."""
+    """Extract rule statements from markdown content.
+
+    Detects:
+
+    - Bullet list items (``- text`` or ``* text``)
+    - Numbered list items (``1. text``)
+    - Table rows that contain at least one constraint keyword
+      (must / never / always / forbidden / required / non-negotiable / mandatory)
+    """
     rules: list[str] = []
+    seen: set[str] = set()
+
     for line in content.splitlines():
         stripped = line.strip()
-        if stripped.startswith(("- **", "* **", "- ", "* ")):
-            rule_text = stripped.lstrip("-* ").strip()
-            if len(rule_text) > 10:
-                rules.append(rule_text)
+        rule_text: str | None = None
+
+        if stripped.startswith(("- ", "* ")):
+            rule_text = stripped[2:].strip()
+        elif _NUMBERED_RE.match(stripped):
+            rule_text = _NUMBERED_RE.sub("", stripped).strip()
+        elif stripped.startswith("|") and stripped.endswith("|"):
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            joined = " — ".join(c for c in cells if c and not _TABLE_SEP_RE.match(c))
+            if any(kw in joined.lower() for kw in _CONSTRAINT_KEYWORDS):
+                rule_text = joined
+
+        if rule_text:
+            clean = _strip_markdown(rule_text)
+            if len(clean) > 10 and clean not in seen:
+                seen.add(clean)
+                rules.append(clean)
+
     return rules

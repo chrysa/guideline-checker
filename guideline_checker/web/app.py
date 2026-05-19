@@ -15,6 +15,7 @@ from fastapi import BackgroundTasks, FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from guideline_checker.checker import RuleResult, run_checks
+from guideline_checker.loader import InstructionFile, load_all_sources
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
@@ -27,6 +28,7 @@ _SCAN_ROOT: Path = Path(os.environ.get("SCAN_ROOT", "."))
 @dataclass
 class _ScanState:
     results: list[dict[str, Any]] = field(default_factory=list)
+    constraints: list[dict[str, Any]] = field(default_factory=list)
     timestamp: str | None = None
     running: bool = False
     error: str | None = None
@@ -60,6 +62,22 @@ def _serialize_results(results: list[RuleResult]) -> list[dict[str, Any]]:
     ]
 
 
+def _serialize_constraints(sources: list[InstructionFile]) -> list[dict[str, Any]]:
+    """Convert InstructionFile list to JSON-serialisable constraint dicts."""
+    return [
+        {
+            "name": src.path.name,
+            "path": str(src.path),
+            "source_type": src.source_type.value,
+            "description": src.description,
+            "apply_to": src.apply_to,
+            "rule_count": len(src.rules),
+            "rules": src.rules,
+        }
+        for src in sources
+    ]
+
+
 def _do_scan() -> None:
     """Run a full compliance scan and update _state."""
     _state.running = True
@@ -68,6 +86,8 @@ def _do_scan() -> None:
         instructions_dir = _SCAN_ROOT / ".github" / "instructions"
         results = run_checks(_SCAN_ROOT, instructions_dir)
         _state.results = _serialize_results(results)
+        all_sources = load_all_sources(_SCAN_ROOT)
+        _state.constraints = _serialize_constraints(all_sources)
         _state.timestamp = datetime.now(UTC).isoformat()
     except Exception as exc:  # pragma: no cover
         _state.error = str(exc)
@@ -105,6 +125,8 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
   <title>Guideline Checker Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    .tab-btn { color: #6b7280; border-bottom: 2px solid transparent; }
+    .tab-btn.active { color: #1e40af; border-bottom-color: #1e40af; font-weight: 600; }
     .filter-btn { color: #6b7280; background: white; }
     .filter-btn.active { background: #1e40af; color: white; border-color: #1e40af; }
     .sev-error  { background: #fef2f2; border-color: #fca5a5; }
@@ -170,32 +192,63 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
       Running initial scan&hellip;
     </div>
 
-    <!-- Filters + Search -->
-    <div id="controls" class="hidden flex flex-wrap gap-2 items-center">
-      <div class="flex gap-1">
-        <button class="filter-btn active px-3 py-1.5 rounded text-sm font-medium border"
-          data-severity="all" onclick="setFilter('all')">All</button>
-        <button class="filter-btn px-3 py-1.5 rounded text-sm font-medium border"
-          data-severity="error" onclick="setFilter('error')">Errors</button>
-        <button class="filter-btn px-3 py-1.5 rounded text-sm font-medium border"
-          data-severity="warning" onclick="setFilter('warning')">Warnings</button>
-        <button class="filter-btn px-3 py-1.5 rounded text-sm font-medium border"
-          data-severity="info" onclick="setFilter('info')">Info</button>
-      </div>
-      <input id="search" type="text" placeholder="Search by file, rule&hellip;"
-        class="ml-auto border border-gray-300 rounded px-3 py-1.5 text-sm
-               focus:outline-none focus:ring-2 focus:ring-blue-300 w-56"
-        oninput="renderViolations()">
+    <!-- Tab navigation -->
+    <div id="tab-nav" class="hidden border-b border-gray-200 flex gap-6">
+      <button class="tab-btn active pb-2 text-sm transition-colors"
+        data-tab="violations" onclick="switchTab('violations')">Violations</button>
+      <button class="tab-btn pb-2 text-sm transition-colors"
+        data-tab="constraints" onclick="switchTab('constraints')">
+        Constraints &nbsp;<span id="badge-constraints"
+          class="bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded-full"></span>
+      </button>
     </div>
 
-    <!-- Violations list -->
-    <div id="violations-container" class="hidden space-y-3"></div>
+    <!-- ─── Violations tab ──────────────────────────────────────────────────── -->
+    <div id="tab-violations">
+      <!-- Filters + Search -->
+      <div id="controls" class="flex flex-wrap gap-2 items-center">
+        <div class="flex gap-1">
+          <button class="filter-btn active px-3 py-1.5 rounded text-sm font-medium border"
+            data-severity="all" onclick="setFilter('all')">All</button>
+          <button class="filter-btn px-3 py-1.5 rounded text-sm font-medium border"
+            data-severity="error" onclick="setFilter('error')">Errors</button>
+          <button class="filter-btn px-3 py-1.5 rounded text-sm font-medium border"
+            data-severity="warning" onclick="setFilter('warning')">Warnings</button>
+          <button class="filter-btn px-3 py-1.5 rounded text-sm font-medium border"
+            data-severity="info" onclick="setFilter('info')">Info</button>
+        </div>
+        <input id="search" type="text" placeholder="Search by file, rule&hellip;"
+          class="ml-auto border border-gray-300 rounded px-3 py-1.5 text-sm
+                 focus:outline-none focus:ring-2 focus:ring-blue-300 w-56"
+          oninput="renderViolations()">
+      </div>
 
-    <!-- All clear -->
-    <div id="all-clear" class="hidden text-center py-14">
-      <div class="text-6xl mb-3">&#x2705;</div>
-      <p class="text-green-600 font-semibold text-lg">All guidelines satisfied</p>
-      <p class="text-gray-400 text-sm mt-1">No violations found in current filter.</p>
+      <!-- Violations list -->
+      <div id="violations-container" class="space-y-3"></div>
+
+      <!-- All clear -->
+      <div id="all-clear" class="hidden text-center py-14">
+        <div class="text-6xl mb-3">&#x2705;</div>
+        <p class="text-green-600 font-semibold text-lg">All guidelines satisfied</p>
+        <p class="text-gray-400 text-sm mt-1">No violations found in current filter.</p>
+      </div>
+    </div>
+
+    <!-- ─── Constraints tab ─────────────────────────────────────────────────── -->
+    <div id="tab-constraints" class="hidden space-y-4">
+      <div class="flex items-center gap-3">
+        <input id="cst-search" type="text" placeholder="Search constraints&hellip;"
+          class="border border-gray-300 rounded px-3 py-1.5 text-sm
+                 focus:outline-none focus:ring-2 focus:ring-purple-300 w-64"
+          oninput="renderConstraints()">
+        <span id="cst-summary" class="text-xs text-gray-500 ml-auto"></span>
+      </div>
+      <div id="constraints-container" class="space-y-4"></div>
+      <div id="cst-empty" class="hidden text-center py-14 text-gray-400 text-sm">
+        No constraint sources found. Add <code>.github/instructions/*.instructions.md</code>,
+        <code>.github/copilot-instructions.md</code>, <code>CLAUDE.md</code>
+        or <code>AGENTS.md</code> to your project.
+      </div>
     </div>
 
   </main>
@@ -203,12 +256,43 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
   <script>
     var _filter = 'all';
     var _data   = null;
+    var _cdata  = null;
+    var _activeTab = 'violations';
+
+    /* ── helpers ─────────────────────────────────────────────────────────── */
 
     function esc(s) {
       return String(s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
+
+    var _SOURCE_BADGE = {
+      'copilot-instruction': 'bg-blue-100 text-blue-700',
+      'copilot':             'bg-indigo-100 text-indigo-700',
+      'claude':              'bg-purple-100 text-purple-700',
+      'agents':              'bg-green-100 text-green-700',
+    };
+
+    function sourceBadge(type) {
+      var cls = _SOURCE_BADGE[type] || 'bg-gray-100 text-gray-600';
+      var label = type === 'copilot-instruction' ? 'copilot .instructions' : type;
+      return '<span class="' + cls + ' px-2 py-0.5 rounded text-xs font-medium">' + esc(label) + '</span>';
+    }
+
+    /* ── tab switching ───────────────────────────────────────────────────── */
+
+    function switchTab(tab) {
+      _activeTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.tab === tab);
+      });
+      document.getElementById('tab-violations').classList.toggle('hidden', tab !== 'violations');
+      document.getElementById('tab-constraints').classList.toggle('hidden', tab !== 'constraints');
+      if (tab === 'constraints') renderConstraints();
+    }
+
+    /* ── violations tab ──────────────────────────────────────────────────── */
 
     function setFilter(sev) {
       _filter = sev;
@@ -245,13 +329,12 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
       var allClear  = document.getElementById('all-clear');
 
       if (items.length === 0) {
-        container.classList.add('hidden');
+        container.innerHTML = '';
         allClear.classList.remove('hidden');
         return;
       }
 
       allClear.classList.add('hidden');
-      container.classList.remove('hidden');
       container.innerHTML = items.map(function(v) {
         return '<div class="bg-white border rounded-lg shadow-sm overflow-hidden sev-' + esc(v.severity) + '">'
           + '<div class="px-4 py-3 flex items-start gap-3">'
@@ -269,6 +352,61 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
           + '</div></div></div></div>';
       }).join('');
     }
+
+    /* ── constraints tab ─────────────────────────────────────────────────── */
+
+    function renderConstraints() {
+      if (!_cdata) return;
+      var search = (document.getElementById('cst-search').value || '').toLowerCase();
+      var sources = (_cdata.sources || []).filter(function(s) {
+        if (!search) return true;
+        if (s.name.toLowerCase().indexOf(search) >= 0) return true;
+        if (s.description.toLowerCase().indexOf(search) >= 0) return true;
+        return s.rules.some(function(r) { return r.toLowerCase().indexOf(search) >= 0; });
+      });
+
+      var container = document.getElementById('constraints-container');
+      var empty     = document.getElementById('cst-empty');
+
+      if (sources.length === 0) {
+        container.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+      empty.classList.add('hidden');
+
+      container.innerHTML = sources.map(function(s) {
+        var matchedRules = search
+          ? s.rules.filter(function(r) { return r.toLowerCase().indexOf(search) >= 0; })
+          : s.rules;
+        if (search && matchedRules.length === 0) return '';
+        var rulesHtml = matchedRules.length > 0
+          ? '<ul class="mt-3 space-y-1.5">' + matchedRules.map(function(r) {
+              return '<li class="text-sm text-gray-700 flex items-start gap-2">'
+                + '<span class="text-gray-300 mt-0.5 flex-shrink-0">&#9656;</span>'
+                + '<span>' + esc(r) + '</span></li>';
+            }).join('') + '</ul>'
+          : '<p class="text-xs text-gray-400 mt-2 italic">No rules extracted.</p>';
+        return '<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-4">'
+          + '<div class="flex items-start gap-2 flex-wrap">'
+          + sourceBadge(s.source_type)
+          + '<span class="font-medium text-gray-800 text-sm">' + esc(s.description) + '</span>'
+          + '<span class="ml-auto text-xs text-gray-400">' + esc(s.name) + '</span>'
+          + '</div>'
+          + (s.apply_to && s.apply_to !== '**/*'
+              ? '<div class="mt-1 text-xs text-gray-400">applies to: '
+                + '<code class="bg-gray-100 px-1 rounded">'
+                + esc(s.apply_to) + '</code></div>'
+              : '')
+          + '<div class="text-xs text-gray-500 mt-1">'
+            + esc(matchedRules.length)
+            + ' rule' + (matchedRules.length !== 1 ? 's' : '') + '</div>'
+          + rulesHtml
+          + '</div>';
+      }).filter(Boolean).join('');
+    }
+
+    /* ── shared state update ─────────────────────────────────────────────── */
 
     function updateStats(data) {
       var all    = flatViolations(data.results);
@@ -296,12 +434,9 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
         banner.classList.add('hidden');
       }
 
-      var loading = document.getElementById('loading');
-      var controls = document.getElementById('controls');
-
       if (data.results !== null && !data.running) {
-        loading.classList.add('hidden');
-        controls.classList.remove('hidden');
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('tab-nav').classList.remove('hidden');
         updateStats(data);
         renderViolations();
       }
@@ -313,10 +448,24 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
         : 'Run Scan';
     }
 
+    async function loadConstraints() {
+      try {
+        var r = await fetch('/api/constraints');
+        _cdata = await r.json();
+        var total = _cdata.total_rules || 0;
+        document.getElementById('badge-constraints').textContent = total;
+        document.getElementById('cst-summary').textContent =
+          _cdata.total_sources + ' source' + (_cdata.total_sources !== 1 ? 's' : '')
+          + ' \u2014 ' + total + ' rule' + (total !== 1 ? 's' : '');
+        if (_activeTab === 'constraints') renderConstraints();
+      } catch(_) {}
+    }
+
     async function load() {
       try {
         var r = await fetch('/api/results');
         render(await r.json());
+        await loadConstraints();
       } catch(_) {}
     }
 
@@ -332,6 +481,7 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
         var data = await r.json();
         render(data);
         if (data.running) poll();
+        else await loadConstraints();
       }, 1500);
     }
 
@@ -375,5 +525,18 @@ def get_results() -> JSONResponse:
             "running": _state.running,
             "error": _state.error,
             "results": _state.results,
+        }
+    )
+
+
+@app.get("/api/constraints")
+def get_constraints() -> JSONResponse:
+    """Return all extracted constraints from every discovered instruction source."""
+    return JSONResponse(
+        {
+            "timestamp": _state.timestamp,
+            "sources": _state.constraints,
+            "total_rules": sum(s["rule_count"] for s in _state.constraints),
+            "total_sources": len(_state.constraints),
         }
     )
