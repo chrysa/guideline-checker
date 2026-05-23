@@ -211,3 +211,6 @@ marimo/_lsp/
 __marimo__/
 .ci-backup-*/
 .gitnexus
+
+# CodeGraph (local index — never commit)
+.codegraph/
