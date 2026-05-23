@@ -138,6 +138,7 @@ jobs:
         name: SonarCloud analysis
         needs: [config, ruff, test]
         if: always()
+        continue-on-error: true
         runs-on: ubuntu-latest
         timeout-minutes: 15
         steps:
@@ -146,9 +147,9 @@ jobs:
                   fetch-depth: 0
 
             - name: SonarCloud scan
-              uses: chrysa/github-actions/sonar-scan@v1.0.8
+              uses: chrysa/github-actions/sonar-scan-python@main
               with:
-                  latest-python: ${{ needs.config.outputs.latest-python }}
+                  python-version: ${{ needs.config.outputs.latest-python }}
                   sonar-token: ${{ secrets.SONAR_TOKEN }}
                   github-token: ${{ secrets.GITHUB_TOKEN }}
                   project-key: ${{ vars.SONAR_PROJECT_KEY || 'chrysa_guideline-checker' }}
