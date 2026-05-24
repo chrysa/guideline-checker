@@ -48,7 +48,7 @@ outputs:
 runs:
   steps:
   - name: Set up Python
-    uses: actions/setup-python@v5
+    uses: actions/setup-python@v6
     with:
       python-version: ${{ inputs.python-version }}
   - name: Install guideline-checker
@@ -78,7 +78,7 @@ runs:
       sarif_file: ${{ inputs.sarif-output }}
   - if: ${{ !cancelled() }}
     name: Upload Markdown report as artifact
-    uses: actions/upload-artifact@v4
+    uses: actions/upload-artifact@v7
     with:
       if-no-files-found: warn
       name: guideline-report
