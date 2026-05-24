@@ -14,6 +14,7 @@ from guideline_checker.web.app import _state, app
 def client() -> TestClient:
     """Return a TestClient with the startup scan mocked out."""
     _state.results = []
+    _state.constraints = []
     _state.timestamp = None
     _state.running = False
     _state.error = None
@@ -45,6 +46,13 @@ def test_dashboard_contains_expected_text(client: TestClient) -> None:
     assert "Guideline Checker" in response.text
     assert "api/scan" in response.text
     assert "api/results" in response.text
+
+
+def test_dashboard_contains_constraints_tab(client: TestClient) -> None:
+    response = client.get("/")
+    assert "api/constraints" in response.text
+    assert "tab-constraints" in response.text
+    assert "switchTab" in response.text
 
 
 # ── /api/results ───────────────────────────────────────────────────────────────
@@ -179,6 +187,7 @@ def test_do_scan_happy_path() -> None:
     from guideline_checker.web.app import _do_scan
 
     _state.results = []
+    _state.constraints = []
     _state.timestamp = None
     _state.running = False
     _state.error = None
@@ -189,7 +198,10 @@ def test_do_scan_happy_path() -> None:
     fake_rr.files_checked = 2
     fake_rr.violations = []
 
-    with patch("guideline_checker.web.app.run_checks", return_value=[fake_rr]):
+    with (
+        patch("guideline_checker.web.app.run_checks", return_value=[fake_rr]),
+        patch("guideline_checker.web.app.load_all_sources", return_value=[]),
+    ):
         _do_scan()
 
     assert _state.running is False
@@ -205,7 +217,51 @@ def test_do_scan_sets_running_false_on_completion() -> None:
 
     _state.running = False
 
-    with patch("guideline_checker.web.app.run_checks", return_value=[]):
+    with (
+        patch("guideline_checker.web.app.run_checks", return_value=[]),
+        patch("guideline_checker.web.app.load_all_sources", return_value=[]),
+    ):
         _do_scan()
 
     assert _state.running is False
+
+
+# ── /api/constraints ───────────────────────────────────────────────────────────
+
+
+def test_api_constraints_empty_state(client: TestClient) -> None:
+    response = client.get("/api/constraints")
+    assert response.status_code == 200
+    data = response.json()
+    assert "sources" in data
+    assert "total_rules" in data
+    assert "total_sources" in data
+    assert data["sources"] == []
+    assert data["total_rules"] == 0
+    assert data["total_sources"] == 0
+
+
+def test_api_constraints_with_data(client: TestClient) -> None:
+    _state.constraints = [
+        {
+            "name": "CLAUDE.md",
+            "path": "/project/CLAUDE.md",
+            "source_type": "claude",
+            "description": "Claude — CLAUDE.md",
+            "apply_to": "**/*",
+            "rule_count": 2,
+            "rules": ["Never hardcode secrets", "Always use type annotations"],
+        }
+    ]
+    response = client.get("/api/constraints")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_sources"] == 1
+    assert data["total_rules"] == 2
+    assert data["sources"][0]["source_type"] == "claude"
+
+
+def test_scan_state_has_constraints_field(client: TestClient) -> None:
+    """_ScanState must have constraints initialised to []."""
+    assert hasattr(_state, "constraints")
+    assert isinstance(_state.constraints, list)
