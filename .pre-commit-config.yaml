@@ -40,6 +40,17 @@ repos:
   - exclude: ^\.github/(workflows|ISSUE_TEMPLATE)/
     id: yaml-sorter
     exclude: '^(\.github/workflows/|\.github/|GitVersion\.yml)'
+  - id: adr-gate
+  - id: no-bare-except
+  - id: python-logger-detection
+  - id: no-sync-in-async
+  - id: debugger-detection
+  - id: fastapi-missing-response-model
+  - id: console-log-detection
+  - id: console-debug-detection
+  - id: no-console-warn
+  - id: ts-unreachable-code
+  - id: dockerfile-no-latest
   - id: regression-gate
     stages:
     - pre-push
