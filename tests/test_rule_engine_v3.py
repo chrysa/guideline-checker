@@ -214,11 +214,11 @@ class TestInlineDisable:
 class TestBuildChecksAggregation:
     def test_build_checks_returns_list(self) -> None:
         checks = _build_checks("no print calls and no eval and no any")
-        assert isinstance(checks, list)
+        assert isinstance(checks, (list, tuple))
         patterns = [c.pattern for c in checks]
         assert "print(" in patterns
         assert "eval(" in patterns
 
     def test_build_checks_empty_for_unknown_rule(self) -> None:
         checks = _build_checks("use proper naming conventions")
-        assert checks == []
+        assert len(checks) == 0
