@@ -83,11 +83,10 @@ def _do_scan() -> None:
     _state.running = True
     _state.error = None
     try:
-        instructions_dir = _SCAN_ROOT / ".github" / "instructions"
-        results = run_checks(_SCAN_ROOT, instructions_dir)
+        results = run_checks(_SCAN_ROOT, all_sources=True)
         _state.results = _serialize_results(results)
-        all_sources = load_all_sources(_SCAN_ROOT)
-        _state.constraints = _serialize_constraints(all_sources)
+        all_srcs = load_all_sources(_SCAN_ROOT)
+        _state.constraints = _serialize_constraints(all_srcs)
         _state.timestamp = datetime.now(UTC).isoformat()
     except Exception as exc:  # pragma: no cover
         _state.error = str(exc)
@@ -495,19 +494,19 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 
-@app.get("/health")
+@app.get("/health", response_model=dict[str, str])
 def health() -> dict[str, str]:
     """Liveness probe."""
     return {"status": "ok"}
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse, response_model=None)
 def dashboard() -> str:
     """Serve the interactive dashboard."""
     return _DASHBOARD_HTML
 
 
-@app.post("/api/scan")
+@app.post("/api/scan", response_model=dict[str, str])
 def trigger_scan(background_tasks: BackgroundTasks) -> dict[str, str]:
     """Trigger a new compliance scan in the background."""
     if _state.running:
@@ -516,7 +515,7 @@ def trigger_scan(background_tasks: BackgroundTasks) -> dict[str, str]:
     return {"status": "started"}
 
 
-@app.get("/api/results")
+@app.get("/api/results", response_model=None)
 def get_results() -> JSONResponse:
     """Return the latest scan results as JSON."""
     return JSONResponse(
@@ -529,7 +528,7 @@ def get_results() -> JSONResponse:
     )
 
 
-@app.get("/api/constraints")
+@app.get("/api/constraints", response_model=None)
 def get_constraints() -> JSONResponse:
     """Return all extracted constraints from every discovered instruction source."""
     return JSONResponse(
