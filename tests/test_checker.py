@@ -50,7 +50,7 @@ description: "Python guidelines"
 def test_run_checks_finds_violations(project_with_violations: tuple[Path, Path]) -> None:
     """Should find violations in files matching applyTo pattern."""
     root, inst_dir = project_with_violations
-    results = run_checks(root=root, instructions_dir=inst_dir)
+    results = run_checks(root=root, instructions_dir=inst_dir, all_sources=False)
     assert len(results) == 1
     violations = results[0].violations
     assert any("print" in v.line_content for v in violations)
@@ -60,7 +60,7 @@ def test_run_checks_empty_instructions(tmp_path: Path) -> None:
     """Should return empty results when no instructions exist."""
     inst_dir = tmp_path / "instructions"
     inst_dir.mkdir()
-    results = run_checks(root=tmp_path, instructions_dir=inst_dir)
+    results = run_checks(root=tmp_path, instructions_dir=inst_dir, all_sources=False)
     assert results == []
 
 
@@ -86,7 +86,7 @@ description: "Python guidelines"
 """,
         encoding="utf-8",
     )
-    results = run_checks(root=root, instructions_dir=inst_dir)
+    results = run_checks(root=root, instructions_dir=inst_dir, all_sources=False)
     assert all(len(r.violations) == 0 for r in results)
 
 
@@ -346,17 +346,16 @@ class TestRuleEngineV02:
             rules=["Always use from __future__ import annotations"],
         )
         f = tmp_path / "mod.py"
-        # File that does NOT use from __future__ import annotations (no __future__)
+        # File that does NOT use from __future__ import annotations → should flag
         f.write_text("import os\n")
         violations = _check_file(f, instr)
-        # Should NOT flag (pattern not found = no violation)
-        assert violations == []
+        assert any("__future__" in v.line_content for v in violations)
 
-        # File that uses it — pattern found should not be a violation (info, triggers)
+        # File that has it → no violation
         f2 = tmp_path / "good.py"
         f2.write_text("from __future__ import annotations\nimport os\n")
         violations2 = _check_file(f2, instr)
-        assert any("__future__" in v.line_content for v in violations2)
+        assert violations2 == []
 
     def test_typescript_console_debug_check(self, tmp_path: Path) -> None:
         """_typescript_checks: no console.debug in TS files."""
