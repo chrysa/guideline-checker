@@ -50,7 +50,7 @@ def test_main_no_command(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_main_check_missing_instructions(tmp_path: Path) -> None:
-    code = main(["check", "--root", str(tmp_path)])
+    code = main(["check", "--root", str(tmp_path), "--no-multi-source"])
     assert code == 1
 
 

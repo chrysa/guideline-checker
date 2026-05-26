@@ -90,6 +90,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Only check files modified in the current git working tree (git diff --name-only HEAD).",
     )
+    check_cmd.add_argument(
+        "--no-multi-source",
+        action="store_true",
+        default=False,
+        dest="no_multi_source",
+        help=(
+            "Only load *.instructions.md from --instructions dir "
+            "(disable CLAUDE.md, copilot-instructions.md, AGENTS.md discovery)."
+        ),
+    )
     return parser
 
 
@@ -140,11 +150,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     root = args.root.resolve()
+    use_all_sources = not args.no_multi_source
     instructions_dir = args.instructions or root / ".github" / "instructions"
 
-    if not instructions_dir.exists():
+    if args.no_multi_source and not instructions_dir.exists():
         print(f"[guideline-checker] Instructions directory not found: {instructions_dir}", file=sys.stderr)
         return 1
+
+    if use_all_sources:
+        print("[guideline-checker] Multi-source mode: loading Copilot instructions, CLAUDE.md, AGENTS.md.")
 
     # --diff: restrict to git-modified files
     diff_files: list[Path] | None = None
@@ -160,7 +174,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"[guideline-checker] --diff: checking {len(diff_files)} modified file(s).")
 
-    results = run_checks(root=root, instructions_dir=instructions_dir, diff_files=diff_files)
+    results = run_checks(
+        root=root,
+        instructions_dir=instructions_dir,
+        diff_files=diff_files,
+        all_sources=use_all_sources,
+    )
 
     reporter = HtmlReporter()
     report_path: Path = args.output

@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import fnmatch
+import functools
+import os
 import re
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from dataclasses import replace as dataclass_replace
 from pathlib import Path
 from typing import NamedTuple
 
-from guideline_checker.loader import InstructionFile, load_instructions
+from guideline_checker.loader import InstructionFile, load_all_sources, load_instructions
 
 IGNORE_DIRS = {
     ".git",
@@ -23,7 +27,88 @@ IGNORE_DIRS = {
     ".pytest_cache",
     ".eggs",
     "*.egg-info",
+    "coverage",
+    ".tox",
+    "htmlcov",
+    "reports",
+    # IDE / editor generated dirs — never contain project source
+    ".vscode",
+    ".idea",
+    ".fleet",
 }
+
+# Only scan text-based source/config files — skip binaries, images, archives, etc.
+_TEXT_EXTENSIONS = {
+    # Python / general scripting
+    ".py",
+    ".pyi",
+    # Web / JS / TS
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".html",
+    ".htm",
+    ".css",
+    ".scss",
+    ".sass",
+    ".less",
+    ".vue",
+    ".svelte",
+    # Config / data
+    ".json",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".ini",
+    ".cfg",
+    ".env",
+    ".xml",
+    ".properties",
+    # Shell / infra
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".fish",
+    ".tf",
+    ".tfvars",
+    ".dockerfile",
+    "",  # no extension = likely script/Makefile
+    # Docs / prose
+    ".md",
+    ".rst",
+    ".txt",
+    # Java / other compiled (common in monorepos)
+    ".java",
+    ".kt",
+    ".scala",
+    ".go",
+    ".rs",
+    ".rb",
+    ".php",
+    ".cs",
+    # CI / misc
+    ".sql",
+    ".graphql",
+    ".proto",
+}
+
+# Maximum size for scanned files — larger files are generated/compiled artefacts
+_MAX_FILE_SIZE: int = 200 * 1024
+
+
+def _is_text_file(path: Path) -> bool:
+    """Return True if the file should be scanned (text-based extension and within size limit)."""
+    try:
+        if path.stat().st_size > _MAX_FILE_SIZE:
+            return False
+    except OSError:
+        return False
+    suffix = path.suffix.lower()
+    return suffix in _TEXT_EXTENSIONS or (suffix == "" and path.stat().st_size < 512_000)
+
 
 # Inline suppression marker — add this comment on any line to skip all rule checks
 DISABLE_COMMENT = "guideline: disable"
@@ -53,37 +138,142 @@ class RuleResult:
     files_checked: int = 0
 
 
-def run_checks(root: Path, instructions_dir: Path, diff_files: list[Path] | None = None) -> list[RuleResult]:
-    """Check all files in root against all instruction files in instructions_dir.
+def run_checks(
+    root: Path,
+    instructions_dir: Path | None = None,
+    diff_files: list[Path] | None = None,
+    all_sources: bool = True,
+) -> list[RuleResult]:
+    """Check all files in root against instruction files.
 
     Args:
         root: Project root directory.
         instructions_dir: Directory containing *.instructions.md files.
+            When ``all_sources`` is True (default), this is ignored and all
+            sources are discovered automatically.
         diff_files: When provided, restrict file scanning to this explicit list
             (used by the ``--diff`` CLI flag to check only git-modified files).
+        all_sources: When True (default), use :func:`load_all_sources` to
+            discover all instruction sources (Copilot, Claude, Agents).
+            When False, load only ``*.instructions.md`` from ``instructions_dir``.
     """
-    instructions = load_instructions(instructions_dir)
+    if all_sources:
+        instructions = load_all_sources(root)
+    elif instructions_dir is not None:
+        instructions = load_instructions(instructions_dir)
+    else:
+        instructions = load_all_sources(root)
     all_files = diff_files if diff_files is not None else _collect_files(root)
-    results: list[RuleResult] = []
 
-    for instruction in instructions:
-        result = RuleResult(instruction=instruction)
-        matched_files = [f for f in all_files if _matches_pattern(f, root, instruction.apply_to)]
-        result.files_checked = len(matched_files)
-        for file_path in matched_files:
-            violations = _check_file(file_path, instruction)
-            result.violations.extend(violations)
-        results.append(result)
+    # Narrow apply_to for instructions whose filename hints at a specific language
+    instructions = [_narrow_apply_to(instr) for instr in instructions]
+
+    # Exclude instruction source files from being scanned — they define the rules,
+    # not the code under review.  Scanning them produces spurious violations because
+    # they contain rule *examples* (e.g. bare assert statements in docs).
+    instruction_paths = frozenset(instr.path for instr in instructions)
+    all_files = [f for f in all_files if f not in instruction_paths]
+
+    cpu_count = min(len(instructions), os.cpu_count() or 1, 8)
+    if cpu_count > 1:
+        with ProcessPoolExecutor(max_workers=cpu_count) as executor:
+            futures = [executor.submit(_instruction_worker, root, instr, all_files) for instr in instructions]
+            results = [f.result() for f in as_completed(futures)]
+    else:
+        results = [_instruction_worker(root, instr, all_files) for instr in instructions]
 
     return results
 
 
+# Keywords that indicate an instruction targets Python source files only.
+_PYTHON_INSTR_KEYWORDS = frozenset({"python", "django", "ruff", "decorator", "drf", "pep", "mypy"})
+# Keywords that indicate an instruction targets test files only.
+_TEST_INSTR_KEYWORDS = frozenset({"test", "pytest", "fixture"})
+# Keywords that indicate an instruction targets Makefile-like files only.
+_MAKEFILE_INSTR_KEYWORDS = frozenset({"makefile"})
+
+
+def _narrow_apply_to(instruction: InstructionFile) -> InstructionFile:
+    """Narrow a generic ``apply_to='**/*'`` pattern based on instruction filename.
+
+    When an instruction's filename clearly targets a specific language/file type,
+    restricting ``apply_to`` avoids running (e.g.) 450 Django rules against
+    1 158 JSON files that can never trigger them.
+    """
+    if instruction.apply_to != "**/*":
+        return instruction  # respect explicit setting
+
+    name = instruction.path.stem.lower()
+
+    if any(kw in name for kw in _PYTHON_INSTR_KEYWORDS):
+        return dataclass_replace(instruction, apply_to="**/*.py")
+
+    if any(kw in name for kw in _TEST_INSTR_KEYWORDS):
+        return dataclass_replace(
+            instruction,
+            apply_to="**/tests/**/*.py, **/test_*.py, **/conftest.py",
+        )
+
+    if any(kw in name for kw in _MAKEFILE_INSTR_KEYWORDS):
+        return dataclass_replace(instruction, apply_to="**/Makefile*, **/*.mk")
+
+    return instruction
+
+
+def _file_batch_worker(
+    root: Path,
+    instr_data: list[tuple[str, list[str], str, str, str, object]],
+    file_batch: list[Path],
+) -> list[tuple[int, int, list[Violation]]]:
+    """Worker: process a file batch against all instructions.
+
+    Each worker handles ~1/N of the files but runs all instructions, so CPU
+    load is balanced regardless of rule-count differences between sources.
+    Returns list of ``(instruction_idx, matched_count, violations)``.
+    """
+    from guideline_checker.loader import InstructionFile
+
+    batch_results: list[tuple[int, int, list[Violation]]] = []
+    for idx, (path_str, rules, apply_to, description, content, source_type) in enumerate(instr_data):
+        instr = InstructionFile(
+            path=Path(path_str),
+            rules=rules,
+            apply_to=apply_to,
+            description=description,
+            content=content,
+            source_type=source_type,  # type: ignore[arg-type]
+        )
+        matched = [f for f in file_batch if _matches_pattern(f, root, apply_to)]
+        violations: list[Violation] = []
+        for fp in matched:
+            violations.extend(_check_file(fp, instr))
+        batch_results.append((idx, len(matched), violations))
+    return batch_results
+
+
+def _instruction_worker(
+    root: Path,
+    instruction: InstructionFile,
+    all_files: list[Path],
+) -> RuleResult:
+    """Fallback single-process worker: check one instruction against matching files."""
+    result = RuleResult(instruction=instruction)
+    matched_files = [f for f in all_files if _matches_pattern(f, root, instruction.apply_to)]
+    result.files_checked = len(matched_files)
+    for file_path in matched_files:
+        violations = _check_file(file_path, instruction)
+        result.violations.extend(violations)
+    return result
+
+
 def _collect_files(root: Path) -> list[Path]:
-    """Recursively collect all files, ignoring known irrelevant directories."""
+    """Recursively collect text-based source files, ignoring known irrelevant directories."""
     return [
         path
         for path in root.rglob("*")
-        if path.is_file() and not any(part in IGNORE_DIRS or part.endswith(".egg-info") for part in path.parts)
+        if path.is_file()
+        and not any(part in IGNORE_DIRS or part.endswith(".egg-info") for part in path.parts)
+        and _is_text_file(path)
     ]
 
 
@@ -110,17 +300,32 @@ def _matches_pattern(file_path: Path, root: Path, pattern: str) -> bool:
     return False
 
 
-def _check_file(file_path: Path, instruction: InstructionFile) -> list[Violation]:
+def _check_file(
+    file_path: Path,
+    instruction: InstructionFile,
+    *,
+    cached_lines: list[str] | None = None,
+) -> list[Violation]:
     """Check a single file against an instruction's rules."""
     violations: list[Violation] = []
-    try:
-        lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return violations
+    if cached_lines is not None:
+        lines = cached_lines
+    else:
+        try:
+            lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return violations
+
+    file_content = "\n".join(lines).lower()
 
     for rule in instruction.rules:
-        rule_violations = _evaluate_rule(file_path, lines, rule)
-        violations.extend(rule_violations)
+        # Whole-file checks (presence/absence)
+        whole_file_violations = _check_presence_rules(file_path, lines, file_content, rule)
+        violations.extend(whole_file_violations)
+
+        # Per-line checks
+        line_violations = _evaluate_rule(file_path, lines, rule)
+        violations.extend(line_violations)
 
     return violations
 
@@ -158,8 +363,13 @@ def _evaluate_rule(file_path: Path, lines: list[str], rule: str) -> list[Violati
     return violations
 
 
-def _build_checks(rule_lower: str) -> list[PatternCheck]:
-    """Build anti-pattern checks from rule text. Returns list of PatternCheck."""
+@functools.cache
+def _build_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
+    """Build anti-pattern checks from rule text.
+
+    Cached so that identical rules across multiple instruction sources are
+    only compiled once — eliminates O(rules x files) redundant work.
+    """
     checks: list[PatternCheck] = []
     checks.extend(_debug_output_checks(rule_lower))
     checks.extend(_exception_checks(rule_lower))
@@ -171,7 +381,101 @@ def _build_checks(rule_lower: str) -> list[PatternCheck]:
     checks.extend(_typescript_checks(rule_lower))
     checks.extend(_python_strict_checks(rule_lower))
     checks.extend(_security_checks(rule_lower))
-    return checks
+    checks.extend(_docker_checks(rule_lower))
+    return tuple(checks)
+
+
+def _check_presence_rules(file_path: Path, lines: list[str], file_content: str, rule: str) -> list[Violation]:
+    """Check whole-file presence requirements (must include X in every file)."""
+    violations: list[Violation] = []
+    rule_lower = rule.lower()
+    suffix = file_path.suffix
+
+    # "from __future__ import annotations in every file" (Python only)
+    if (
+        suffix == ".py"
+        and "from __future__ import annotations" in rule_lower
+        and "from __future__ import annotations" not in file_content
+    ):
+        violations.append(
+            Violation(
+                file=file_path,
+                line_number=1,
+                line_content="Missing: from __future__ import annotations",
+                rule=rule,
+                severity="warning",
+            )
+        )
+
+    # "health endpoint is mandatory" / "/health endpoint" (Python/TS API files)
+    if (
+        suffix in (".py", ".ts")
+        and "/health" in rule_lower
+        and "mandatory" in rule_lower
+        and '"/ health"' not in file_content
+        and "'/health'" not in file_content
+        and "@app" in file_content
+    ):
+        violations.append(
+            Violation(
+                file=file_path,
+                line_number=1,
+                line_content="Missing: /health endpoint (mandatory)",
+                rule=rule,
+                severity="warning",
+            )
+        )
+
+    # Max function/method length
+    match = re.search(r"max\s+function\s+length[:\s]+(\d+)", rule_lower) or re.search(
+        r"max\s+(\d+)\s+lines?\s+(?:per\s+)?function", rule_lower
+    )
+    if match and suffix == ".py":
+        limit = int(match.group(1))
+        violations.extend(_check_function_lengths(file_path, lines, limit))
+
+    return violations
+
+
+def _check_function_lengths(file_path: Path, lines: list[str], limit: int) -> list[Violation]:
+    """Flag Python functions that exceed a line-count limit."""
+    violations: list[Violation] = []
+    func_start: int | None = None
+    func_name = ""
+
+    for lineno, line in enumerate(lines, start=1):
+        stripped = line.lstrip()
+        if re.match(r"(async\s+)?def\s+\w+", stripped):
+            if func_start is not None:
+                length = lineno - func_start
+                if length > limit:
+                    violations.append(
+                        Violation(
+                            file=file_path,
+                            line_number=func_start,
+                            line_content=f"Function '{func_name}' has {length} lines (limit: {limit})",
+                            rule=f"max function length: {limit}",
+                            severity="warning",
+                        )
+                    )
+            func_start = lineno
+            func_name = re.search(r"def\s+(\w+)", stripped).group(1)  # type: ignore[union-attr]
+
+    # Check last function
+    if func_start is not None:
+        length = len(lines) - func_start + 1
+        if length > limit:
+            violations.append(
+                Violation(
+                    file=file_path,
+                    line_number=func_start,
+                    line_content=f"Function '{func_name}' has {length} lines (limit: {limit})",
+                    rule=f"max function length: {limit}",
+                    severity="warning",
+                )
+            )
+
+    return violations
 
 
 def _check_length_rules(file_path: Path, lines: list[str], rule_lower: str) -> list[Violation]:
@@ -200,15 +504,15 @@ def _check_length_rules(file_path: Path, lines: list[str], rule_lower: str) -> l
 
 def _debug_output_checks(rule_lower: str) -> list[PatternCheck]:
     checks: list[PatternCheck] = []
-    if "no print" in rule_lower or "print()" in rule_lower:
+    if "no print" in rule_lower or "print()" in rule_lower or "never use print" in rule_lower:
         checks.append(PatternCheck("print(", "warning"))
     if "no pprint" in rule_lower or "pprint()" in rule_lower:
         checks.append(PatternCheck("pprint(", "warning"))
-    if "no console.log" in rule_lower:
+    if any(phrase in rule_lower for phrase in ("no console.log", "no `console.log`", "never console.log")):
         checks.append(PatternCheck("console.log(", "warning"))
-    if "no console.debug" in rule_lower:
+    if any(phrase in rule_lower for phrase in ("no console.debug", "no `console.debug`")):
         checks.append(PatternCheck("console.debug(", "warning"))
-    if "no debugger" in rule_lower:
+    if any(phrase in rule_lower for phrase in ("no debugger", "no `debugger`")):
         checks.append(PatternCheck("debugger", "warning"))
     return checks
 
@@ -238,31 +542,50 @@ def _import_checks(rule_lower: str) -> list[PatternCheck]:
     return checks
 
 
-def _annotation_checks(rule_lower: str) -> list[PatternCheck]:
-    if "from __future__ import annotations" in rule_lower:
-        return [PatternCheck("__future__", "info")]
+def _annotation_checks(_rule_lower: str) -> list[PatternCheck]:
+    # Handled by _check_presence_rules (whole-file absence check) — no per-line pattern needed.
     return []
 
 
 def _hygiene_checks(rule_lower: str) -> list[PatternCheck]:
     checks: list[PatternCheck] = []
-    if "no todo" in rule_lower:
+    if any(phrase in rule_lower for phrase in ("no todo", "no todos", "avoid todo")):
         checks.append(PatternCheck("TODO", "warning", match_in_comments=True))
-    if "no fixme" in rule_lower:
+    if any(phrase in rule_lower for phrase in ("no fixme", "avoid fixme")):
         checks.append(PatternCheck("FIXME", "warning", match_in_comments=True))
-    if "no hack" in rule_lower:
+    if any(phrase in rule_lower for phrase in ("no hack", "avoid hack")):
         checks.append(PatternCheck("HACK", "warning", match_in_comments=True))
     if "no assert" in rule_lower and "test" not in rule_lower:
         checks.append(PatternCheck("assert ", "warning"))
+    if any(phrase in rule_lower for phrase in ("no magic number", "no magic string", "magic number")):
+        # Cannot detect statically without full AST, but flag obvious cases
+        pass
+    return checks
+
+
+def _docker_checks(rule_lower: str) -> list[PatternCheck]:
+    """Docker / container checks."""
+    checks: list[PatternCheck] = []
+    if any(phrase in rule_lower for phrase in ("run as non-root", "non-root user", "no root")):
+        checks.append(PatternCheck("USER root", "error"))
+    if "no latest tag" in rule_lower or "never use :latest" in rule_lower:
+        checks.append(PatternCheck(":latest", "warning"))
+    if "no add instruction" in rule_lower or "use copy not add" in rule_lower:
+        checks.append(PatternCheck("\nADD ", "warning"))
     return checks
 
 
 def _credential_checks(rule_lower: str) -> list[PatternCheck]:
-    _secret_keywords = ("secret", "password", "credential", "key", "token")
-    if "no hardcoded" not in rule_lower or not any(kw in rule_lower for kw in _secret_keywords):
+    _secret_keywords = ("secret", "password", "credential", "key", "token", "api key", "api_key")
+    is_hardcoded_check = any(
+        phrase in rule_lower
+        for phrase in ("no hardcoded", "hardcoded api", "hardcoded secret", "never hardcode", "all via env")
+    )
+    if not is_hardcoded_check or not any(kw in rule_lower for kw in _secret_keywords):
         return []
     return [
-        PatternCheck(kw, "error") for kw in ("password =", "password=", "secret =", "secret=", "api_key =", "api_key=")
+        PatternCheck(kw, "error")
+        for kw in ("password =", "password=", "secret =", "secret=", "api_key =", "api_key=", "token =", "token=")
     ]
 
 

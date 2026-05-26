@@ -22,7 +22,7 @@ class TestRealProjectIntegration:
     """Run against the bundled fixture project which has known violations."""
 
     def test_finds_python_violations(self) -> None:
-        results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS)
+        results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS, all_sources=False)
         python_results = [r for r in results if "python" in r.instruction.path.name]
         assert len(python_results) > 0
         all_violations = [v for r in python_results for v in r.violations]
@@ -30,22 +30,22 @@ class TestRealProjectIntegration:
         assert len(all_violations) > 0
 
     def test_detects_eval_in_bad_code(self) -> None:
-        results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS)
+        results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS, all_sources=False)
         all_violations = [v for r in results for v in r.violations]
         assert any("eval(" in v.line_content for v in all_violations)
 
     def test_detects_bare_except_in_bad_code(self) -> None:
-        results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS)
+        results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS, all_sources=False)
         all_violations = [v for r in results for v in r.violations]
         assert any("except:" in v.line_content for v in all_violations)
 
     def test_detects_wildcard_import_in_bad_code(self) -> None:
-        results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS)
+        results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS, all_sources=False)
         all_violations = [v for r in results for v in r.violations]
         assert any("import *" in v.line_content for v in all_violations)
 
     def test_good_code_has_fewer_violations(self) -> None:
-        results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS)
+        results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS, all_sources=False)
         # Find violations per file
         good_code_violations = [v for r in results for v in r.violations if "good_code" in str(v.file)]
         bad_code_violations = [v for r in results for v in r.violations if "bad_code" in str(v.file)]
@@ -53,14 +53,14 @@ class TestRealProjectIntegration:
 
     def test_inline_disable_suppresses_hardcoded_key(self) -> None:
         """bad_code.py has API_KEY line with # guideline: disable — should be skipped."""
-        results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS)
+        results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS, all_sources=False)
         all_violations = [v for r in results for v in r.violations]
         # The API_KEY line has guideline: disable, so it should NOT appear
         assert not any("API_KEY" in v.line_content for v in all_violations)
 
     def test_cli_exits_nonzero_on_real_violations(self, tmp_path: Path) -> None:
         out = tmp_path / "report.html"
-        code = main(["check", "--root", str(FIXTURE_ROOT), "--output", str(out)])
+        code = main(["check", "--root", str(FIXTURE_ROOT), "--output", str(out), "--no-multi-source"])
         assert code == 1  # violations found → exit 1
 
     def test_cli_produces_all_report_formats(self, tmp_path: Path) -> None:
@@ -83,6 +83,7 @@ class TestRealProjectIntegration:
                 str(md_out),
                 "--fail-on",
                 "never",
+                "--no-multi-source",
             ]
         )
         assert html_out.exists()
