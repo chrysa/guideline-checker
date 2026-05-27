@@ -100,3 +100,111 @@ def test_html_reporter_violation_outside_root(tmp_path: Path) -> None:
     reporter.write(results=[result], output_path=output, root=tmp_path)
     content = output.read_text(encoding="utf-8")
     assert "external_file.py" in content
+
+
+# ── Linter results integration ────────────────────────────────────────────────
+
+
+def test_html_reporter_with_linter_results(tmp_path: Path) -> None:
+    """Should render linter sections when linter_results are provided."""
+    from guideline_checker.linters import LinterResult, LinterViolation
+
+    instruction = _make_instruction(tmp_path)
+    result = RuleResult(instruction=instruction, violations=[], files_checked=2)
+    linter_violation = LinterViolation(
+        file=tmp_path / "main.py",
+        line=10,
+        col=1,
+        code="F401",
+        message="'os' imported but unused",
+        severity="error",
+        linter="ruff",
+    )
+    linter_result = LinterResult(
+        linter="ruff",
+        available=True,
+        violations=[linter_violation],
+    )
+    reporter = HtmlReporter()
+    output = tmp_path / "report.html"
+    reporter.write(
+        results=[result],
+        output_path=output,
+        root=tmp_path,
+        linter_results=[linter_result],
+    )
+    content = output.read_text(encoding="utf-8")
+    assert "<!DOCTYPE html>" in content
+    assert "ruff" in content
+    assert "F401" in content
+
+
+def test_html_reporter_linter_unavailable(tmp_path: Path) -> None:
+    """Should render 'unavailable' state when linter is not installed."""
+    from guideline_checker.linters import LinterResult
+
+    instruction = _make_instruction(tmp_path)
+    result = RuleResult(instruction=instruction, violations=[], files_checked=1)
+    linter_result = LinterResult(
+        linter="mypy",
+        available=False,
+        error="mypy not found in PATH",
+    )
+    reporter = HtmlReporter()
+    output = tmp_path / "report.html"
+    reporter.write(
+        results=[result],
+        output_path=output,
+        root=tmp_path,
+        linter_results=[linter_result],
+    )
+    content = output.read_text(encoding="utf-8")
+    assert "mypy" in content
+
+
+def test_html_reporter_linter_no_violations(tmp_path: Path) -> None:
+    """Should render clean linter section with no violations."""
+    from guideline_checker.linters import LinterResult
+
+    instruction = _make_instruction(tmp_path)
+    result = RuleResult(instruction=instruction, violations=[], files_checked=1)
+    linter_result = LinterResult(linter="ruff", available=True, violations=[])
+    reporter = HtmlReporter()
+    output = tmp_path / "report.html"
+    reporter.write(
+        results=[result],
+        output_path=output,
+        root=tmp_path,
+        linter_results=[linter_result],
+    )
+    content = output.read_text(encoding="utf-8")
+    assert "ruff" in content
+
+
+def test_html_reporter_linter_violation_outside_root(tmp_path: Path) -> None:
+    """Linter violations outside root should use absolute path fallback."""
+    from guideline_checker.linters import LinterResult, LinterViolation
+
+    instruction = _make_instruction(tmp_path)
+    result = RuleResult(instruction=instruction, violations=[], files_checked=1)
+    external = tmp_path.parent / "ext.py"
+    linter_violation = LinterViolation(
+        file=external,
+        line=1,
+        col=0,
+        code="E501",
+        message="line too long",
+        severity="warning",
+        linter="ruff",
+    )
+    linter_result = LinterResult(linter="ruff", available=True, violations=[linter_violation])
+    reporter = HtmlReporter()
+    output = tmp_path / "report.html"
+    reporter.write(
+        results=[result],
+        output_path=output,
+        root=tmp_path,
+        linter_results=[linter_result],
+    )
+    content = output.read_text(encoding="utf-8")
+    assert "ext.py" in content

@@ -100,6 +100,65 @@ def build_parser() -> argparse.ArgumentParser:
             "(disable CLAUDE.md, copilot-instructions.md, AGENTS.md discovery)."
         ),
     )
+    check_cmd.add_argument(
+        "--linters",
+        nargs="*",
+        default=None,
+        metavar="LINTER",
+        help=(
+            "Run external linters and include results in the report. "
+            "Pass specific linters (ruff mypy eslint) or no argument to auto-detect. "
+            "Example: --linters ruff mypy"
+        ),
+    )
+
+    # ── synthesize subcommand ────────────────────────────────────────────────
+    syn_cmd = sub.add_parser(
+        "synthesize",
+        help="Generate a multi-repo synthesis report from a workspace directory.",
+    )
+    syn_cmd.add_argument(
+        "--workspace",
+        type=Path,
+        required=True,
+        help="Workspace directory containing multiple project repos.",
+    )
+    syn_cmd.add_argument(
+        "--repos",
+        nargs="*",
+        default=None,
+        metavar="REPO",
+        help=("Explicit list of repo subdirectory names to include. When omitted, all subdirectories are processed."),
+    )
+    syn_cmd.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Synthesis HTML output path (default: <workspace>/guideline-synthesis.html).",
+    )
+    syn_cmd.add_argument(
+        "--linters",
+        nargs="*",
+        default=None,
+        metavar="LINTER",
+        help=(
+            "Run external linters on each repo. Pass specific linters (ruff mypy eslint) or no argument to auto-detect."
+        ),
+    )
+    syn_cmd.add_argument(
+        "--no-multi-source",
+        action="store_true",
+        default=False,
+        dest="no_multi_source",
+        help="Only load *.instructions.md (disable CLAUDE.md, copilot-instructions.md, AGENTS.md).",
+    )
+    syn_cmd.add_argument(
+        "--instructions",
+        type=Path,
+        default=None,
+        help=("Shared instructions directory to use for all repos (overrides per-repo .github/instructions/)."),
+    )
+
     return parser
 
 
@@ -145,6 +204,9 @@ def main(argv: list[str] | None = None) -> int:
         instructions_dir: Path | None = args.instructions
         return run_init(root=root, instructions_dir=instructions_dir, force=args.force)
 
+    if args.command == "synthesize":
+        return _cmd_synthesize(args)
+
     if args.command != "check":
         parser.print_help()
         return 0
@@ -181,9 +243,29 @@ def main(argv: list[str] | None = None) -> int:
         all_sources=use_all_sources,
     )
 
+    # ── Optional linter integration ──────────────────────────────────────────
+    linter_results = []
+    if args.linters is not None:
+        from guideline_checker.linters import run_linters
+
+        linter_names: list[str] | None = args.linters if args.linters else None
+        print(
+            "[guideline-checker] Running linters"
+            + (f": {', '.join(linter_names)}" if linter_names else " (auto-detect)")
+            + " ..."
+        )
+        linter_results = run_linters(root, linters=linter_names)
+        for lr in linter_results:
+            if not lr.available:
+                print(f"[guideline-checker] Linter '{lr.linter}' unavailable: {lr.error}", file=sys.stderr)
+            elif lr.error:
+                print(f"[guideline-checker] Linter '{lr.linter}' error: {lr.error}", file=sys.stderr)
+            else:
+                print(f"[guideline-checker] Linter '{lr.linter}': {len(lr.violations)} violation(s).")
+
     reporter = HtmlReporter()
     report_path: Path = args.output
-    reporter.write(results=results, output_path=report_path, root=root)
+    reporter.write(results=results, output_path=report_path, root=root, linter_results=linter_results)
     print(f"[guideline-checker] Report written to: {report_path}")
 
     if args.json:
@@ -219,6 +301,99 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.fail_on == "warning" and (error_count + warning_count) > 0:
         return 1
+    return 0
+
+
+# ─── synthesize command ───────────────────────────────────────────────────────
+
+
+def _cmd_synthesize(args: argparse.Namespace) -> int:
+    """Run checks on each repo in a workspace and produce a synthesis report."""
+    from guideline_checker.reporters.synthesis_html import SynthesisHtmlReporter
+
+    workspace: Path = args.workspace.resolve()
+    if not workspace.is_dir():
+        print(f"[guideline-checker] Workspace not found: {workspace}", file=sys.stderr)
+        return 1
+
+    output: Path = args.output or workspace / "guideline-synthesis.html"
+    use_all_sources = not args.no_multi_source
+    shared_instructions: Path | None = args.instructions
+
+    # Discover repos
+    if args.repos:
+        repo_names: list[str] = args.repos
+    else:
+        repo_names = sorted(d.name for d in workspace.iterdir() if d.is_dir() and not d.name.startswith("."))
+
+    print(f"[guideline-checker] Synthesizing {len(repo_names)} repo(s) in {workspace} ...")
+
+    linter_names: list[str] | None = None
+    run_linters_flag = args.linters is not None
+    if run_linters_flag and args.linters:
+        linter_names = args.linters
+
+    repo_entries = []
+    for name in repo_names:
+        repo_path = workspace / name
+        if not repo_path.is_dir():
+            print(f"[guideline-checker]   SKIP {name} (not a directory)")
+            repo_entries.append({"name": name, "path": repo_path, "skipped": True, "reason": "not a directory"})
+            continue
+
+        instructions_dir = shared_instructions or (repo_path / ".github" / "instructions")
+
+        print(f"[guideline-checker]   Checking {name} ...", end=" ", flush=True)
+        try:
+            results = run_checks(
+                root=repo_path,
+                instructions_dir=instructions_dir,
+                all_sources=use_all_sources,
+            )
+        except Exception as exc:
+            print(f"ERROR: {exc}")
+            repo_entries.append({"name": name, "path": repo_path, "skipped": True, "reason": str(exc)})
+            continue
+
+        linter_results = []
+        if run_linters_flag:
+            from guideline_checker.linters import run_linters
+
+            linter_results = run_linters(repo_path, linters=linter_names)
+
+        # Write per-repo HTML
+        per_repo_report = repo_path / "guideline-report.html"
+        HtmlReporter().write(
+            results=results,
+            output_path=per_repo_report,
+            root=repo_path,
+            linter_results=linter_results,
+        )
+
+        errors = sum(sum(1 for v in r.violations if v.severity == "error") for r in results)
+        warnings = sum(sum(1 for v in r.violations if v.severity == "warning") for r in results)
+        linter_errors = sum(sum(1 for v in lr.violations if v.severity == "error") for lr in linter_results)
+        linter_warnings = sum(sum(1 for v in lr.violations if v.severity == "warning") for lr in linter_results)
+        print(f"errors={errors + linter_errors} warnings={warnings + linter_warnings}")
+        repo_entries.append(
+            {
+                "name": name,
+                "path": repo_path,
+                "skipped": False,
+                "results": results,
+                "linter_results": linter_results,
+                "report_path": per_repo_report,
+                "errors": errors + linter_errors,
+                "warnings": warnings + linter_warnings,
+            }
+        )
+
+    SynthesisHtmlReporter().write(
+        workspace=workspace,
+        repo_entries=repo_entries,
+        output_path=output,
+    )
+    print(f"[guideline-checker] Synthesis report written to: {output}")
     return 0
 
 
