@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -271,7 +272,7 @@ def _run_biome(root: Path) -> LinterResult:
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
-_LINTER_MAP: dict[str, callable] = {
+_LINTER_MAP: dict[str, Callable[..., LinterResult]] = {
     "ruff": _run_ruff,
     "mypy": _run_mypy,
     "eslint": _run_eslint,

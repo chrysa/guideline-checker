@@ -101,7 +101,7 @@ class MarkdownReporter:
 
             lines += [f"**Violations: {len(result.violations)}** ({n_err} error(s), {n_warn} warning(s))", ""]
 
-            by_file: dict[Path, list] = defaultdict(list)
+            by_file: dict[Path, list[object]] = defaultdict(list)
             for v in result.violations:
                 by_file[v.file].append(v)
 

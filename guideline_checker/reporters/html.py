@@ -310,7 +310,7 @@ class HtmlReporter:
 
     # ── Linter sections ────────────────────────────────────────────────────────
 
-    def _render_linter_nav(self, linter_results: list | None) -> str:
+    def _render_linter_nav(self, linter_results: list[object] | None) -> str:
         """Render sidebar nav section for linters."""
         if not linter_results:
             return ""
@@ -347,7 +347,7 @@ class HtmlReporter:
             f"</div>"
         )
 
-    def _render_linter_section(self, linter_results: list | None, root: Path) -> str:
+    def _render_linter_section(self, linter_results: list[object] | None, root: Path) -> str:
         """Render the full linter results section for all linters."""
         if not linter_results:
             return ""
@@ -388,9 +388,9 @@ class HtmlReporter:
             )
         return "\n".join(parts)
 
-    def _render_linter_violations(self, violations: list, root: Path) -> str:
+    def _render_linter_violations(self, violations: list[object], root: Path) -> str:
         """Render linter violations grouped by file."""
-        by_file: dict[Path, list] = defaultdict(list)
+        by_file: dict[Path, list[object]] = defaultdict(list)
         for v in violations:
             by_file[v.file].append(v)
 
