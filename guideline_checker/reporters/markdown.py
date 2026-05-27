@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
-from guideline_checker.checker import RuleResult
+from guideline_checker.checker import RuleResult, Violation
 
 _SEVERITY_EMOJI = {
     "error": "🔴",
@@ -101,7 +101,7 @@ class MarkdownReporter:
 
             lines += [f"**Violations: {len(result.violations)}** ({n_err} error(s), {n_warn} warning(s))", ""]
 
-            by_file: dict[Path, list[object]] = defaultdict(list)
+            by_file: dict[Path, list[Violation]] = defaultdict(list)
             for v in result.violations:
                 by_file[v.file].append(v)
 
