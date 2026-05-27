@@ -61,6 +61,16 @@ test: ## Run tests
 
 test-cov: ## Run tests with coverage report
 	pytest tests -v --cov=$(PACKAGE_DIR) --cov-report=xml --cov-report=term-missing --cov-fail-under=85
+
+e2e: ## Run Playwright E2E tests (requires server on port 8080)
+	pytest tests/e2e/ -v --browser chromium
+
+e2e-headed: ## Run E2E tests in headed (visible) browser
+	pytest tests/e2e/ -v --browser chromium --headed
+
+install-e2e: ## Install E2E dependencies (playwright + browsers)
+	$(PIP) install -e ".[e2e]"
+	playwright install chromium --with-deps
 # ─── Docker ───────────────────────────────────────────────────────────────────
 
 docker-build: ## Build all Docker stages
