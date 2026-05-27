@@ -183,7 +183,7 @@ class SynthesisHtmlReporter:
     def write(
         self,
         workspace: Path,
-        repo_entries: list[dict],
+        repo_entries: list[dict[str, object]],
         output_path: Path,
     ) -> None:
         """Generate the synthesis report.
