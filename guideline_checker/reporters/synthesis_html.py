@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from guideline_checker.reporters.html import _escape_html
 
@@ -183,7 +184,7 @@ class SynthesisHtmlReporter:
     def write(
         self,
         workspace: Path,
-        repo_entries: list[dict[str, object]],
+        repo_entries: list[dict[str, Any]],
         output_path: Path,
     ) -> None:
         """Generate the synthesis report.
