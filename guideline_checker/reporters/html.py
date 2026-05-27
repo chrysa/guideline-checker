@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import UTC
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING
 from guideline_checker.checker import RuleResult, Violation
 
 if TYPE_CHECKING:
-    from guideline_checker.linters import LinterResult
+    from guideline_checker.linters import LinterResult, LinterViolation
 
 # ─── Templates ────────────────────────────────────────────────────────────────
 
@@ -310,7 +311,7 @@ class HtmlReporter:
 
     # ── Linter sections ────────────────────────────────────────────────────────
 
-    def _render_linter_nav(self, linter_results: list[object] | None) -> str:
+    def _render_linter_nav(self, linter_results: Sequence[LinterResult] | None) -> str:
         """Render sidebar nav section for linters."""
         if not linter_results:
             return ""
@@ -347,7 +348,7 @@ class HtmlReporter:
             f"</div>"
         )
 
-    def _render_linter_section(self, linter_results: list[object] | None, root: Path) -> str:
+    def _render_linter_section(self, linter_results: Sequence[LinterResult] | None, root: Path) -> str:
         """Render the full linter results section for all linters."""
         if not linter_results:
             return ""
@@ -388,9 +389,9 @@ class HtmlReporter:
             )
         return "\n".join(parts)
 
-    def _render_linter_violations(self, violations: list[object], root: Path) -> str:
+    def _render_linter_violations(self, violations: list[LinterViolation], root: Path) -> str:
         """Render linter violations grouped by file."""
-        by_file: dict[Path, list[object]] = defaultdict(list)
+        by_file: dict[Path, list[LinterViolation]] = defaultdict(list)
         for v in violations:
             by_file[v.file].append(v)
 
