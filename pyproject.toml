@@ -42,6 +42,7 @@ dev = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
 ]
+e2e = ["playwright>=1.48", "pytest-playwright>=0.5"]
 
 [project.scripts]
 guideline-checker = "guideline_checker.cli:main"
@@ -58,7 +59,7 @@ include = ["guideline_checker*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=guideline_checker --cov-report=xml --cov-report=term-missing --cov-fail-under=85"
+addopts = "--cov=guideline_checker --cov-report=xml --cov-report=term-missing --cov-fail-under=85 --ignore=tests/e2e"
 
 [tool.coverage.run]
 source = ["guideline_checker"]
