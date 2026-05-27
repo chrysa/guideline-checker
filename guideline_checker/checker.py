@@ -277,19 +277,69 @@ def _collect_files(root: Path) -> list[Path]:
     ]
 
 
+def _split_patterns(pattern: str) -> list[str]:
+    """Split comma-separated glob patterns, respecting brace groups ``{a,b}``.
+
+    A plain ``split(",")`` would break patterns like ``{api,adminzone}/**/*.py``
+    by splitting inside the braces.  This function only splits on commas that
+    are *not* nested inside ``{…}``.
+    """
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    for ch in pattern:
+        if ch == "{":
+            depth += 1
+            current.append(ch)
+        elif ch == "}":
+            depth -= 1
+            current.append(ch)
+        elif ch == "," and depth == 0:
+            parts.append("".join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+    if current:
+        parts.append("".join(current).strip())
+    return [p for p in parts if p]
+
+
+def _expand_brace_pattern(pattern: str) -> list[str]:
+    """Expand ``{a,b}/foo`` into ``[a/foo, b/foo]`` recursively.
+
+    Only the innermost (non-nested) brace group is expanded per call;
+    recursion handles nested braces and multiple brace groups.
+    """
+    m = re.search(r"\{([^{}]+)\}", pattern)
+    if not m:
+        return [pattern]
+    before = pattern[: m.start()]
+    after = pattern[m.end() :]
+    expanded: list[str] = []
+    for alt in m.group(1).split(","):
+        expanded.extend(_expand_brace_pattern(before + alt.strip() + after))
+    return expanded
+
+
 def _matches_pattern(file_path: Path, root: Path, pattern: str) -> bool:
     """Check if a file path matches a glob pattern (relative to root).
 
     Supports ``**`` recursive wildcards via :meth:`pathlib.PurePath.match`
     with a fallback for root-level files (Python 3.12 compat).
     Comma-separated patterns are treated as alternatives (match any).
+    Brace expansion ``{a,b}`` is supported (e.g. ``{api,adminzone}/**/*.py``).
     """
     try:
         relative = file_path.relative_to(root)
     except ValueError:
         return False
 
-    patterns = [p.strip() for p in pattern.split(",") if p.strip()]
+    # Split on commas NOT inside braces, then expand brace alternatives.
+    raw_patterns = _split_patterns(pattern)
+    patterns: list[str] = []
+    for p in raw_patterns:
+        patterns.extend(_expand_brace_pattern(p))
+
     for pat in patterns:
         if relative.match(pat):
             return True

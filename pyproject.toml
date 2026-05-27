@@ -42,6 +42,7 @@ dev = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
 ]
+e2e = ["playwright>=1.48", "pytest-playwright>=0.5"]
 
 [project.scripts]
 guideline-checker = "guideline_checker.cli:main"
