@@ -31,7 +31,7 @@ import os
 import secrets
 import time
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import (
@@ -111,7 +111,7 @@ def _check_local(creds: HTTPBasicCredentials | None) -> None:
 
 def _check_ldap(creds: HTTPBasicCredentials | None) -> None:
     try:
-        from ldap3 import ALL, SIMPLE, Connection, Server  # type: ignore[import]
+        from ldap3 import ALL, SIMPLE, Connection, Server  # type: ignore[import-untyped]
     except ImportError as exc:
         raise RuntimeError("ldap3 is required for LDAP auth. Install with: pip install ldap3") from exc
 
@@ -138,26 +138,26 @@ def _check_ldap(creds: HTTPBasicCredentials | None) -> None:
 
 
 # JWKS in-memory cache: {uri: (payload, fetched_at_monotonic)}
-_jwks_cache: dict[str, tuple[dict, float]] = {}
+_jwks_cache: dict[str, tuple[dict[str, Any], float]] = {}
 _JWKS_TTL = 3600.0  # seconds
 
 
-def _fetch_jwks(uri: str) -> dict:
-    import httpx  # type: ignore[import]
+def _fetch_jwks(uri: str) -> dict[str, Any]:
+    import httpx
 
     cached = _jwks_cache.get(uri)
     if cached and (time.monotonic() - cached[1]) < _JWKS_TTL:
         return cached[0]
     resp = httpx.get(uri, timeout=10)
     resp.raise_for_status()
-    data: dict = resp.json()
+    data: dict[str, Any] = resp.json()
     _jwks_cache[uri] = (data, time.monotonic())
     return data
 
 
 def _check_oidc(bearer: HTTPAuthorizationCredentials | None) -> None:
     try:
-        import jwt as pyjwt  # type: ignore[import]
+        import jwt as pyjwt  # type: ignore[import-not-found]
     except ImportError as exc:
         raise RuntimeError("PyJWT is required for OIDC auth. Install with: pip install PyJWT") from exc
 
@@ -192,7 +192,7 @@ def _check_oidc(bearer: HTTPAuthorizationCredentials | None) -> None:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="No matching signing key found in JWKS",
             )
-        decode_kw: dict = {"algorithms": ["RS256"]}
+        decode_kw: dict[str, Any] = {"algorithms": ["RS256"]}
         if audience:
             decode_kw["audience"] = audience
         pyjwt.decode(bearer.credentials, public_key, **decode_kw)
