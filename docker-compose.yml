@@ -5,30 +5,33 @@ services:
       context: .
       dockerfile: Dockerfile
       target: lint
+    container_name: guideline-checker-lint
     environment:
-      - PYTHONDONTWRITEBYTECODE=1
-      - PYTHONUNBUFFERED=1
+    - PYTHONDONTWRITEBYTECODE=1
+    - PYTHONUNBUFFERED=1
   test:
     container_name: guideline-checker-test
     build:
       context: .
       dockerfile: Dockerfile
       target: test
+    container_name: guideline-checker-test
     environment:
-      - PYTHONDONTWRITEBYTECODE=1
-      - PYTHONUNBUFFERED=1
+    - PYTHONDONTWRITEBYTECODE=1
+    - PYTHONUNBUFFERED=1
     volumes:
-      - ./coverage.xml:/app/coverage.xml
+    - ./coverage.xml:/app/coverage.xml
   web:
     container_name: guideline-checker-web
     build:
       context: .
       dockerfile: Dockerfile
       target: web
+    container_name: guideline-checker-web
     environment:
-      - PYTHONDONTWRITEBYTECODE=1
-      - PYTHONUNBUFFERED=1
-      - SCAN_ROOT=/workspace
+    - PYTHONDONTWRITEBYTECODE=1
+    - PYTHONUNBUFFERED=1
+    - SCAN_ROOT=/workspace
     healthcheck:
       interval: 30s
       retries: 3
@@ -36,7 +39,7 @@ services:
       test: CMD curl -f http://localhost:8080/health
       timeout: 10s
     ports:
-      - 8080:8080
+    - 8080:8080
     restart: unless-stopped
     volumes:
-      - .:/workspace:ro
+    - .:/workspace:ro

@@ -11,15 +11,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import BackgroundTasks, Depends, FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from guideline_checker.checker import RuleResult, run_checks
 from guideline_checker.loader import InstructionFile, load_all_sources
+from guideline_checker.web.auth import require_auth
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
 _SCAN_ROOT: Path = Path(os.environ.get("SCAN_ROOT", "."))
+# API key is read here only for templating into the dashboard HTML.
+# Authentication logic is fully handled by guideline_checker.web.auth.
+_API_KEY: str = os.environ.get("API_KEY", "")
 
 
 # ── State ──────────────────────────────────────────────────────────────────────
@@ -253,6 +257,8 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
   </main>
 
   <script>
+    var _apiKey     = '__API_KEY__';
+    var _apiHeaders = _apiKey ? {'X-Api-Key': _apiKey} : {};
     var _filter = 'all';
     var _data   = null;
     var _cdata  = null;
@@ -449,7 +455,7 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
 
     async function loadConstraints() {
       try {
-        var r = await fetch('/api/constraints');
+        var r = await fetch('/api/constraints', {headers: _apiHeaders});
         _cdata = await r.json();
         var total = _cdata.total_rules || 0;
         document.getElementById('badge-constraints').textContent = total;
@@ -462,7 +468,7 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
 
     async function load() {
       try {
-        var r = await fetch('/api/results');
+        var r = await fetch('/api/results', {headers: _apiHeaders});
         render(await r.json());
         await loadConstraints();
       } catch(_) {}
@@ -470,13 +476,13 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
 
     async function triggerScan() {
       document.getElementById('scan-btn').disabled = true;
-      await fetch('/api/scan', { method: 'POST' });
+      await fetch('/api/scan', { method: 'POST', headers: _apiHeaders });
       poll();
     }
 
     function poll() {
       setTimeout(async function() {
-        var r    = await fetch('/api/results');
+        var r    = await fetch('/api/results', {headers: _apiHeaders});
         var data = await r.json();
         render(data);
         if (data.running) poll();
@@ -503,10 +509,10 @@ def health() -> dict[str, str]:
 @app.get("/", response_class=HTMLResponse, response_model=None)
 def dashboard() -> str:
     """Serve the interactive dashboard."""
-    return _DASHBOARD_HTML
+    return _DASHBOARD_HTML.replace("__API_KEY__", _API_KEY)
 
 
-@app.post("/api/scan", response_model=dict[str, str])
+@app.post("/api/scan", response_model=dict[str, str], dependencies=[Depends(require_auth)])
 def trigger_scan(background_tasks: BackgroundTasks) -> dict[str, str]:
     """Trigger a new compliance scan in the background."""
     if _state.running:
@@ -515,7 +521,7 @@ def trigger_scan(background_tasks: BackgroundTasks) -> dict[str, str]:
     return {"status": "started"}
 
 
-@app.get("/api/results", response_model=None)
+@app.get("/api/results", response_model=None, dependencies=[Depends(require_auth)])
 def get_results() -> JSONResponse:
     """Return the latest scan results as JSON."""
     return JSONResponse(
@@ -528,7 +534,7 @@ def get_results() -> JSONResponse:
     )
 
 
-@app.get("/api/constraints", response_model=None)
+@app.get("/api/constraints", response_model=None, dependencies=[Depends(require_auth)])
 def get_constraints() -> JSONResponse:
     """Return all extracted constraints from every discovered instruction source."""
     return JSONResponse(
