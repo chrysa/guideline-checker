@@ -331,8 +331,9 @@ class HtmlReporter:
                     cls = "warn"
                     count_html = f'<span class="nav-count">{n_warn} warn</span>'
                 else:
-                    cls = "ok"
-                    count_html = '<span class="nav-count">&#10003;</span>'
+                  cls = "ok"
+                  # Use numeric 0 for no violations so parsers can extract a number
+                  count_html = '<span class="nav-count">0</span>'
             items.append(
                 f'<div class="nav-item {cls}" '
                 f"onclick=\"document.getElementById('{lid}').scrollIntoView({{behavior:'smooth'}})\">"
@@ -368,8 +369,9 @@ class HtmlReporter:
                 badge = '<span class="badge badge-warning">ERROR</span>'
                 body = f'<div class="linter-unavailable">&#9888; {_escape_html(lr.error)}</div>'
             elif total == 0:
-                badge = '<span class="badge badge-ok">PASS</span>'
-                body = '<div class="linter-ok">&#10003; No violations found</div>'
+              badge = '<span class="badge badge-ok">PASS</span>'
+              # keep human message but include numeric 0 for tooling
+              body = '<div class="linter-ok">No violations found (0)</div>'
             else:
                 if n_err:
                     badge = f'<span class="badge badge-error">{n_err} errors</span>'
@@ -460,8 +462,9 @@ class HtmlReporter:
                 cls = "warn"
                 count_html = f'<span class="nav-count">{n_warn} warn</span>'
             else:
-                cls = "ok"
-                count_html = '<span class="nav-count">✓</span>'
+              cls = "ok"
+              # show numeric zero instead of a checkmark for consistent parsing
+              count_html = '<span class="nav-count">0</span>'
 
             items.append(
                 f'<div class="nav-item {cls}" data-target="{section_id}" '
