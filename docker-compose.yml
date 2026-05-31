@@ -1,5 +1,6 @@
 services:
   lint:
+    container_name: guideline-checker-lint
     build:
       context: .
       dockerfile: Dockerfile
@@ -8,6 +9,7 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
   test:
+    container_name: guideline-checker-test
     build:
       context: .
       dockerfile: Dockerfile
@@ -18,6 +20,7 @@ services:
     volumes:
       - ./coverage.xml:/app/coverage.xml
   web:
+    container_name: guideline-checker-web
     build:
       context: .
       dockerfile: Dockerfile
