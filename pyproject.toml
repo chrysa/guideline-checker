@@ -82,5 +82,13 @@ warn_return_any = true
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]
+module = "cryptography.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "jwt"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "ldap3"
 ignore_missing_imports = true
