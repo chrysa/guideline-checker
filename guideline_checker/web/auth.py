@@ -111,7 +111,7 @@ def _check_local(creds: HTTPBasicCredentials | None) -> None:
 
 def _check_ldap(creds: HTTPBasicCredentials | None) -> None:
     try:
-        from ldap3 import ALL, SIMPLE, Connection, Server  # type: ignore[import-untyped]
+        from ldap3 import ALL, SIMPLE, Connection, Server
     except ImportError as exc:
         raise RuntimeError("ldap3 is required for LDAP auth. Install with: pip install ldap3") from exc
 
@@ -157,7 +157,8 @@ def _fetch_jwks(uri: str) -> dict[str, Any]:
 
 def _check_oidc(bearer: HTTPAuthorizationCredentials | None) -> None:
     try:
-        import jwt as pyjwt  # type: ignore[import-not-found]
+        import jwt as pyjwt
+        from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey as _RSAPublicKey
     except ImportError as exc:
         raise RuntimeError("PyJWT is required for OIDC auth. Install with: pip install PyJWT") from exc
 
@@ -182,10 +183,16 @@ def _check_oidc(bearer: HTTPAuthorizationCredentials | None) -> None:
     try:
         header = pyjwt.get_unverified_header(bearer.credentials)
         kid = header.get("kid")
-        public_key = None
+        public_key: _RSAPublicKey | None = None
         for k in jwks.get("keys", []):
             if kid is None or k.get("kid") == kid:
-                public_key = pyjwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(k))
+                raw_key = pyjwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(k))
+                if not isinstance(raw_key, _RSAPublicKey):
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="JWKS key is not an RSA public key",
+                    )
+                public_key = raw_key
                 break
         if public_key is None:
             raise HTTPException(
@@ -199,7 +206,7 @@ def _check_oidc(bearer: HTTPAuthorizationCredentials | None) -> None:
     except pyjwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {exc}",
+            detail="Invalid or expired token",
         ) from exc
 
 

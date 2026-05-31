@@ -224,7 +224,7 @@ def _narrow_apply_to(instruction: InstructionFile) -> InstructionFile:
 
 def _file_batch_worker(
     root: Path,
-    instr_data: list[tuple[str, list[str], str, str, str, object]],
+    instr_data: list[tuple[str, list[str], str, str, str, str]],
     file_batch: list[Path],
 ) -> list[tuple[int, int, list[Violation]]]:
     """Worker: process a file batch against all instructions.
@@ -233,7 +233,7 @@ def _file_batch_worker(
     load is balanced regardless of rule-count differences between sources.
     Returns list of ``(instruction_idx, matched_count, violations)``.
     """
-    from guideline_checker.loader import InstructionFile
+    from guideline_checker.loader import InstructionFile, SourceType
 
     batch_results: list[tuple[int, int, list[Violation]]] = []
     for idx, (path_str, rules, apply_to, description, content, source_type) in enumerate(instr_data):
@@ -243,7 +243,7 @@ def _file_batch_worker(
             apply_to=apply_to,
             description=description,
             content=content,
-            source_type=source_type,  # type: ignore[arg-type]
+            source_type=SourceType(source_type),
         )
         matched = [f for f in file_batch if _matches_pattern(f, root, apply_to)]
         violations: list[Violation] = []
@@ -522,7 +522,8 @@ def _check_function_lengths(file_path: Path, lines: list[str], limit: int) -> li
                         )
                     )
             func_start = lineno
-            func_name = re.search(r"def\s+(\w+)", stripped).group(1)  # type: ignore[union-attr]
+            match = re.search(r"def\s+(\w+)", stripped)
+            func_name = match.group(1) if match else "<anonymous>"
 
     # Check last function
     if func_start is not None:
@@ -697,7 +698,7 @@ def _security_checks(rule_lower: str) -> list[PatternCheck]:
         checks.append(PatternCheck("https://", "info"))
     if "no hardcoded ip" in rule_lower:
         checks.append(PatternCheck("127.0.0.1", "warning"))
-        checks.append(PatternCheck("0.0.0.0", "warning"))  # noqa: S104
+        checks.append(PatternCheck("0.0.0.0", "warning"))
     if "no shell=true" in rule_lower or "no shell injection" in rule_lower:
         checks.append(PatternCheck("shell=True", "error"))
     if "no pickle" in rule_lower:
