@@ -199,7 +199,7 @@ def _check_oidc(bearer: HTTPAuthorizationCredentials | None) -> None:
     except pyjwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {exc}",
+            detail="Invalid or expired token",
         ) from exc
 
 
