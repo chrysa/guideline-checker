@@ -76,21 +76,24 @@ repos:
     - commit-msg
   repo: https://github.com/compilerla/conventional-pre-commit
   rev: v4.4.0
-- repo: local
-  hooks:
-  - id: run-tests
+- hooks:
+  - entry: make docker-test
+    id: run-tests
+    language: system
     name: run test suite (with coverage)
-    entry: make docker-test
-    language: system
     pass_filenames: false
     stages:
     - pre-push
-  - id: sonar-scanner
+  - entry: bash -c 'docker run --rm --env SONAR_TOKEN -v "$(pwd):/usr/src"
+      sonarsource/sonar-scanner-cli:11
+      -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=chrysa
+      -Dsonar.projectKey=chrysa_guideline-checker
+      -Dsonar.python.coverage.reportPaths=reports/coverage.xml
+      -Dsonar.python.xunit.reportPath=reports/junit.xml'
+    id: sonar-scanner
+    language: system
     name: sonar cloud analysis
-    entry: bash -c 'docker run --rm --env SONAR_TOKEN -v "$(pwd):/usr/src" sonarsource/sonar-scanner-cli:11 
-      -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=chrysa -Dsonar.projectKey=chrysa_guideline-checker 
-      -Dsonar.python.coverage.reportPaths=reports/coverage.xml -Dsonar.python.xunit.reportPath=reports/junit.xml'
-    language: system
     pass_filenames: false
     stages:
     - pre-push
+  repo: local
