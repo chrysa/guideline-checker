@@ -28,6 +28,8 @@ IGNORE_DIRS = {
     ".eggs",
     "*.egg-info",
     "coverage",
+    # graphify output directory — generated docs, not source
+    "graphify-out",
     ".tox",
     "htmlcov",
     "reports",
@@ -266,6 +268,16 @@ def _instruction_worker(
     return result
 
 
+# Generated output files produced by guideline-checker itself — scanning them
+# causes spurious violations because they contain quoted code from the project.
+IGNORE_FILES = {
+    "guideline-report.html",
+    "guideline-report.json",
+    "guideline-report.md",
+    "guideline-synthesis.html",
+}
+
+
 def _collect_files(root: Path) -> list[Path]:
     """Recursively collect text-based source files, ignoring known irrelevant directories."""
     return [
@@ -273,6 +285,7 @@ def _collect_files(root: Path) -> list[Path]:
         for path in root.rglob("*")
         if path.is_file()
         and not any(part in IGNORE_DIRS or part.endswith(".egg-info") for part in path.parts)
+        and path.name not in IGNORE_FILES
         and _is_text_file(path)
     ]
 

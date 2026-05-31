@@ -6,7 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.checker import PatternCheck, _line_matches, _matches_pattern, run_checks
+from guideline_checker.checker import (
+    IGNORE_FILES,
+    PatternCheck,
+    _collect_files,
+    _expand_brace_pattern,
+    _line_matches,
+    _matches_pattern,
+    _narrow_apply_to,
+    _split_patterns,
+    run_checks,
+)
 
 
 @pytest.fixture()
@@ -390,3 +400,296 @@ class TestRuleEngineV02:
         f.write_text("try:\n    pass\nexcept:\n    pass\n")
         violations = _check_file(f, instr)
         assert any("except:" in v.line_content for v in violations)
+
+
+# --- IGNORE_FILES / _collect_files unit tests ---
+
+
+class TestCollectFiles:
+    """Unit tests for _collect_files and IGNORE_FILES."""
+
+    def test_ignore_files_contains_generated_report_names(self) -> None:
+        """IGNORE_FILES must contain all guideline-checker output filenames."""
+        assert "guideline-report.html" in IGNORE_FILES
+        assert "guideline-report.json" in IGNORE_FILES
+        assert "guideline-report.md" in IGNORE_FILES
+        assert "guideline-synthesis.html" in IGNORE_FILES
+
+    def test_collect_files_excludes_guideline_report_html(self, tmp_path: Path) -> None:
+        """_collect_files should not return guideline-report.html."""
+        (tmp_path / "guideline-report.html").write_text("<html>report</html>")
+        (tmp_path / "app.py").write_text("x = 1\n")
+        result = _collect_files(tmp_path)
+        names = [p.name for p in result]
+        assert "guideline-report.html" not in names
+        assert "app.py" in names
+
+    def test_collect_files_excludes_guideline_report_json(self, tmp_path: Path) -> None:
+        """_collect_files should not return guideline-report.json."""
+        (tmp_path / "guideline-report.json").write_text('{"rules": []}')
+        (tmp_path / "module.ts").write_text("export const x = 1;\n")
+        result = _collect_files(tmp_path)
+        names = [p.name for p in result]
+        assert "guideline-report.json" not in names
+        assert "module.ts" in names
+
+    def test_collect_files_excludes_guideline_report_md(self, tmp_path: Path) -> None:
+        """_collect_files should not return guideline-report.md."""
+        (tmp_path / "guideline-report.md").write_text("# Report\n")
+        (tmp_path / "README.md").write_text("# Readme\n")
+        result = _collect_files(tmp_path)
+        names = [p.name for p in result]
+        assert "guideline-report.md" not in names
+        assert "README.md" in names
+
+    def test_collect_files_excludes_synthesis_html(self, tmp_path: Path) -> None:
+        """_collect_files should not return guideline-synthesis.html."""
+        (tmp_path / "guideline-synthesis.html").write_text("<html>synthesis</html>")
+        (tmp_path / "index.html").write_text("<html></html>")
+        result = _collect_files(tmp_path)
+        names = [p.name for p in result]
+        assert "guideline-synthesis.html" not in names
+        assert "index.html" in names
+
+    def test_collect_files_skips_node_modules(self, tmp_path: Path) -> None:
+        """_collect_files should not descend into node_modules."""
+        nm = tmp_path / "node_modules" / "pkg"
+        nm.mkdir(parents=True)
+        (nm / "index.js").write_text("module.exports = {};\n")
+        (tmp_path / "src.py").write_text("x = 1\n")
+        result = _collect_files(tmp_path)
+        paths_str = [str(p) for p in result]
+        assert not any("node_modules" in s for s in paths_str)
+        assert any("src.py" in s for s in paths_str)
+
+    def test_run_checks_ignores_generated_report_files(self, tmp_path: Path) -> None:
+        """run_checks should not flag violations inside guideline-report.md."""
+        root = tmp_path / "project"
+        root.mkdir()
+        inst_dir = root / ".github" / "instructions"
+        inst_dir.mkdir(parents=True)
+        (inst_dir / "no_print.instructions.md").write_text(
+            '---\napplyTo: "**/*"\ndescription: "no print"\n---\n\n- No print() calls\n',
+            encoding="utf-8",
+        )
+        # Clean source file
+        (root / "app.py").write_text("def hello():\n    return 1\n", encoding="utf-8")
+        # Generated report that contains the word "print" — should be ignored
+        (root / "guideline-report.md").write_text("# Report\n\n- No print() calls\n", encoding="utf-8")
+        results = run_checks(root=root, instructions_dir=inst_dir, all_sources=False)
+        violations = [v for r in results for v in r.violations]
+        flagged_files = {v.file_path for v in violations}
+        assert not any("guideline-report" in str(f) for f in flagged_files)
+
+
+# --- _split_patterns / _expand_brace_pattern tests ---
+
+
+class TestSplitPatterns:
+    """Unit tests for _split_patterns and _expand_brace_pattern."""
+
+    def test_split_plain_comma(self) -> None:
+        """Comma-separated patterns without braces are split correctly."""
+        result = _split_patterns("**/*.py, **/*.pyi")
+        assert result == ["**/*.py", "**/*.pyi"]
+
+    def test_split_preserves_brace_commas(self) -> None:
+        """Commas inside braces must NOT split the pattern."""
+        result = _split_patterns("{api,admin}/**/*.py, **/*.md")
+        assert "{api,admin}/**/*.py" in result
+        assert "**/*.md" in result
+        assert len(result) == 2
+
+    def test_split_nested_braces(self) -> None:
+        """Opening brace increments depth; inner commas stay grouped."""
+        result = _split_patterns("{a,{b,c}}/**")
+        assert len(result) == 1
+        assert "{a,{b,c}}/**" in result
+
+    def test_split_trailing_brace_decrements_depth(self) -> None:
+        """Closing brace decrements depth; comma after it splits as expected."""
+        result = _split_patterns("{a,b}/**/*.py,**/*.ts")
+        assert len(result) == 2
+
+    def test_expand_brace_no_brace(self) -> None:
+        """Pattern without braces is returned as-is (single-element list)."""
+        result = _expand_brace_pattern("**/*.py")
+        assert result == ["**/*.py"]
+
+    def test_expand_brace_simple(self) -> None:
+        """Single brace group is expanded into alternatives."""
+        result = _expand_brace_pattern("{api,admin}/**/*.py")
+        assert "api/**/*.py" in result
+        assert "admin/**/*.py" in result
+        assert len(result) == 2
+
+    def test_expand_brace_multiple_groups(self) -> None:
+        """Multiple brace groups are fully expanded (all combinations)."""
+        result = _expand_brace_pattern("{a,b}/{x,y}.py")
+        assert len(result) == 4
+        assert "a/x.py" in result
+        assert "b/y.py" in result
+
+
+# --- _narrow_apply_to tests ---
+
+
+class TestNarrowApplyTo:
+    """Unit tests for _narrow_apply_to."""
+
+    def _make_instruction(self, name: str, apply_to: str = "**/*") -> object:
+        from pathlib import Path
+
+        from guideline_checker.loader import InstructionFile
+
+        return InstructionFile(
+            path=Path(f".github/instructions/{name}.md"),
+            apply_to=apply_to,
+            description=name,
+            content="",
+            rules=[],
+        )
+
+    def test_explicit_apply_to_not_narrowed(self) -> None:
+        """Instructions with an explicit apply_to are not modified."""
+        instr = self._make_instruction("anything", apply_to="**/*.ts")
+        result = _narrow_apply_to(instr)  # type: ignore[arg-type]
+        assert result.apply_to == "**/*.ts"
+
+    def test_test_keyword_narrows_to_test_pattern(self) -> None:
+        """Instructions with 'test' in filename are narrowed to test file patterns."""
+        instr = self._make_instruction("test_performance")
+        result = _narrow_apply_to(instr)  # type: ignore[arg-type]
+        assert "tests" in result.apply_to
+
+    def test_makefile_keyword_narrows(self) -> None:
+        """Instructions with 'makefile' in filename are narrowed to Makefile patterns."""
+        instr = self._make_instruction("makefiles_guidelines")
+        result = _narrow_apply_to(instr)  # type: ignore[arg-type]
+        assert "Makefile" in result.apply_to
+
+    def test_no_keyword_unchanged(self) -> None:
+        """Instructions without a recognised keyword keep **/* apply_to."""
+        instr = self._make_instruction("generic_guidelines")
+        result = _narrow_apply_to(instr)  # type: ignore[arg-type]
+        assert result.apply_to == "**/*"
+
+
+# --- length-rule tests ---
+
+
+class TestLengthRules:
+    """Tests for function-length and file-length rules."""
+
+    def test_function_length_rule_flags_long_function(self, tmp_path: Path) -> None:
+        """A Python file with a function exceeding the limit should produce a warning."""
+        from guideline_checker.loader import InstructionFile
+
+        long_func = "\n".join(["def long_func():"] + ["    x = 1"] * 15)
+        f = tmp_path / "long.py"
+        f.write_text(long_func)
+        from guideline_checker.checker import _check_file
+
+        instr = InstructionFile(
+            path=tmp_path / "rules.md",
+            apply_to="**/*.py",
+            description="length check",
+            content="- max function length: 10",
+            rules=["max function length: 10"],
+        )
+        violations = _check_file(f, instr)
+        assert any("long_func" in v.line_content for v in violations)
+
+    def test_function_length_two_functions_second_too_long(self, tmp_path: Path) -> None:
+        """Multiple functions: only the one exceeding the limit is flagged."""
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        code = "def short():\n    return 1\n\n" + "def long_fn():\n" + "    x = 1\n" * 12
+        f = tmp_path / "multi.py"
+        f.write_text(code)
+        instr = InstructionFile(
+            path=tmp_path / "rules.md",
+            apply_to="**/*.py",
+            description="length",
+            content="- max function length: 5",
+            rules=["max function length: 5"],
+        )
+        violations = _check_file(f, instr)
+        assert any("long_fn" in v.line_content for v in violations)
+
+    def test_file_length_rule_flags_long_file(self, tmp_path: Path) -> None:
+        """A file exceeding the max line count should produce a warning."""
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        f = tmp_path / "big.py"
+        f.write_text("\n".join([f"x_{i} = {i}" for i in range(200)]))
+        instr = InstructionFile(
+            path=tmp_path / "rules.md",
+            apply_to="**/*.py",
+            description="file length",
+            content="- max file length: 50",
+            rules=["max file length: 50"],
+        )
+        violations = _check_file(f, instr)
+        assert len(violations) >= 1
+        assert "lines" in violations[0].line_content
+
+
+# --- _credential_checks / _docker_checks tests ---
+
+
+class TestSecurityPatternChecks:
+    """Tests for Docker and credential pattern checks."""
+
+    def test_docker_no_root_user(self, tmp_path: Path) -> None:
+        """Docker check: 'run as non-root' flags USER root."""
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        f = tmp_path / "Dockerfile"
+        f.write_text("FROM ubuntu\nUSER root\nRUN apt-get install -y curl\n")
+        instr = InstructionFile(
+            path=tmp_path / "docker.md",
+            apply_to="**/Dockerfile*",
+            description="docker",
+            content="- Run as non-root user in production",
+            rules=["Run as non-root user in production"],
+        )
+        violations = _check_file(f, instr)
+        assert any("USER root" in v.line_content for v in violations)
+
+    def test_docker_no_latest_tag(self, tmp_path: Path) -> None:
+        """Docker check: 'no latest tag' flags :latest usage."""
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        f = tmp_path / "Dockerfile"
+        f.write_text("FROM ubuntu:latest\nRUN echo hello\n")
+        instr = InstructionFile(
+            path=tmp_path / "docker.md",
+            apply_to="**/Dockerfile*",
+            description="docker",
+            content="- No latest tag in FROM instructions",
+            rules=["No latest tag in FROM instructions"],
+        )
+        violations = _check_file(f, instr)
+        assert any(":latest" in v.line_content for v in violations)
+
+    def test_credential_hardcoded_password(self, tmp_path: Path) -> None:
+        """Credential check: hardcoded password= is flagged as an error."""
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        f = tmp_path / "config.py"
+        f.write_text('DB_PASSWORD = "secret123"\n')
+        instr = InstructionFile(
+            path=tmp_path / "secrets.md",
+            apply_to="**/*.py",
+            description="no hardcoded secrets",
+            content="- No hardcoded password or secret in code, all via env vars",
+            rules=["No hardcoded password or secret in code, all via env vars"],
+        )
+        violations = _check_file(f, instr)
+        assert any("password" in v.line_content.lower() or "password" in v.rule.lower() for v in violations)

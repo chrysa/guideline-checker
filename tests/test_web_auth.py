@@ -1,0 +1,228 @@
+"""Unit tests for the multi-mode authentication module."""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from guideline_checker.web.auth import (
+    AuthMode,
+    _check_api_key,
+    _check_local,
+    _resolve_mode,
+)
+
+# ── _resolve_mode ─────────────────────────────────────────────────────────────
+
+
+def test_resolve_mode_disabled_via_auth_enabled_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUTH_ENABLED", "false")
+    monkeypatch.delenv("AUTH_MODE", raising=False)
+    assert _resolve_mode() == AuthMode.DISABLED
+
+
+def test_resolve_mode_default_is_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.delenv("AUTH_MODE", raising=False)
+    assert _resolve_mode() == AuthMode.API_KEY
+
+
+def test_resolve_mode_explicit_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("AUTH_MODE", "local")
+    assert _resolve_mode() == AuthMode.LOCAL
+
+
+def test_resolve_mode_explicit_ldap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("AUTH_MODE", "ldap")
+    assert _resolve_mode() == AuthMode.LDAP
+
+
+def test_resolve_mode_explicit_oidc(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("AUTH_MODE", "oidc")
+    assert _resolve_mode() == AuthMode.OIDC
+
+
+def test_resolve_mode_invalid_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("AUTH_MODE", "bogus")
+    with pytest.raises(ValueError, match="Unknown AUTH_MODE"):
+        _resolve_mode()
+
+
+# ── _check_api_key ────────────────────────────────────────────────────────────
+
+
+def test_check_api_key_skips_when_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("API_KEY", raising=False)
+    # Should not raise
+    _check_api_key(None)
+    _check_api_key("anything")
+
+
+def test_check_api_key_accepts_correct_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("API_KEY", "secret-key")
+    # Should not raise
+    _check_api_key("secret-key")
+
+
+def test_check_api_key_rejects_wrong_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi import HTTPException
+
+    monkeypatch.setenv("API_KEY", "correct-key")
+    with pytest.raises(HTTPException) as exc_info:
+        _check_api_key("wrong-key")
+    assert exc_info.value.status_code == 403
+
+
+def test_check_api_key_rejects_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi import HTTPException
+
+    monkeypatch.setenv("API_KEY", "correct-key")
+    with pytest.raises(HTTPException) as exc_info:
+        _check_api_key(None)
+    assert exc_info.value.status_code == 403
+
+
+# ── _check_local ──────────────────────────────────────────────────────────────
+
+
+def test_check_local_skips_when_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LOCAL_USERNAME", raising=False)
+    monkeypatch.delenv("LOCAL_PASSWORD", raising=False)
+    _check_local(None)
+
+
+def test_check_local_accepts_correct_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi.security import HTTPBasicCredentials
+
+    monkeypatch.setenv("LOCAL_USERNAME", "admin")
+    monkeypatch.setenv("LOCAL_PASSWORD", "s3cr3t")
+    creds = HTTPBasicCredentials(username="admin", password="s3cr3t")  # noqa: S106
+    _check_local(creds)
+
+
+def test_check_local_rejects_wrong_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi import HTTPException
+    from fastapi.security import HTTPBasicCredentials
+
+    monkeypatch.setenv("LOCAL_USERNAME", "admin")
+    monkeypatch.setenv("LOCAL_PASSWORD", "s3cr3t")
+    creds = HTTPBasicCredentials(username="admin", password="wrong")  # noqa: S106
+    with pytest.raises(HTTPException) as exc_info:
+        _check_local(creds)
+    assert exc_info.value.status_code == 401
+
+
+def test_check_local_rejects_missing_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi import HTTPException
+
+    monkeypatch.setenv("LOCAL_USERNAME", "admin")
+    monkeypatch.setenv("LOCAL_PASSWORD", "s3cr3t")
+    with pytest.raises(HTTPException) as exc_info:
+        _check_local(None)
+    assert exc_info.value.status_code == 401
+
+
+# ── require_auth via TestClient ───────────────────────────────────────────────
+
+
+@pytest.fixture()
+def auth_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """TestClient with auth mocked at web app level."""
+    from unittest.mock import patch
+
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("AUTH_MODE", "api_key")
+    monkeypatch.setenv("API_KEY", "test-key-123")
+
+    from guideline_checker.web.app import _state, app
+
+    _state.results = []
+    _state.constraints = []
+    _state.timestamp = None
+    _state.running = False
+    _state.error = None
+
+    with patch("guideline_checker.web.app._do_scan"), TestClient(app, raise_server_exceptions=True) as c:
+        yield c  # type: ignore[misc]
+
+
+def test_api_results_requires_auth_key(auth_client: TestClient) -> None:
+    """Without API key, /api/results should be forbidden."""
+    response = auth_client.get("/api/results")
+    assert response.status_code == 403
+
+
+def test_api_results_accepts_valid_key(auth_client: TestClient) -> None:
+    """With correct API key, /api/results should return 200."""
+    response = auth_client.get("/api/results", headers={"X-Api-Key": "test-key-123"})
+    assert response.status_code == 200
+
+
+def test_api_scan_requires_auth_key(auth_client: TestClient) -> None:
+    """Without API key, /api/scan should be forbidden."""
+    with patch("guideline_checker.web.app._do_scan"):
+        response = auth_client.post("/api/scan")
+    assert response.status_code == 403
+
+
+def test_api_constraints_requires_auth_key(auth_client: TestClient) -> None:
+    """Without API key, /api/constraints should be forbidden."""
+    response = auth_client.get("/api/constraints")
+    assert response.status_code == 403
+
+
+def test_health_no_auth_required(auth_client: TestClient) -> None:
+    """/health must always be accessible without auth."""
+    response = auth_client.get("/health")
+    assert response.status_code == 200
+
+
+def test_dashboard_no_auth_required(auth_client: TestClient) -> None:
+    """Dashboard HTML must always be accessible without auth."""
+    response = auth_client.get("/")
+    assert response.status_code == 200
+
+
+def test_dashboard_contains_api_key_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dashboard HTML must embed the API key for JS fetch calls."""
+    import guideline_checker.web.app as web_app
+
+    monkeypatch.setattr(web_app, "_API_KEY", "injected-key-xyz")
+
+    from guideline_checker.web.app import _state
+
+    _state.results = []
+    _state.constraints = []
+    _state.timestamp = None
+    _state.running = False
+    _state.error = None
+
+    with patch("guideline_checker.web.app._do_scan"), TestClient(web_app.app) as c:
+        response = c.get("/")
+    assert "injected-key-xyz" in response.text
+
+
+def test_disabled_mode_allows_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With AUTH_ENABLED=false, all API endpoints should be accessible."""
+    monkeypatch.setenv("AUTH_ENABLED", "false")
+    monkeypatch.delenv("API_KEY", raising=False)
+
+    from guideline_checker.web.app import _state, app
+
+    _state.results = []
+    _state.constraints = []
+    _state.timestamp = None
+    _state.running = False
+    _state.error = None
+
+    with patch("guideline_checker.web.app._do_scan"), TestClient(app) as c:
+        response = c.get("/api/results")
+        assert response.status_code == 200
+        response = c.get("/api/constraints")
+        assert response.status_code == 200
