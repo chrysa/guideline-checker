@@ -162,3 +162,9 @@ This project is indexed by GitNexus as **guideline-checker** (286 symbols, 465 r
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+## Skills
+
+Shared skills from `shared-standards/.claude/skills/`:
+
+- `ui-ux/SKILL.md` — UX/UI/ergonomics across ALL surfaces (web, CLI, VS Code, Discord, desktop, game, agent) + WCAG 2.1 AA + dark mode + i18n FR+EN (load when building any human-facing surface)
