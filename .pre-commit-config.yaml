@@ -37,9 +37,8 @@ repos:
   - id: python-print-detection
   - id: python-pprint-detection
   - id: python-unreachable-code
-  - exclude: ^\.github/(workflows|ISSUE_TEMPLATE)/
+  - exclude: ^\.github/(workflows|ISSUE_TEMPLATE)/|^\.github/dependabot\.yml$
     id: yaml-sorter
-    exclude: '^(\.github/workflows/|\.github/|GitVersion\.yml)'
   - id: adr-gate
   - id: no-bare-except
   - id: python-logger-detection
@@ -77,3 +76,24 @@ repos:
     - commit-msg
   repo: https://github.com/compilerla/conventional-pre-commit
   rev: v4.4.0
+- hooks:
+  - entry: make docker-test
+    id: run-tests
+    language: system
+    name: run test suite (with coverage)
+    pass_filenames: false
+    stages:
+    - pre-push
+  - entry: bash -c 'docker run --rm --env SONAR_TOKEN -v "$(pwd):/usr/src"
+      sonarsource/sonar-scanner-cli:11
+      -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=chrysa
+      -Dsonar.projectKey=chrysa_guideline-checker
+      -Dsonar.python.coverage.reportPaths=reports/coverage.xml
+      -Dsonar.python.xunit.reportPath=reports/junit.xml'
+    id: sonar-scanner
+    language: system
+    name: sonar cloud analysis
+    pass_filenames: false
+    stages:
+    - pre-push
+  repo: local

@@ -17,6 +17,7 @@ from guideline_checker.checker import (
     _split_patterns,
     run_checks,
 )
+from guideline_checker.loader import InstructionFile
 
 
 @pytest.fixture()
@@ -537,10 +538,8 @@ class TestSplitPatterns:
 class TestNarrowApplyTo:
     """Unit tests for _narrow_apply_to."""
 
-    def _make_instruction(self, name: str, apply_to: str = "**/*") -> object:
+    def _make_instruction(self, name: str, apply_to: str = "**/*") -> InstructionFile:
         from pathlib import Path
-
-        from guideline_checker.loader import InstructionFile
 
         return InstructionFile(
             path=Path(f".github/instructions/{name}.md"),
@@ -553,25 +552,25 @@ class TestNarrowApplyTo:
     def test_explicit_apply_to_not_narrowed(self) -> None:
         """Instructions with an explicit apply_to are not modified."""
         instr = self._make_instruction("anything", apply_to="**/*.ts")
-        result = _narrow_apply_to(instr)  # type: ignore[arg-type]
+        result = _narrow_apply_to(instr)
         assert result.apply_to == "**/*.ts"
 
     def test_test_keyword_narrows_to_test_pattern(self) -> None:
         """Instructions with 'test' in filename are narrowed to test file patterns."""
         instr = self._make_instruction("test_performance")
-        result = _narrow_apply_to(instr)  # type: ignore[arg-type]
+        result = _narrow_apply_to(instr)
         assert "tests" in result.apply_to
 
     def test_makefile_keyword_narrows(self) -> None:
         """Instructions with 'makefile' in filename are narrowed to Makefile patterns."""
         instr = self._make_instruction("makefiles_guidelines")
-        result = _narrow_apply_to(instr)  # type: ignore[arg-type]
+        result = _narrow_apply_to(instr)
         assert "Makefile" in result.apply_to
 
     def test_no_keyword_unchanged(self) -> None:
         """Instructions without a recognised keyword keep **/* apply_to."""
         instr = self._make_instruction("generic_guidelines")
-        result = _narrow_apply_to(instr)  # type: ignore[arg-type]
+        result = _narrow_apply_to(instr)
         assert result.apply_to == "**/*"
 
 
