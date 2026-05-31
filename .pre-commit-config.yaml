@@ -37,7 +37,7 @@ repos:
   - id: python-print-detection
   - id: python-pprint-detection
   - id: python-unreachable-code
-  - exclude: ^\.github/(workflows|ISSUE_TEMPLATE)/
+  - exclude: ^\.github/(workflows|ISSUE_TEMPLATE)/|^\.github/dependabot\.yml$
     id: yaml-sorter
   - id: adr-gate
   - id: no-bare-except
