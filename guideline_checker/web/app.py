@@ -21,9 +21,12 @@ from guideline_checker.web.auth import require_auth
 # ── Configuration ──────────────────────────────────────────────────────────────
 
 _SCAN_ROOT: Path = Path(os.environ.get("SCAN_ROOT", "."))
-# API key is read here only for templating into the dashboard HTML.
-# Authentication logic is fully handled by guideline_checker.web.auth.
-_API_KEY: str = os.environ.get("API_KEY", "")
+# NOTE: the server-side API key is deliberately NOT read here. The dashboard
+# HTML is served on the public ``/`` route, so embedding the key would leak it
+# to every anonymous visitor and defeat ``api_key`` authentication entirely.
+# Instead the browser asks the user for the key at runtime (see the dashboard
+# JS), keeps it in sessionStorage, and sends it via the ``X-Api-Key`` header.
+# Authentication logic itself lives in guideline_checker.web.auth.
 
 
 # ── State ──────────────────────────────────────────────────────────────────────
@@ -153,12 +156,21 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
         <h1 class="text-xl font-bold tracking-tight">&#x1F50D; Guideline Checker</h1>
         <p id="scan-time" class="text-gray-400 text-xs mt-0.5">&mdash;</p>
       </div>
-      <button id="scan-btn"
-        class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2
-               rounded text-sm font-medium transition-colors flex items-center gap-2"
-        onclick="triggerScan()">
-        Run Scan
-      </button>
+      <div class="flex items-center gap-2">
+        <button id="key-btn"
+          class="bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-2
+                 rounded text-sm font-medium transition-colors flex items-center gap-2"
+          title="Set the API key used to call the protected endpoints"
+          onclick="setApiKey()">
+          &#x1F511; API key
+        </button>
+        <button id="scan-btn"
+          class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2
+                 rounded text-sm font-medium transition-colors flex items-center gap-2"
+          onclick="triggerScan()">
+          Run Scan
+        </button>
+      </div>
     </div>
   </header>
 
@@ -257,8 +269,36 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
   </main>
 
   <script>
-    var _apiKey     = '__API_KEY__';
-    var _apiHeaders = _apiKey ? {'X-Api-Key': _apiKey} : {};
+    /* The API key is supplied by the user at runtime and kept only in this
+       browser's sessionStorage — it is never embedded in the served HTML. */
+    var _apiKey = '';
+    try { _apiKey = sessionStorage.getItem('gc_api_key') || ''; } catch (_) {}
+
+    function apiHeaders() {
+      return _apiKey ? {'X-Api-Key': _apiKey} : {};
+    }
+
+    function setApiKey() {
+      var k = window.prompt('Enter API key (leave blank if auth is disabled):', _apiKey || '');
+      if (k === null) return false;            // user cancelled
+      _apiKey = k.trim();
+      try { sessionStorage.setItem('gc_api_key', _apiKey); } catch (_) {}
+      return true;
+    }
+
+    /* Fetch wrapper: injects the API key header and, on 401/403, prompts the
+       user for a key once and retries the request. */
+    async function apiFetch(url, opts) {
+      opts = opts || {};
+      opts.headers = Object.assign({}, opts.headers || {}, apiHeaders());
+      var resp = await fetch(url, opts);
+      if ((resp.status === 401 || resp.status === 403) && setApiKey()) {
+        opts.headers = Object.assign({}, opts.headers || {}, apiHeaders());
+        resp = await fetch(url, opts);
+      }
+      return resp;
+    }
+
     var _filter = 'all';
     var _data   = null;
     var _cdata  = null;
@@ -455,7 +495,7 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
 
     async function loadConstraints() {
       try {
-        var r = await fetch('/api/constraints', {headers: _apiHeaders});
+        var r = await apiFetch('/api/constraints');
         _cdata = await r.json();
         var total = _cdata.total_rules || 0;
         document.getElementById('badge-constraints').textContent = total;
@@ -468,7 +508,7 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
 
     async function load() {
       try {
-        var r = await fetch('/api/results', {headers: _apiHeaders});
+        var r = await apiFetch('/api/results');
         render(await r.json());
         await loadConstraints();
       } catch(_) {}
@@ -476,13 +516,13 @@ _DASHBOARD_HTML: str = """<!DOCTYPE html>
 
     async function triggerScan() {
       document.getElementById('scan-btn').disabled = true;
-      await fetch('/api/scan', { method: 'POST', headers: _apiHeaders });
+      await apiFetch('/api/scan', { method: 'POST' });
       poll();
     }
 
     function poll() {
       setTimeout(async function() {
-        var r    = await fetch('/api/results', {headers: _apiHeaders});
+        var r    = await apiFetch('/api/results');
         var data = await r.json();
         render(data);
         if (data.running) poll();
@@ -508,8 +548,13 @@ def health() -> dict[str, str]:
 
 @app.get("/", response_class=HTMLResponse, response_model=None)
 def dashboard() -> str:
-    """Serve the interactive dashboard."""
-    return _DASHBOARD_HTML.replace("__API_KEY__", _API_KEY)
+    """Serve the interactive dashboard.
+
+    The HTML is fully static and contains no secret: when ``api_key`` auth is
+    active the browser prompts the user for the key and stores it client-side,
+    so the server never leaks it to anonymous visitors of this public route.
+    """
+    return _DASHBOARD_HTML
 
 
 @app.post("/api/scan", response_model=dict[str, str], dependencies=[Depends(require_auth)])
