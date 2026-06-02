@@ -189,23 +189,33 @@ def test_dashboard_no_auth_required(auth_client: TestClient) -> None:
     assert response.status_code == 200
 
 
-def test_dashboard_contains_api_key_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Dashboard HTML must embed the API key for JS fetch calls."""
+def test_dashboard_never_embeds_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: the dashboard must NEVER embed the server-side API key.
+
+    The dashboard is served on the public ``/`` route, so leaking the key into
+    the HTML would hand it to every anonymous visitor and defeat ``api_key``
+    authentication. The browser must instead obtain the key at runtime.
+    """
     import guideline_checker.web.app as web_app
 
-    monkeypatch.setattr(web_app, "_API_KEY", "injected-key-xyz")
+    secret = "super-secret-should-not-leak"  # noqa: S105
+    monkeypatch.setenv("API_KEY", secret)
 
-    from guideline_checker.web.app import _state
-
-    _state.results = []
-    _state.constraints = []
-    _state.timestamp = None
-    _state.running = False
-    _state.error = None
+    web_app._state.results = []
+    web_app._state.constraints = []
+    web_app._state.timestamp = None
+    web_app._state.running = False
+    web_app._state.error = None
 
     with patch("guideline_checker.web.app._do_scan"), TestClient(web_app.app) as c:
         response = c.get("/")
-    assert "injected-key-xyz" in response.text
+
+    assert response.status_code == 200
+    assert secret not in response.text
+    assert "__API_KEY__" not in response.text
+    # The client must still know how to authenticate itself.
+    assert "X-Api-Key" in response.text
+    assert "sessionStorage" in response.text
 
 
 def test_disabled_mode_allows_all(monkeypatch: pytest.MonkeyPatch) -> None:
