@@ -5,9 +5,13 @@
   "hooks": {
     "PreCompact": [
       {
-        "type": "command",
-        "command": "~/.claude/hooks/pre-compact.sh",
-        "timeout": 5000
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/pre-compact.sh",
+            "timeout": 5000
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -56,9 +60,13 @@
     ],
     "Notification": [
       {
-        "type": "command",
-        "command": "notify-send 'Claude Code' 'En attente de ton input' 2>/dev/null || true",
-        "timeout": 3000
+        "hooks": [
+          {
+            "type": "command",
+            "command": "notify-send 'Claude Code' 'En attente de ton input' 2>/dev/null || true",
+            "timeout": 3000
+          }
+        ]
       }
     ]
   }
