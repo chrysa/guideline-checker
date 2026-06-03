@@ -158,3 +158,5 @@ mypy guideline_checker
 ## License
 
 MIT -- see [LICENSE](LICENSE).
+
+<!-- ci verify -->
