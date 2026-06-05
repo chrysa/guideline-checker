@@ -48,7 +48,7 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 15
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6.0.2
             - uses: chrysa/github-actions/python-setup@v1.0.12
               with:
                   python-version: ${{ needs.config.outputs.latest-python }}
@@ -66,7 +66,7 @@ jobs:
             matrix:
                 python-version: ${{ fromJson(needs.config.outputs.python-versions) }}
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6.0.2
 
             - name: Setup environment
               uses: chrysa/github-actions/tool-setup@v1.0.12
@@ -93,7 +93,7 @@ jobs:
             matrix:
                 python-version: ${{ fromJson(needs.config.outputs.python-versions) }}
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6.0.2
 
             - name: Setup environment
               uses: chrysa/github-actions/tool-setup@v1.0.12
@@ -119,7 +119,7 @@ jobs:
             matrix:
                 python-version: ${{ fromJson(needs.config.outputs.python-versions) }}
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6.0.2
 
             - name: Setup environment
               uses: chrysa/github-actions/tool-setup@v1.0.12
@@ -142,7 +142,7 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 15
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6.0.2
               with:
                   fetch-depth: 0
 
@@ -166,7 +166,7 @@ jobs:
             contents: read
             security-events: write
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6.0.2
 
             - name: Run guideline-checker
               uses: ./
@@ -186,7 +186,7 @@ jobs:
         permissions:
             contents: write
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6.0.2
               with:
                   fetch-depth: 0
 
