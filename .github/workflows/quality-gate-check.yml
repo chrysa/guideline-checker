@@ -8,6 +8,15 @@ on:
     push:
         branches: [main, master]
 
+# The reusable quality-gate-check workflow requests checks:write and
+# statuses:write. The repo default GITHUB_TOKEN is read-only, so the caller
+# must grant these scopes explicitly, otherwise the called workflow cannot
+# start (startup_failure).
+permissions:
+    checks: write
+    contents: read
+    statuses: write
+
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/quality-gate-check.yml@main
