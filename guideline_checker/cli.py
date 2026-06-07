@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -167,9 +168,12 @@ def _get_diff_files(root: Path) -> list[Path] | None:
 
     Returns None if git is unavailable or the directory is not a git repo.
     """
+    git_path = shutil.which("git")
+    if git_path is None:
+        return None
     try:
         result = subprocess.run(
-            ["git", "diff", "--name-only", "HEAD"],
+            [git_path, "diff", "--name-only", "HEAD"],
             capture_output=True,
             text=True,
             cwd=root,
@@ -178,7 +182,7 @@ def _get_diff_files(root: Path) -> list[Path] | None:
         if result.returncode != 0:
             # Fallback: list staged files only (new repo with no HEAD)
             result = subprocess.run(
-                ["git", "diff", "--name-only", "--cached"],
+                [git_path, "diff", "--name-only", "--cached"],
                 capture_output=True,
                 text=True,
                 cwd=root,
