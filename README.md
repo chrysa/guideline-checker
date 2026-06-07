@@ -20,6 +20,7 @@ A CLI tool that reads GitHub Copilot instruction files (`.instructions.md`) from
 - **JSON report**: machine-readable output for CI pipelines
 - **Markdown report**: human-readable summary for PR comments
 - **SARIF report**: upload to GitHub Code Scanning
+- **Web dashboard**: live FastAPI dashboard (`web` command) with pluggable auth (api_key / local / ldap / oidc)
 - **CI-friendly**: exits with code 1 if violations are found (configurable threshold)
 - **Pre-commit hook**: runs as a pre-commit hook on the entire project
 
@@ -94,6 +95,31 @@ guideline-checker check --fail-on error
     guideline-checker check --output guideline-report.html
 ```
 
+### Web dashboard
+
+Launch a live FastAPI dashboard that scans a directory and serves an interactive
+compliance report. Requires the `web` extra:
+
+```bash
+pip install 'guideline-checker[web]'
+
+# Serve the dashboard for the current directory on http://127.0.0.1:8080
+guideline-checker web
+
+# Custom scan root, host and port
+guideline-checker web --root /path/to/project --host 0.0.0.0 --port 8000
+
+# Auto-reload on code changes (development only)
+guideline-checker web --reload
+```
+
+The dashboard binds to loopback (`127.0.0.1`) by default. Authentication is configured
+via environment variables — `AUTH_MODE` (`disabled` / `api_key` / `local` / `ldap` / `oidc`)
+and the matching settings in [`.env.example`](.env.example). When you bind a non-loopback
+host with auth left open, the command prints a warning.
+
+A containerised alternative is available via `make web-up` (Docker Compose, port 8080).
+
 ---
 
 ## Report Format
@@ -117,11 +143,16 @@ guideline_checker/
     checker.py              # match files against rules by applyTo pattern
     init_cmd.py             # init subcommand — scaffold default instruction files
     hook.py                 # pre-commit hook entry point
+    linters.py              # external linter integration (ruff / mypy / eslint / biome)
     reporters/
         html.py             # HTML report generator
         json_reporter.py    # JSON report generator (CI artifact)
         markdown.py         # Markdown summary generator
         sarif.py            # SARIF report generator (GitHub Code Scanning)
+        synthesis_html.py   # multi-repo synthesis report generator
+    web/
+        app.py              # FastAPI dashboard (web subcommand / Docker)
+        auth.py             # pluggable auth (api_key / local / ldap / oidc)
 tests/
     test_checker.py         # checker engine tests
     test_cli.py             # CLI entry point tests

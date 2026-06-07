@@ -91,6 +91,9 @@ docker-lint: ## Run lint + type-check inside Docker container
 docker-clean: ## Remove Docker images and containers for this project
 	docker compose down --rmi local --volumes --remove-orphans
 
+web-local: ## Run the web dashboard natively (no Docker, port 8080)
+	$(PYTHON) -m guideline_checker.cli web
+
 web-up: ## Start the web dashboard (containerised, port 8080)
 	docker compose up -d web
 
