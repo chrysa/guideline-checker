@@ -8,13 +8,59 @@ Machine-readable output lines:
 - OVERALL_RESULT|FAIL
 """
 
+from __future__ import annotations
+
 import json
 import re
+import shlex
+import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+
+@dataclass(frozen=True)
+class CommandSpec:
+    """An ordered fallback chain of argv vectors, run without a shell.
+
+    Each alternative is executed in order until one exits 0. This replaces the
+    previous ``shell=True`` single-string form: shell operators such as ``||``
+    are no longer interpreted by a shell — fallbacks are expressed as multiple
+    argv vectors instead. ``swallow_exit`` mirrors a trailing ``|| true``: the
+    gate is then driven by its parsed metric rather than the tool's exit code.
+    """
+
+    alternatives: tuple[tuple[str, ...], ...]
+    swallow_exit: bool = False
+
+    @classmethod
+    def parse(cls, raw: object) -> CommandSpec:
+        """Build a spec from a config override.
+
+        Accepted forms:
+        - ``"make lint"`` → one argv vector (split with shlex, never a shell).
+        - ``["make", "lint"]`` → one argv vector.
+        - ``[["pip-audit"], ["npm", "audit"]]`` → an ordered fallback chain.
+        """
+        if isinstance(raw, str):
+            return cls((tuple(shlex.split(raw)),))
+        if isinstance(raw, list):
+            if raw and all(isinstance(item, str) for item in raw):
+                return cls((tuple(raw),))
+            chain: list[tuple[str, ...]] = []
+            for alt in raw:
+                if not isinstance(alt, (list, tuple)):
+                    raise ValueError(f"Unsupported command specification: {raw!r}")
+                chain.append(tuple(str(part) for part in alt))
+            return cls(tuple(chain))
+        raise ValueError(f"Unsupported command specification: {raw!r}")
+
+    def display(self) -> str:
+        rendered = " || ".join(shlex.join(alt) for alt in self.alternatives)
+        return f"{rendered} || true" if self.swallow_exit else rendered
 
 
 class QualityGate:
@@ -34,36 +80,61 @@ class QualityGate:
         with open(self.config_path, encoding="utf-8") as handle:
             self.config = json.load(handle)
 
-        self.gates = [
-            ("Tests", "tests", "passed_tests", "≥", "make test"),
-            ("Coverage", "coverage", "coverage_percentage", "≥", "make test-coverage"),
-            ("Lint", "lint", "warning_count", "=", "make lint"),
-            ("Types", "types", "error_count", "≤", "make type-check"),
-            ("Build", "build", "build_status", "=", "make build"),
-            ("Secrets", "security_secrets", "secret_count", "=", "detect-secrets scan --all-files 2>&1 || true"),
+        self.gates: list[tuple[str, str, str, str, CommandSpec]] = [
+            ("Tests", "tests", "passed_tests", "≥", CommandSpec((("make", "test"),))),
+            ("Coverage", "coverage", "coverage_percentage", "≥", CommandSpec((("make", "test-coverage"),))),
+            ("Lint", "lint", "warning_count", "=", CommandSpec((("make", "lint"),))),
+            ("Types", "types", "error_count", "≤", CommandSpec((("make", "type-check"),))),
+            ("Build", "build", "build_status", "=", CommandSpec((("make", "build"),))),
+            (
+                "Secrets",
+                "security_secrets",
+                "secret_count",
+                "=",
+                CommandSpec((("detect-secrets", "scan", "--all-files"),), swallow_exit=True),
+            ),
             (
                 "VulnDeps",
                 "security_vulns",
                 "vuln_count",
                 "≤",
-                "pip-audit 2>&1 || npm audit --audit-level=high 2>&1 || true",
+                CommandSpec(
+                    (("pip-audit",), ("npm", "audit", "--audit-level=high")),
+                    swallow_exit=True,
+                ),
             ),
         ]
 
-    def _run(self, cmd: str) -> tuple[int, str]:
-        try:
-            result = subprocess.run(  # noqa: S602
-                cmd,
-                shell=True,  # Commands may include shell operators (||, &&)
-                capture_output=True,
-                text=True,
-                timeout=600,
-            )
-            return result.returncode, (result.stdout or "") + (result.stderr or "")
-        except subprocess.TimeoutExpired:
-            return 124, "Command timed out after 600 seconds"
-        except Exception as exc:
-            return 127, f"Execution error: {exc}"
+    def _run(self, spec: CommandSpec) -> tuple[int, str]:
+        combined = ""
+        returncode = 0
+        for argv in spec.alternatives:
+            if not argv:
+                continue
+            executable = shutil.which(argv[0])
+            if executable is None:
+                combined += f"Command not found: {argv[0]}\n"
+                returncode = 127
+                continue
+            try:
+                result = subprocess.run(
+                    [executable, *argv[1:]],
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return 124, combined + "Command timed out after 600 seconds"
+            except OSError as exc:
+                return 127, combined + f"Execution error: {exc}"
+            combined += (result.stdout or "") + (result.stderr or "")
+            returncode = result.returncode
+            if returncode == 0:
+                break
+        if spec.swallow_exit:
+            return 0, combined
+        return returncode, combined
 
     def _parse_passed_tests(self, output: str) -> int:
         patterns = [
@@ -150,14 +221,15 @@ class QualityGate:
             return current <= target
         return False
 
-    def _run_gate(self, gate_name: str, key: str, metric_name: str, default_cmd: str) -> dict[str, Any]:
-        cmd = self.config.get("commands", {}).get(key, default_cmd)
-        print(f"RUN_GATE|{gate_name}|{cmd}")
-        exit_code, output = self._run(cmd)
+    def _run_gate(self, gate_name: str, key: str, metric_name: str, default_spec: CommandSpec) -> dict[str, Any]:
+        raw = self.config.get("commands", {}).get(key)
+        spec = CommandSpec.parse(raw) if raw is not None else default_spec
+        print(f"RUN_GATE|{gate_name}|{spec.display()}")
+        exit_code, output = self._run(spec)
         metric = self._parse_metric(gate_name, exit_code, output)
         return {
             "gate": gate_name,
-            "command": cmd,
+            "command": spec.display(),
             "exit_code": exit_code,
             "metric_name": metric_name,
             "metric": metric,
