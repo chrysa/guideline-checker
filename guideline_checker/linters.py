@@ -43,7 +43,8 @@ class LinterResult:
 
 def _run_ruff(root: Path) -> LinterResult:
     """Run ``ruff check`` on *root* and return a :class:`LinterResult`."""
-    if not shutil.which("ruff"):
+    ruff_path = shutil.which("ruff")
+    if ruff_path is None:
         return LinterResult(linter="ruff", available=False, error="ruff not found in PATH")
 
     # Check if there are Python files
@@ -54,7 +55,7 @@ def _run_ruff(root: Path) -> LinterResult:
     try:
         result = subprocess.run(
             [
-                "ruff",
+                ruff_path,
                 "check",
                 "--output-format",
                 "json",
@@ -106,7 +107,8 @@ def _run_ruff(root: Path) -> LinterResult:
 
 def _run_mypy(root: Path) -> LinterResult:
     """Run ``mypy`` on *root* (Python files) and return a :class:`LinterResult`."""
-    if not shutil.which("mypy"):
+    mypy_path = shutil.which("mypy")
+    if mypy_path is None:
         return LinterResult(linter="mypy", available=False, error="mypy not found in PATH")
 
     has_python = any(root.rglob("*.py"))
@@ -116,7 +118,7 @@ def _run_mypy(root: Path) -> LinterResult:
     try:
         result = subprocess.run(
             [
-                "mypy",
+                mypy_path,
                 "--output=json",
                 "--ignore-missing-imports",
                 "--no-error-summary",
@@ -170,14 +172,15 @@ def _run_eslint(root: Path) -> LinterResult:
     if shutil.which("biome"):
         return _run_biome(root)
 
-    if not shutil.which("eslint"):
+    eslint_path = shutil.which("eslint")
+    if eslint_path is None:
         # Try local node_modules/.bin/eslint
         local_eslint = root / "node_modules" / ".bin" / "eslint"
         if not local_eslint.is_file():
             return LinterResult(linter="eslint", available=False, error="eslint not found")
         eslint_cmd = str(local_eslint)
     else:
-        eslint_cmd = "eslint"
+        eslint_cmd = eslint_path
 
     try:
         result = subprocess.run(
@@ -230,9 +233,12 @@ def _run_eslint(root: Path) -> LinterResult:
 
 def _run_biome(root: Path) -> LinterResult:
     """Run ``biome check`` on *root* and return a :class:`LinterResult`."""
+    biome_path = shutil.which("biome")
+    if biome_path is None:
+        return LinterResult(linter="eslint", available=False, error="biome not found in PATH")
     try:
         result = subprocess.run(
-            ["biome", "check", "--reporter=json", str(root)],
+            [biome_path, "check", "--reporter=json", str(root)],
             capture_output=True,
             text=True,
             timeout=60,

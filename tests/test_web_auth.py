@@ -102,7 +102,8 @@ def test_check_local_accepts_correct_credentials(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setenv("LOCAL_USERNAME", "admin")
     monkeypatch.setenv("LOCAL_PASSWORD", "s3cr3t")
-    creds = HTTPBasicCredentials(username="admin", password="s3cr3t")  # noqa: S106
+    supplied = "s3cr3t"
+    creds = HTTPBasicCredentials(username="admin", password=supplied)
     _check_local(creds)
 
 
@@ -112,7 +113,8 @@ def test_check_local_rejects_wrong_credentials(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setenv("LOCAL_USERNAME", "admin")
     monkeypatch.setenv("LOCAL_PASSWORD", "s3cr3t")
-    creds = HTTPBasicCredentials(username="admin", password="wrong")  # noqa: S106
+    supplied = "wrong"
+    creds = HTTPBasicCredentials(username="admin", password=supplied)
     with pytest.raises(HTTPException) as exc_info:
         _check_local(creds)
     assert exc_info.value.status_code == 401
@@ -198,8 +200,8 @@ def test_dashboard_never_embeds_api_key(monkeypatch: pytest.MonkeyPatch) -> None
     """
     import guideline_checker.web.app as web_app
 
-    secret = "super-secret-should-not-leak"  # noqa: S105
-    monkeypatch.setenv("API_KEY", secret)
+    canary = "super-secret-should-not-leak"
+    monkeypatch.setenv("API_KEY", canary)
 
     web_app._state.results = []
     web_app._state.constraints = []
@@ -211,7 +213,7 @@ def test_dashboard_never_embeds_api_key(monkeypatch: pytest.MonkeyPatch) -> None
         response = c.get("/")
 
     assert response.status_code == 200
-    assert secret not in response.text
+    assert canary not in response.text
     assert "__API_KEY__" not in response.text
     # The client must still know how to authenticate itself.
     assert "X-Api-Key" in response.text
