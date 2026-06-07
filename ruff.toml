@@ -16,9 +16,14 @@ select = [
     "PERF", # performance
 ]
 ignore = [
-    "S101",    # use of assert (for tests)
-    "S603",    # subprocess without shell=True
-    "S607",    # partial executable path
+    "S101",    # use of assert (sanctioned by chrysa standard)
+    # S603 is a non-actionable advisory: it fires on *every* subprocess.run /
+    # Popen call regardless of how the arguments are built, and ruff/bandit
+    # offer no code-level way to clear it. The real injection surface is
+    # eliminated in code instead — no shell=True (S602) and every executable is
+    # resolved to an absolute path via shutil.which (S607). All argv vectors are
+    # static or come from trusted local config, never from untrusted input.
+    "S603",    # subprocess call — advisory only; risk handled via shell=False + shutil.which
 ]
 
 [lint.per-file-ignores]
