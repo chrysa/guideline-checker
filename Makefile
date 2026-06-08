@@ -1,4 +1,5 @@
 #!make
+# makefile-tier: python-app
 ifneq (,)
 	$(error This Makefile requires GNU Make)
 endif
@@ -120,10 +121,12 @@ quality-gate-verify: ## Verify no regression since baseline
 
 # ─── Compat aliases ───────────────────────────────────────────────────────────
 
-type-check: typecheck ## Legacy alias
 
 dev: ## Start development environment (install in editable mode)
 	pip install -e .[dev]
 
 build: ## Build package (alias → docker-build)
 	$(MAKE) docker-build
+
+# ─── CI gate ─────────────────────────────────────
+ci: lint typecheck test ## Run the full local gate (lint + typecheck + test)
