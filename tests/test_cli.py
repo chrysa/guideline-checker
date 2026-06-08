@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+import os
 from pathlib import Path
 
 import pytest
@@ -138,3 +140,80 @@ def test_main_check_fail_on_warning_with_warning_only(tmp_path: Path) -> None:
     root = _make_project(tmp_path, violation=True)  # print() → severity warning
     code = main(["check", "--root", str(root), "--fail-on", "warning"])
     assert code == 1
+
+
+# ─── web subcommand ────────────────────────────────────────────────────────────
+
+
+def test_build_parser_has_web_subcommand() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["web"])
+    assert args.command == "web"
+    assert args.root == Path(".")
+    assert args.host == "127.0.0.1"
+    assert args.port == 8080
+    assert args.reload is False
+
+
+def test_main_web_launches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCAN_ROOT", "placeholder")  # register for teardown restoration
+    captured: dict[str, object] = {}
+
+    def fake_run(app: object, **kwargs: object) -> None:
+        captured["app"] = app
+        captured.update(kwargs)
+
+    monkeypatch.setattr("uvicorn.run", fake_run)
+
+    code = main(["web", "--root", str(tmp_path), "--port", "9999"])
+
+    assert code == 0
+    assert os.environ["SCAN_ROOT"] == str(tmp_path.resolve())
+    assert captured["host"] == "127.0.0.1"
+    assert captured["port"] == 9999
+
+
+def test_main_web_reload_uses_import_string(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCAN_ROOT", "placeholder")
+    captured: dict[str, object] = {}
+
+    def fake_run(app: object, **kwargs: object) -> None:
+        captured["app"] = app
+        captured.update(kwargs)
+
+    monkeypatch.setattr("uvicorn.run", fake_run)
+
+    code = main(["web", "--root", str(tmp_path), "--reload"])
+
+    assert code == 0
+    assert captured["app"] == "guideline_checker.web.app:app"
+    assert captured["reload"] is True
+
+
+def test_main_web_missing_uvicorn(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    real_import = importlib.import_module
+
+    def raiser(name: str, *a: object, **k: object) -> object:
+        if name == "uvicorn":
+            raise ImportError("no uvicorn")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(importlib, "import_module", raiser)
+
+    code = main(["web"])
+
+    assert code == 1
+    assert "guideline-checker[web]" in capsys.readouterr().err
+
+
+def test_main_web_warns_on_open_public_bind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("SCAN_ROOT", "placeholder")
+    monkeypatch.setenv("AUTH_MODE", "disabled")
+    monkeypatch.setattr("uvicorn.run", lambda *a, **k: None)
+
+    code = main(["web", "--root", str(tmp_path), "--host", "0.0.0.0"])
+
+    assert code == 0
+    assert "WARNING" in capsys.readouterr().err
