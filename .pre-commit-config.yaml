@@ -35,6 +35,7 @@ repos:
   repo: https://github.com/pre-commit/mirrors-mypy
   rev: v2.0.0
 - hooks:
+  - id: makefile-check
   - id: python-print-detection
   - id: python-pprint-detection
   - id: python-unreachable-code
@@ -62,7 +63,7 @@ repos:
   - id: fastapi-missing-links
     exclude: ^tests/
   repo: https://github.com/chrysa/pre-commit-tools
-  rev: v0.1.1-92
+  rev: v0.1.1-94
 - hooks:
   - id: gitleaks
   repo: https://github.com/gitleaks/gitleaks
