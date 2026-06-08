@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -28,6 +29,16 @@ def _make_project(tmp_path: Path) -> tuple[Path, Path]:
 
 
 class TestGetDiffFiles:
+    @pytest.fixture(autouse=True)
+    def _git_on_path(self) -> Iterator[None]:
+        """Pretend git is installed so tests do not depend on the host/container PATH.
+
+        ``_get_diff_files`` guards on ``shutil.which("git")`` (subprocess hardening);
+        without this the guard short-circuits to None in git-less images.
+        """
+        with patch("shutil.which", return_value="/usr/bin/git"):
+            yield
+
     def test_returns_paths_from_git_output(self, tmp_path: Path) -> None:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="src/app.py\nsrc/util.py\n")
