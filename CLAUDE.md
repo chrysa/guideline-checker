@@ -32,6 +32,16 @@ guideline-checker check --root . --fail-on error
 guideline-checker check --root . --json report.json --output report.html
 ```
 
+### Web dashboard
+
+```bash
+pip install 'guideline-checker[web]'
+guideline-checker web --root . --port 8080   # serve dashboard at http://127.0.0.1:8080
+```
+
+Auth is env-driven (`AUTH_MODE`, `API_KEY`, … — see `.env.example`). `make web-up` runs the
+containerised equivalent.
+
 ### Integration with chrysa/pre-commit-tools
 
 For projects using `chrysa/pre-commit-tools`, add both repos to `.pre-commit-config.yaml`:
@@ -55,12 +65,16 @@ For projects using `chrysa/pre-commit-tools`, add both repos to `.pre-commit-con
 guideline_checker/
   __init__.py           # Package version
   checker.py            # Core check engine — runs rules against source files
-  cli.py                # CLI entry point (argparse) — check subcommand
+  cli.py                # CLI entry point (argparse) — init/check/synthesize/web subcommands
   hook.py               # Pre-commit hook entry point (delegates to cli.main)
   loader.py             # Instruction file loader and parser
+  linters.py            # External linter integration (ruff / mypy / eslint / biome)
   reporters/
     html.py             # HTML report generator (string templates)
     json_reporter.py    # JSON report output
+  web/
+    app.py              # FastAPI dashboard (web subcommand / Docker)
+    auth.py             # Pluggable auth (api_key / local / ldap / oidc)
 .pre-commit-hooks.yaml  # Hook definition for pre-commit framework
 tests/
   test_checker.py       # Core engine tests
