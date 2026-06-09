@@ -452,6 +452,7 @@ def _build_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
     checks.extend(_python_strict_checks(rule_lower))
     checks.extend(_security_checks(rule_lower))
     checks.extend(_docker_checks(rule_lower))
+    checks.extend(_django_checks(rule_lower))
     return tuple(checks)
 
 
@@ -711,6 +712,36 @@ def _security_checks(rule_lower: str) -> list[PatternCheck]:
     if "no pickle" in rule_lower:
         checks.append(PatternCheck("import pickle", "error"))
         checks.append(PatternCheck("pickle.load", "error"))
+    return checks
+
+
+def _django_checks(rule_lower: str) -> list[PatternCheck]:
+    """Django / DRF anti-pattern checks (settings hardening + ORM safety).
+
+    The markdown rule loader strips underscores from rule text (``ALLOWED_HOSTS``
+    becomes ``allowedhosts``), so trigger phrases are matched against an
+    underscore-stripped copy. The emitted patterns keep underscores because they
+    are matched against source lines, which retain them.
+    """
+    checks: list[PatternCheck] = []
+    compact = rule_lower.replace("_", "")
+    if "no debug = true" in compact or "debug must be false" in compact:
+        checks.append(PatternCheck("debug = true", "error"))
+        checks.append(PatternCheck("debug=true", "error"))
+    if "no wildcard allowedhosts" in compact or "allowedhosts wildcard" in compact:
+        checks.append(PatternCheck('allowed_hosts = ["*"', "error"))
+        checks.append(PatternCheck("allowed_hosts = ['*'", "error"))
+        checks.append(PatternCheck('allowed_hosts=["*"', "error"))
+        checks.append(PatternCheck("allowed_hosts=['*'", "error"))
+    if "no corsallowall" in compact or "corsallowallorigins" in compact:
+        checks.append(PatternCheck("cors_allow_all_origins = true", "error"))
+        checks.append(PatternCheck("cors_allow_all_origins=true", "error"))
+    if "no raw sql" in compact or "no .raw(" in compact or "no queryset.raw" in compact:
+        checks.append(PatternCheck(".raw(", "warning"))
+        checks.append(PatternCheck(".extra(", "warning"))
+    if "no hardcoded secretkey" in compact or "secretkey from env" in compact:
+        checks.append(PatternCheck('secret_key = "', "error"))
+        checks.append(PatternCheck("secret_key = '", "error"))
     return checks
 
 
