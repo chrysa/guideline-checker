@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -191,6 +192,72 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable auto-reload on code changes (development only).",
     )
 
+    # ── central subcommand ───────────────────────────────────────────────────
+    central_cmd = sub.add_parser(
+        "central",
+        help="Launch the central aggregation server (requires the 'web' extra).",
+    )
+    central_cmd.add_argument(
+        "--store",
+        type=Path,
+        default=Path("./central-store"),
+        help="Directory backing the report store (default: ./central-store).",
+    )
+    central_cmd.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Interface to bind (default: 127.0.0.1, loopback only).",
+    )
+    central_cmd.add_argument(
+        "--port",
+        type=int,
+        default=8090,
+        help="Port to listen on (default: 8090).",
+    )
+    central_cmd.add_argument(
+        "--reload",
+        action="store_true",
+        default=False,
+        help="Enable auto-reload on code changes (development only).",
+    )
+
+    # ── push subcommand ──────────────────────────────────────────────────────
+    push_cmd = sub.add_parser(
+        "push",
+        help="Push a JSON compliance report to a central server.",
+    )
+    push_cmd.add_argument(
+        "--server",
+        required=True,
+        help="Base URL of the central server, e.g. https://guidelines.example.com",
+    )
+    push_cmd.add_argument(
+        "--report",
+        type=Path,
+        default=Path("guideline-report.json"),
+        help="Path to the JSON report produced by 'check --json' (default: guideline-report.json).",
+    )
+    push_cmd.add_argument(
+        "--repo",
+        default=None,
+        help="Repo identifier ([A-Za-z0-9._-]). Defaults to the git remote / directory name.",
+    )
+    push_cmd.add_argument(
+        "--commit",
+        default=None,
+        help="Commit SHA to record (default: current git HEAD, if available).",
+    )
+    push_cmd.add_argument(
+        "--branch",
+        default=None,
+        help="Branch name to record (default: current git branch, if available).",
+    )
+    push_cmd.add_argument(
+        "--api-key",
+        default=None,
+        help="API key sent as X-Api-Key (default: API_KEY env var).",
+    )
+
     return parser
 
 
@@ -244,6 +311,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "web":
         return _cmd_web(args)
+
+    if args.command == "central":
+        return _cmd_central(args)
+
+    if args.command == "push":
+        return _cmd_push(args)
 
     if args.command != "check":
         parser.print_help()
@@ -486,6 +559,150 @@ def _cmd_web(args: argparse.Namespace) -> int:
     else:
         app = importlib.import_module("guideline_checker.web.app").app
         uvicorn.run(app, host=args.host, port=args.port)
+    return 0
+
+
+# ─── central command ──────────────────────────────────────────────────────────
+
+
+def _cmd_central(args: argparse.Namespace) -> int:
+    """Launch the central aggregation server, persisting reports under ``--store``."""
+    store: Path = args.store.resolve()
+    os.environ["CENTRAL_STORE"] = str(store)
+
+    try:
+        uvicorn = importlib.import_module("uvicorn")
+    except ImportError:
+        print(
+            "[guideline-checker] The central server needs the 'web' extra. "
+            "Install it with: pip install 'guideline-checker[web]'",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.host not in _LOOPBACK_HOSTS and _auth_is_open():
+        print(
+            f"[guideline-checker] WARNING: binding {args.host} with authentication disabled — "
+            "the ingest API is exposed without protection. Set AUTH_MODE/API_KEY (see .env.example).",
+            file=sys.stderr,
+        )
+
+    print(f"[guideline-checker] Serving central server (store: {store}) at http://{args.host}:{args.port} ...")
+    if args.reload:
+        uvicorn.run("guideline_checker.web.central:central_app", host=args.host, port=args.port, reload=True)
+    else:
+        central_app = importlib.import_module("guideline_checker.web.central").central_app
+        uvicorn.run(central_app, host=args.host, port=args.port)
+    return 0
+
+
+# ─── push command ─────────────────────────────────────────────────────────────
+
+_REPO_SLUG_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _git_output(git_args: list[str]) -> str | None:
+    """Return stripped stdout of a git command, or None if git/repo is unavailable."""
+    git_path = shutil.which("git")
+    if git_path is None:
+        return None
+    try:
+        proc = subprocess.run(
+            [git_path, *git_args],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
+def _default_repo_name() -> str:
+    """Infer a repo name from the git origin remote, falling back to the cwd name."""
+    url = _git_output(["remote", "get-url", "origin"])
+    if url:
+        name = url.rstrip("/").rsplit("/", 1)[-1]
+        if name.endswith(".git"):
+            name = name[:-4]
+        if name:
+            return name
+    return Path.cwd().name
+
+
+def _slug_repo(name: str) -> str:
+    """Reduce a repo name to the central server's allowed charset."""
+    return _REPO_SLUG_RE.sub("-", name).strip("-")
+
+
+def _cmd_push(args: argparse.Namespace) -> int:
+    """Push a ``check --json`` report to a central server's ingest endpoint."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    report_path: Path = args.report
+    if not report_path.is_file():
+        print(f"[guideline-checker] Report not found: {report_path}", file=sys.stderr)
+        return 1
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[guideline-checker] Cannot read report: {exc}", file=sys.stderr)
+        return 1
+
+    summary = report.get("summary") if isinstance(report, dict) else None
+    if not isinstance(summary, dict):
+        print(
+            "[guideline-checker] Report has no 'summary' block — is this a 'check --json' output?",
+            file=sys.stderr,
+        )
+        return 1
+
+    repo = _slug_repo(args.repo or _default_repo_name())
+    if not repo:
+        print("[guideline-checker] Could not determine a valid repo name; pass --repo.", file=sys.stderr)
+        return 1
+
+    url = args.server.rstrip("/") + "/api/ingest"
+    if not url.startswith(("http://", "https://")):
+        print("[guideline-checker] --server must be an http(s) URL.", file=sys.stderr)
+        return 1
+
+    payload = {
+        "repo": repo,
+        "summary": summary,
+        "commit": args.commit or _git_output(["rev-parse", "HEAD"]),
+        "branch": args.branch or _git_output(["rev-parse", "--abbrev-ref", "HEAD"]),
+        "generated_at": report.get("generated_at"),
+        "report": report,
+    }
+    headers = {"Content-Type": "application/json"}
+    api_key = args.api_key or os.environ.get("API_KEY", "")
+    if api_key:
+        headers["X-Api-Key"] = api_key
+
+    request = urllib.request.Request(  # noqa: S310 — scheme validated to http(s) above
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as resp:  # noqa: S310 — scheme validated above
+            status_code = resp.status
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:200]
+        print(f"[guideline-checker] Push rejected (HTTP {exc.code}): {detail}", file=sys.stderr)
+        return 1
+    except urllib.error.URLError as exc:
+        print(f"[guideline-checker] Push failed: {exc.reason}", file=sys.stderr)
+        return 1
+
+    print(f"[guideline-checker] Pushed report for '{repo}' to {url} (HTTP {status_code}).")
     return 0
 
 
