@@ -1,0 +1,8 @@
+# Transverse rules that apply to every language (language_target: "*").
+language_target: "*"
+rules:
+  - id: secrets-via-env
+    category: security
+    severity: error
+    rule: "Load secrets from environment variables, not source files"
+    rationale: "Secrets committed to source leak through git history"

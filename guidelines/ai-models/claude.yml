@@ -1,0 +1,8 @@
+# Rules specific to Claude models.
+model_target: claude
+rules:
+  - id: claude-xml-structure
+    category: prompt-format
+    severity: warning
+    rule: "Structure Claude prompts with XML tags for reliable instruction following"
+    rationale: "Claude follows tag-delimited instructions more reliably"
