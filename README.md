@@ -6,25 +6,23 @@
 [![SonarCloud](https://sonarcloud.io/api/project_badges/measure?project=chrysa_guideline-checker&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=chrysa_guideline-checker)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
 
-A CLI tool that reads GitHub Copilot instruction files (`.instructions.md`) from a project's `.github/instructions/` directory, validates the codebase against those rules, and generates a **detailed HTML compliance report**.
+Turn the coding rules you already wrote for AI agents into an enforceable lint pass. `guideline-checker` reads your existing instruction files — GitHub Copilot instructions, `CLAUDE.md`, `AGENTS.md` — extracts the rules from them, scans your source tree for violations, and produces compliance reports (HTML, JSON, Markdown, SARIF). It runs as a CLI, a pre-commit hook, or a GitHub Action, so the conventions your agents are told to follow are actually checked.
 
----
+## Who it's for
+
+Teams and solo developers who maintain AI-agent instruction files (`.github/instructions/*.instructions.md`, `CLAUDE.md`, `AGENTS.md`) and want those same conventions enforced on humans and CI — without writing a custom linter per rule.
 
 ## Features
 
-- **Instruction-driven**: rules are loaded from `.instructions.md` files (`applyTo` + content)
-- **Pattern-based checking**: detects anti-patterns (print calls, bare excepts, console.log, etc.)
-- **`init` command**: scaffold default instruction files in any project
-- **`--diff` mode**: restrict scanning to git-changed files (fast incremental checks in pre-commit)
-- **HTML report**: color-coded, grouped by rule file, with file paths and line numbers
-- **JSON report**: machine-readable output for CI pipelines
-- **Markdown report**: human-readable summary for PR comments
-- **SARIF report**: upload to GitHub Code Scanning
-- **Web dashboard**: live FastAPI dashboard (`web` command) with pluggable auth (api_key / local / ldap / oidc)
-- **CI-friendly**: exits with code 1 if violations are found (configurable threshold)
-- **Pre-commit hook**: runs as a pre-commit hook on the entire project
-
----
+- **Multi-source rule discovery** — automatically loads rules from `.github/instructions/*.instructions.md`, `.github/copilot-instructions.md`, `CLAUDE.md` / `.claude/CLAUDE.md`, and `AGENTS.md` / `.claude/agents/*.md`. One set of guidelines, no duplication.
+- **Pattern-based anti-pattern detection** — recognises rule phrasing (e.g. "no print", "no bare except", "no `any`", "no `@ts-ignore`", "run as non-root", "no `:latest` tag", "no hardcoded secrets", max file/function length) and flags matching lines with `error` / `warning` / `info` severity.
+- **`applyTo` scoping** — rules apply only to the files their glob targets; generic rules are auto-narrowed by filename (a `python.instructions.md` rule won't fire on JSON files).
+- **Inline suppression** — add a `guideline: disable` comment on any line to skip it.
+- **`--diff` mode** — check only files changed in the git working tree for fast incremental pre-commit runs.
+- **Multi-repo `synthesize`** — one rolled-up HTML report across every repo in a workspace.
+- **Optional external linters** — fold `ruff`, `mypy`, or `eslint` results into the same report via `--linters`.
+- **Four report formats** — HTML (color-coded, grouped by rule source), JSON (CI artifact), Markdown (PR comments), SARIF 2.1.0 (GitHub Code Scanning).
+- **CI-friendly exit codes** — exits `1` when violations meet the `--fail-on` threshold.
 
 ## Installation
 
@@ -32,160 +30,123 @@ A CLI tool that reads GitHub Copilot instruction files (`.instructions.md`) from
 pip install guideline-checker
 ```
 
-Or from source:
+From source (with dev tooling):
 
 ```bash
 pip install -e '.[dev]'
 ```
 
----
+Requires Python ≥ 3.14. No runtime dependencies for the core CLI; the optional web dashboard needs the `web` extra (see below).
 
 ## Usage
 
-### CLI
+### Scaffold instruction files
 
 ```bash
-# Scaffold default instruction files in .github/instructions/
-guideline-checker init
-
-# Force-overwrite existing instruction files
-guideline-checker init --force
-
-# Check current directory against .github/instructions/
-guideline-checker check
-
-# Check only git-changed files (fast incremental mode)
-guideline-checker check --diff
-
-# Check a specific project root
-guideline-checker check --root /path/to/project
-
-# Output HTML report to a file
-guideline-checker check --output report.html
-
-# Output SARIF (for GitHub Code Scanning upload)
-guideline-checker check --sarif guideline-results.sarif
-
-# Output Markdown summary
-guideline-checker check --markdown guideline-summary.md
-
-# Use a custom instructions directory
-guideline-checker check --instructions .github/instructions/
-
-# Fail only if severity >= error (ignore warnings)
-guideline-checker check --fail-on error
+guideline-checker init            # create default .github/instructions/ files
+guideline-checker init --force    # overwrite existing files
 ```
 
-### Pre-commit hook (incremental with `--diff`)
+### Check a project
+
+```bash
+# Scan the current directory; loads Copilot/CLAUDE/AGENTS sources by default
+guideline-checker check
+
+# Write reports
+guideline-checker check --output report.html \
+                        --json report.json \
+                        --markdown summary.md \
+                        --sarif results.sarif
+
+# Fast incremental check of git-changed files only
+guideline-checker check --diff
+
+# Fail on warnings too (default fails on errors only)
+guideline-checker check --fail-on warning
+
+# Only read *.instructions.md from --instructions, ignore CLAUDE.md / AGENTS.md
+guideline-checker check --no-multi-source --instructions .github/instructions/
+
+# Include external linter results in the report
+guideline-checker check --linters ruff mypy      # or --linters with no args to auto-detect
+```
+
+`--fail-on` accepts `error` (default), `warning`, or `never`.
+
+### Multi-repo synthesis
+
+```bash
+guideline-checker synthesize --workspace /path/to/workspace
+# optional: --repos repo-a repo-b  --linters ruff  --instructions shared/.github/instructions/
+```
+
+Writes a per-repo `guideline-report.html` plus a combined `guideline-synthesis.html`.
+
+### Pre-commit hook
 
 ```yaml
 - repo: https://github.com/chrysa/guideline-checker
   rev: v1.0.0
   hooks:
-    - id: guideline-check
-      args: [--diff, --fail-on, warning]
+    - id: guideline-check                 # check --fail-on error
+    # - id: guideline-check-warning       # stricter: also fails on warnings (stage: manual)
 ```
 
-### GitHub Actions
+Pass extra args to scope it, e.g. `args: [check, --diff, --fail-on, warning]`.
+
+### GitHub Action
+
+The repo ships a composite action (`action.yml`) that installs the tool, runs `check`, uploads SARIF to GitHub Code Scanning, and attaches the Markdown report as an artifact.
 
 ```yaml
 - name: Guideline check
-  run: |
-    pip install guideline-checker
-    guideline-checker check --output guideline-report.html
+  uses: chrysa/guideline-checker@v1
+  with:
+    fail-on: error          # error | warning | never
+    # instructions: ''      # defaults to <root>/.github/instructions
+    # upload-sarif: 'true'
 ```
 
-### Web dashboard
+Outputs: `violations` (count) and `sarif-path`.
 
-Launch a live FastAPI dashboard that scans a directory and serves an interactive
-compliance report. Requires the `web` extra:
+### Python API
+
+```python
+from pathlib import Path
+from guideline_checker.checker import run_checks
+from guideline_checker.reporters.html import HtmlReporter
+
+results = run_checks(root=Path("."), all_sources=True)
+HtmlReporter().write(results=results, output_path=Path("report.html"), root=Path("."))
+```
+
+`run_checks` returns a list of `RuleResult`, each holding the source `InstructionFile` and its `Violation`s. Other reporters: `reporters.json_reporter.JsonReporter`, `reporters.markdown.MarkdownReporter`, `reporters.sarif.SarifReporter`.
+
+## Web dashboard (optional)
+
+Install the extra and serve the FastAPI app to browse and trigger scans from a browser:
 
 ```bash
 pip install 'guideline-checker[web]'
-
-# Serve the dashboard for the current directory on http://127.0.0.1:8080
-guideline-checker web
-
-# Custom scan root, host and port
-guideline-checker web --root /path/to/project --host 0.0.0.0 --port 8000
-
-# Auto-reload on code changes (development only)
-guideline-checker web --reload
+uvicorn guideline_checker.web.app:app --host 0.0.0.0 --port 8000
 ```
 
-The dashboard binds to loopback (`127.0.0.1`) by default. Authentication is configured
-via environment variables — `AUTH_MODE` (`disabled` / `api_key` / `local` / `ldap` / `oidc`)
-and the matching settings in [`.env.example`](.env.example). When you bind a non-loopback
-host with auth left open, the command prints a warning.
+Configure via environment variables (see [`.env.example`](.env.example)): `SCAN_ROOT`, and `AUTH_MODE` = `disabled` | `api_key` (default) | `local` | `ldap` | `oidc`, with the matching credential vars (`API_KEY`, `LOCAL_USERNAME`/`LOCAL_PASSWORD`, `LDAP_*`, `OIDC_*`).
 
-A containerised alternative is available via `make web-up` (Docker Compose, port 8080).
+## How rules are extracted
 
----
-
-## Report Format
-
-The HTML report includes:
-
-- **Summary**: total files checked, violations by severity
-- **Per-rule sections**: rule description, `applyTo` pattern, violations found
-- **Violation details**: file path, line number, matched pattern, suggestion
-- **Color coding**: error / warning / info
-
----
-
-## Architecture
-
-```
-guideline_checker/
-    __init__.py             # package version
-    cli.py                  # argparse entry point (guideline-checker command)
-    loader.py               # load and parse .instructions.md files
-    checker.py              # match files against rules by applyTo pattern
-    init_cmd.py             # init subcommand — scaffold default instruction files
-    hook.py                 # pre-commit hook entry point
-    linters.py              # external linter integration (ruff / mypy / eslint / biome)
-    reporters/
-        html.py             # HTML report generator
-        json_reporter.py    # JSON report generator (CI artifact)
-        markdown.py         # Markdown summary generator
-        sarif.py            # SARIF report generator (GitHub Code Scanning)
-        synthesis_html.py   # multi-repo synthesis report generator
-    web/
-        app.py              # FastAPI dashboard (web subcommand / Docker)
-        auth.py             # pluggable auth (api_key / local / ldap / oidc)
-tests/
-    test_checker.py         # checker engine tests
-    test_cli.py             # CLI entry point tests
-    test_diff_mode.py       # --diff git mode tests
-    test_hook.py            # hook entry point tests
-    test_html_reporter.py   # HTML reporter tests
-    test_init_cmd.py        # init subcommand tests
-    test_json_reporter.py   # JSON reporter tests
-    test_loader.py          # instruction loader tests
-    test_sarif_reporter.py  # SARIF reporter tests
-```
-
----
+Rules are pulled from markdown bullet lists, numbered lists, and table rows containing constraint keywords (`must`, `never`, `always`, `forbidden`, `required`, `mandatory`). For `.instructions.md` files, the YAML frontmatter `applyTo` glob scopes which files a rule set targets. Detection is pattern-based (line and whole-file matching), not a full AST analysis.
 
 ## Development
 
 ```bash
-# Install dev dependencies
 pip install -e '.[dev]'
-
-# Run tests
-pytest
-
-# Lint
-ruff check .
-ruff format .
-
-# Type check
+pytest                       # coverage gate: 85%
+ruff check . && ruff format .
 mypy guideline_checker
 ```
 
----
-
 ## License
 
-MIT -- see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
