@@ -1,4 +1,5 @@
 #!make
+# makefile-tier: python-app
 ifneq (,)
 	$(error This Makefile requires GNU Make)
 endif
@@ -91,6 +92,9 @@ docker-lint: ## Run lint + type-check inside Docker container
 docker-clean: ## Remove Docker images and containers for this project
 	docker compose down --rmi local --volumes --remove-orphans
 
+web-local: ## Run the web dashboard natively (no Docker, port 8080)
+	$(PYTHON) -m guideline_checker.cli web
+
 web-up: ## Start the web dashboard (containerised, port 8080)
 	docker compose up -d web
 
@@ -120,10 +124,12 @@ quality-gate-verify: ## Verify no regression since baseline
 
 # ─── Compat aliases ───────────────────────────────────────────────────────────
 
-type-check: typecheck ## Legacy alias
 
 dev: ## Start development environment (install in editable mode)
 	pip install -e .[dev]
 
 build: ## Build package (alias → docker-build)
 	$(MAKE) docker-build
+
+# ─── CI gate ─────────────────────────────────────
+ci: lint typecheck test ## Run the full local gate (lint + typecheck + test)

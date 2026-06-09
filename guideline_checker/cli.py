@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -159,6 +162,35 @@ def build_parser() -> argparse.ArgumentParser:
         help=("Shared instructions directory to use for all repos (overrides per-repo .github/instructions/)."),
     )
 
+    # ── web subcommand ───────────────────────────────────────────────────────
+    web_cmd = sub.add_parser(
+        "web",
+        help="Launch the FastAPI compliance dashboard (requires the 'web' extra).",
+    )
+    web_cmd.add_argument(
+        "--root",
+        type=Path,
+        default=Path("."),
+        help="Directory to scan and serve results for (default: current directory).",
+    )
+    web_cmd.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Interface to bind (default: 127.0.0.1, loopback only).",
+    )
+    web_cmd.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Port to listen on (default: 8080).",
+    )
+    web_cmd.add_argument(
+        "--reload",
+        action="store_true",
+        default=False,
+        help="Enable auto-reload on code changes (development only).",
+    )
+
     return parser
 
 
@@ -167,9 +199,12 @@ def _get_diff_files(root: Path) -> list[Path] | None:
 
     Returns None if git is unavailable or the directory is not a git repo.
     """
+    git_path = shutil.which("git")
+    if git_path is None:
+        return None
     try:
         result = subprocess.run(
-            ["git", "diff", "--name-only", "HEAD"],
+            [git_path, "diff", "--name-only", "HEAD"],
             capture_output=True,
             text=True,
             cwd=root,
@@ -178,7 +213,7 @@ def _get_diff_files(root: Path) -> list[Path] | None:
         if result.returncode != 0:
             # Fallback: list staged files only (new repo with no HEAD)
             result = subprocess.run(
-                ["git", "diff", "--name-only", "--cached"],
+                [git_path, "diff", "--name-only", "--cached"],
                 capture_output=True,
                 text=True,
                 cwd=root,
@@ -206,6 +241,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "synthesize":
         return _cmd_synthesize(args)
+
+    if args.command == "web":
+        return _cmd_web(args)
 
     if args.command != "check":
         parser.print_help()
@@ -394,6 +432,57 @@ def _cmd_synthesize(args: argparse.Namespace) -> int:
         output_path=output,
     )
     print(f"[guideline-checker] Synthesis report written to: {output}")
+    return 0
+
+
+# ─── web command ──────────────────────────────────────────────────────────────
+
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _auth_is_open() -> bool:
+    """Return True when the dashboard API is effectively unauthenticated.
+
+    Mirrors the env contract honoured by guideline_checker.web.auth at request time.
+    """
+    if os.environ.get("AUTH_ENABLED", "true").lower() == "false":
+        return True
+    mode = os.environ.get("AUTH_MODE", "api_key").lower()
+    if mode == "disabled":
+        return True
+    return mode == "api_key" and not os.environ.get("API_KEY", "")
+
+
+def _cmd_web(args: argparse.Namespace) -> int:
+    """Launch the FastAPI dashboard, scanning ``--root``."""
+    # web.app reads SCAN_ROOT at import time, so it must be set before any import.
+    root: Path = args.root.resolve()
+    os.environ["SCAN_ROOT"] = str(root)
+
+    try:
+        uvicorn = importlib.import_module("uvicorn")
+    except ImportError:
+        print(
+            "[guideline-checker] The web dashboard needs the 'web' extra. "
+            "Install it with: pip install 'guideline-checker[web]'",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.host not in _LOOPBACK_HOSTS and _auth_is_open():
+        print(
+            f"[guideline-checker] WARNING: binding {args.host} with authentication disabled — "
+            "the dashboard API is exposed without protection. Set AUTH_MODE/API_KEY (see .env.example).",
+            file=sys.stderr,
+        )
+
+    print(f"[guideline-checker] Serving dashboard for {root} at http://{args.host}:{args.port} ...")
+    if args.reload:
+        # reload needs an import string so the worker subprocess re-imports the app.
+        uvicorn.run("guideline_checker.web.app:app", host=args.host, port=args.port, reload=True)
+    else:
+        app = importlib.import_module("guideline_checker.web.app").app
+        uvicorn.run(app, host=args.host, port=args.port)
     return 0
 
 
