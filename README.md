@@ -98,7 +98,7 @@ Pass extra args to scope it, e.g. `args: [check, --diff, --fail-on, warning]`.
 
 ### GitHub Action
 
-The repo ships a composite action (`action.yml`) that installs the tool, runs `check`, uploads SARIF to GitHub Code Scanning, and attaches the Markdown report as an artifact.
+The repo ships a composite action (`action.yml`) that installs the tool, runs `check`, uploads SARIF to GitHub Code Scanning, attaches the Markdown + JSON reports as an artifact, and — when a central server is configured — pushes the JSON report to it.
 
 ```yaml
 - name: Guideline check
@@ -107,7 +107,11 @@ The repo ships a composite action (`action.yml`) that installs the tool, runs `c
     fail-on: error          # error | warning | never
     # instructions: ''      # defaults to <root>/.github/instructions
     # upload-sarif: 'true'
+    # central-server: ''     # e.g. https://guidelines.example.com — set to enable the push
+    # central-api-key: ''    # X-Api-Key for the central server (use a secret)
 ```
+
+When `central-server` is set, the action runs `guideline-checker push` after the check — even when the check failed on violations, so the server always gets the latest state. The push is best-effort (`continue-on-error`) so a flaky server never breaks your CI.
 
 Outputs: `violations` (count) and `sarif-path`.
 
