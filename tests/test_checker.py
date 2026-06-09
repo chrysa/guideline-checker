@@ -692,3 +692,51 @@ class TestSecurityPatternChecks:
         )
         violations = _check_file(f, instr)
         assert any("password" in v.line_content.lower() or "password" in v.rule.lower() for v in violations)
+
+
+class TestDjangoChecks:
+    """Django / DRF anti-pattern detection (settings hardening + ORM safety)."""
+
+    def test_detects_debug_true(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "settings.py", "DEBUG = True\n", "No DEBUG = True in committed settings")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("debug = true" in v.line_content.lower() for r in results for v in r.violations)
+
+    def test_detects_wildcard_allowed_hosts(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "settings.py", 'ALLOWED_HOSTS = ["*"]\n', "No wildcard ALLOWED_HOSTS")
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("allowed_hosts" in v.line_content.lower() for r in results for v in r.violations)
+
+    def test_detects_cors_allow_all(self, tmp_path: Path) -> None:
+        root, inst = _make_project(
+            tmp_path, "settings.py", "CORS_ALLOW_ALL_ORIGINS = True\n", "No CORS_ALLOW_ALL_ORIGINS = True"
+        )
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("cors_allow_all_origins" in v.line_content.lower() for r in results for v in r.violations)
+
+    def test_detects_raw_sql(self, tmp_path: Path) -> None:
+        root, inst = _make_project(
+            tmp_path, "views.py", "qs = User.objects.raw('SELECT * FROM users')\n", "No raw SQL (no .raw()"
+        )
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any(".raw(" in v.line_content for r in results for v in r.violations)
+
+    def test_detects_hardcoded_secret_key(self, tmp_path: Path) -> None:
+        root, inst = _make_project(
+            tmp_path,
+            "settings.py",
+            'SECRET_KEY = "hardcoded-key"\n',
+            "No hardcoded SECRET_KEY (load secret_key from env)",
+        )
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("secret_key" in v.line_content.lower() for r in results for v in r.violations)
+
+    def test_no_false_positive_clean_settings(self, tmp_path: Path) -> None:
+        root, inst = _make_project(
+            tmp_path,
+            "settings.py",
+            'import os\nDEBUG = os.environ.get("DEBUG") == "1"\n',
+            "No DEBUG = True in committed settings",
+        )
+        results = run_checks(root=root, instructions_dir=inst)
+        assert all(len(r.violations) == 0 for r in results)
