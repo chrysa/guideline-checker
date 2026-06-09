@@ -1,0 +1,13 @@
+# Rules specific to TypeScript.
+language_target: typescript
+rules:
+  - id: ts-strict-types
+    category: stack
+    severity: error
+    rule: "Prefer precise types over the any escape hatch"
+    rationale: "any disables the type checker"
+  - id: ts-no-suppressions
+    category: stack
+    severity: warning
+    rule: "Resolve type errors instead of suppressing them"
+    rationale: "Suppression comments hide real type bugs"

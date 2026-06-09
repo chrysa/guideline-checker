@@ -383,12 +383,19 @@ def _check_file(
 
     for rule in instruction.rules:
         # Whole-file checks (presence/absence)
-        whole_file_violations = _check_presence_rules(file_path, lines, file_content, rule)
-        violations.extend(whole_file_violations)
-
+        rule_violations = _check_presence_rules(file_path, lines, file_content, rule)
         # Per-line checks
-        line_violations = _evaluate_rule(file_path, lines, rule)
-        violations.extend(line_violations)
+        rule_violations.extend(_evaluate_rule(file_path, lines, rule))
+
+        # Structured sources (YAML referential) carry an explicit severity that
+        # overrides the phrasing-derived default. Markdown sources leave
+        # rule_severity empty, so this is a no-op for them.
+        override = instruction.rule_severity.get(rule)
+        if override is not None:
+            for violation in rule_violations:
+                violation.severity = override
+
+        violations.extend(rule_violations)
 
     return violations
 

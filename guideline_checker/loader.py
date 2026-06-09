@@ -22,6 +22,7 @@ class SourceType(StrEnum):
     COPILOT_GLOBAL = "copilot"  # .github/copilot-instructions.md
     CLAUDE = "claude"  # CLAUDE.md, .claude/CLAUDE.md
     AGENTS = "agents"  # AGENTS.md, .claude/agents/*.md
+    GUIDELINES_YAML = "guidelines"  # guidelines/<dimension>/*.yml structured referential
 
 
 @dataclass
@@ -32,6 +33,10 @@ class InstructionFile:
     content: str
     source_type: SourceType = SourceType.COPILOT_INSTRUCTION
     rules: list[str] = field(default_factory=list)
+    # Maps a rule statement to its explicit severity ("error"/"warning"/"info").
+    # Populated only by structured sources (YAML referential); empty for markdown
+    # sources, where severity stays pattern-derived in the checker.
+    rule_severity: dict[str, str] = field(default_factory=dict)
 
 
 def load_instructions(instructions_dir: Path) -> list[InstructionFile]:
@@ -53,6 +58,7 @@ def load_all_sources(root: Path) -> list[InstructionFile]:
     - ``.github/copilot-instructions.md``         → :attr:`SourceType.COPILOT_GLOBAL`
     - ``CLAUDE.md``, ``.claude/CLAUDE.md``        → :attr:`SourceType.CLAUDE`
     - ``AGENTS.md``, ``.claude/agents/*.md``      → :attr:`SourceType.AGENTS`
+    - ``guidelines/<dimension>/*.yml``            → :attr:`SourceType.GUIDELINES_YAML`
     """
     sources: list[InstructionFile] = []
 
@@ -91,6 +97,14 @@ def load_all_sources(root: Path) -> list[InstructionFile]:
         )
         if inst:
             sources.append(inst)
+
+    # 5. Structured YAML rule referential (guidelines/<dimension>/*.yml)
+    guidelines_dir = root / "guidelines"
+    if guidelines_dir.is_dir():
+        # Imported lazily so the markdown-only path never imports PyYAML.
+        from guideline_checker.guidelines import load_yaml_guidelines
+
+        sources.extend(load_yaml_guidelines(root))
 
     return sources
 

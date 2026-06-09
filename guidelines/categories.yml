@@ -1,0 +1,16 @@
+# Shared category registry for the multi-dimension rule referential.
+# Every rule's `category` MUST exist here — the loader fails on an unknown one.
+# Defined once so the ai-models/ and languages/ dimensions never diverge.
+categories:
+  - id: prompt-format
+    description: "Prompt and instruction formatting"
+  - id: architecture
+    description: "Architecture decisions (seams, abstractions, lock-in)"
+  - id: stack
+    description: "Stack choices and pinned versions"
+  - id: naming
+    description: "Naming conventions"
+  - id: testing
+    description: "Testing practices"
+  - id: security
+    description: "Security and secrets"
