@@ -1,0 +1,13 @@
+# Rules specific to OpenAI GPT models.
+model_target: gpt
+rules:
+  - id: gpt-structured-outputs
+    category: prompt-format
+    severity: warning
+    rule: "Request machine-readable answers via structured outputs / JSON schema, not free-text parsing"
+    rationale: "Schema-constrained decoding removes brittle regex parsing of prose"
+  - id: gpt-system-role
+    category: prompt-format
+    severity: warning
+    rule: "Put durable instructions in the system message, per-request data in the user message"
+    rationale: "Separating policy from payload keeps prompts stable and cacheable"
