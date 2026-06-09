@@ -15,6 +15,9 @@ from guideline_checker.guidelines import (
 )
 from guideline_checker.loader import SourceType, load_all_sources
 
+# The repository's own shipped guidelines/ tree (for coverage assertions).
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
 _CATEGORIES = """\
 categories:
   - id: stack
@@ -45,7 +48,7 @@ def referential(tmp_path: Path) -> Path:
     )
     _write(
         g / "languages" / "python.yml",
-        "language_target: python\nrules:\n"
+        'language_target: python\napply_to_glob: "**/*.py"\nrules:\n'
         "  - id: py-pydantic\n    category: stack\n    severity: error\n"
         '    rule: "Pydantic v2 only"\n',
     )
@@ -62,7 +65,7 @@ def test_loads_both_dimensions(referential: Path) -> None:
 def test_target_drives_apply_to(referential: Path) -> None:
     instructions = load_yaml_guidelines(referential)
     by_rule = {i.rules[0]: i for i in instructions}
-    # Language target maps to its file glob; model target falls through to all files.
+    # Language file declares its glob; the model file declares none -> all files.
     assert by_rule["Pydantic v2 only"].apply_to == "**/*.py"
     assert by_rule["Structure prompts with XML tags"].apply_to == "**/*"
 
@@ -74,17 +77,17 @@ def test_explicit_severity_recorded(referential: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("target", "expected"),
+    ("target", "file_glob", "expected"),
     [
-        ("python", "**/*.py"),
-        ("typescript", "**/*.ts,**/*.tsx"),
-        ("react", "**/*.tsx,**/*.jsx"),
-        ("*", "**/*"),
-        ("claude", "**/*"),  # unknown/model target -> all files
+        ("python", "**/*.py", "**/*.py"),
+        ("typescript", "**/*.ts,**/*.tsx", "**/*.ts,**/*.tsx"),
+        ("django", "**/*.py", "**/*.py"),  # an arbitrary new target uses its file glob
+        ("*", "**/*.py", "**/*"),  # the wildcard ignores the file glob
+        ("claude", "", "**/*"),  # no file glob -> all files
     ],
 )
-def test_target_to_glob(target: str, expected: str) -> None:
-    assert _target_to_glob(target) == expected
+def test_target_to_glob(target: str, file_glob: str, expected: str) -> None:
+    assert _target_to_glob(target, file_glob) == expected
 
 
 def test_per_rule_target_override(tmp_path: Path) -> None:
@@ -93,7 +96,7 @@ def test_per_rule_target_override(tmp_path: Path) -> None:
     _write(g / "categories.yml", _CATEGORIES)
     _write(
         g / "languages" / "python.yml",
-        "language_target: python\nrules:\n"
+        'language_target: python\napply_to_glob: "**/*.py"\nrules:\n'
         '  - id: py-specific\n    category: stack\n    severity: warning\n    rule: "Python only rule"\n'
         '  - id: transverse\n    language_target: "*"\n    category: stack\n    severity: warning\n'
         '    rule: "Applies everywhere"\n',
@@ -102,6 +105,73 @@ def test_per_rule_target_override(tmp_path: Path) -> None:
     globs = {i.rules[0]: i.apply_to for i in instructions}
     assert globs["Python only rule"] == "**/*.py"
     assert globs["Applies everywhere"] == "**/*"
+
+
+def test_new_dimension_is_folder_driven(tmp_path: Path) -> None:
+    """A brand-new dimension folder loads with ZERO code change (genericity guard)."""
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    _write(
+        g / "frameworks" / "django.yml",
+        'framework_target: django\napply_to_glob: "**/*.py"\nrules:\n'
+        '  - id: dj-orm\n    category: stack\n    severity: warning\n    rule: "Use the ORM, not raw SQL"\n',
+    )
+    instructions = load_yaml_guidelines(tmp_path)
+    by_rule = {r: i for i in instructions for r in i.rules}
+    assert "Use the ORM, not raw SQL" in by_rule
+    instr = by_rule["Use the ORM, not raw SQL"]
+    assert instr.apply_to == "**/*.py"
+    assert instr.description == "Guidelines — frameworks/django [django]"
+
+
+def test_file_without_target_field_is_transverse(tmp_path: Path) -> None:
+    """A file with no <dim>_target key defaults every rule to the wildcard target."""
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    _write(
+        g / "misc" / "anything.yml",
+        'rules:\n  - id: t1\n    category: stack\n    severity: info\n    rule: "Everywhere"\n',
+    )
+    instructions = load_yaml_guidelines(tmp_path)
+    by_rule = {r: i for i in instructions for r in i.rules}
+    assert by_rule["Everywhere"].apply_to == "**/*"
+
+
+def test_multiple_target_fields_raises(tmp_path: Path) -> None:
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    _write(
+        g / "languages" / "bad.yml",
+        "language_target: python\nmodel_target: claude\nrules:\n"
+        '  - id: x\n    category: stack\n    severity: error\n    rule: "X"\n',
+    )
+    with pytest.raises(GuidelineError, match="multiple target fields"):
+        load_yaml_guidelines(tmp_path)
+
+
+def test_apply_to_glob_defaults_to_all_files(tmp_path: Path) -> None:
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    _write(
+        g / "languages" / "python.yml",
+        "language_target: python\nrules:\n"  # no apply_to_glob declared
+        '  - id: p\n    category: stack\n    severity: warning\n    rule: "P"\n',
+    )
+    instructions = load_yaml_guidelines(tmp_path)
+    by_rule = {r: i for i in instructions for r in i.rules}
+    assert by_rule["P"].apply_to == "**/*"
+
+
+def test_invalid_apply_to_glob_raises(tmp_path: Path) -> None:
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    _write(
+        g / "languages" / "python.yml",
+        "language_target: python\napply_to_glob: 123\nrules:\n"
+        '  - id: p\n    category: stack\n    severity: warning\n    rule: "P"\n',
+    )
+    with pytest.raises(GuidelineError, match="apply_to_glob"):
+        load_yaml_guidelines(tmp_path)
 
 
 def test_unknown_category_raises(tmp_path: Path) -> None:
@@ -186,7 +256,7 @@ def test_severity_override_end_to_end(tmp_path: Path) -> None:
     _write(g / "categories.yml", _CATEGORIES)
     _write(
         g / "languages" / "python.yml",
-        "language_target: python\nrules:\n"
+        'language_target: python\napply_to_glob: "**/*.py"\nrules:\n'
         "  - id: py-no-print\n    category: stack\n    severity: error\n"
         '    rule: "No print() in production code"\n',
     )
@@ -196,3 +266,18 @@ def test_severity_override_end_to_end(tmp_path: Path) -> None:
     violations = [v for r in results for v in r.violations if "print" in v.rule.lower()]
     assert violations, "expected the detectable no-print rule to flag print("
     assert all(v.severity == "error" for v in violations)
+
+
+def test_shipped_referential_covers_spec_targets() -> None:
+    """The repo's own guidelines/ tree ships every model/language in the spec."""
+    instructions = load_yaml_guidelines(_REPO_ROOT)
+    descriptions = {i.description for i in instructions}
+    for dim, stem in [
+        ("ai-models", "gpt"),
+        ("ai-models", "gemini"),
+        ("ai-models", "mistral"),
+        ("languages", "react"),
+    ]:
+        assert f"Guidelines — {dim}/{stem} [{stem}]" in descriptions
+    react = next(i for i in instructions if i.description == "Guidelines — languages/react [react]")
+    assert react.apply_to == "**/*.tsx,**/*.jsx"

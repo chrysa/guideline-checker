@@ -1,0 +1,19 @@
+apply_to_glob: '**/*.tsx,**/*.jsx'
+language_target: react
+rules:
+- category: stack
+  id: react-hooks-top-level
+  rationale: Conditional hook calls break React's call-order invariant
+  rule: Call hooks only at the top level of a component or custom hook, never in loops,
+    conditions, or nested functions
+  severity: error
+- category: naming
+  id: react-stable-keys
+  rationale: Index keys corrupt state and DOM when the list reorders
+  rule: Key dynamic lists by a stable identity, never by array index
+  severity: warning
+- category: architecture
+  id: react-no-inline-component-defs
+  rationale: Nested definitions remount the subtree on every render, losing state
+  rule: Define components at module scope, never inside another component's render
+  severity: warning
