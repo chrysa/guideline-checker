@@ -36,3 +36,25 @@ upstream editor, but repatriation to the repo is a one-off copy — once in the 
 are self-sufficient.
 
 ---
+
+## D-0003 — Central aggregation server: push model + file-backed store
+
+**Date**: 2026-06-10
+**Status**: accepted
+
+A central server (`guideline_checker/web/central.py`, served by `guideline-checker central`)
+aggregates compliance across all chrysa repos. The flow is **push, not pull**: each repo's CI
+runs `check --json` and posts the report to `POST /api/ingest`; the server keeps the **latest
+snapshot per repo** and renders a combined view. Pull (server clones/scans every repo) was
+rejected — it would couple the server to every repo's credentials, languages, and build env.
+
+**Storage is file-backed** (one JSON file per repo under `CENTRAL_STORE`), not a database: the
+data is a small key→latest-snapshot map, history is not required for the MVP, and this keeps the
+server deployable with zero extra infra. A DB can replace the store module later without changing
+the API. Repo identifiers are constrained to `^[A-Za-z0-9._-]+$` so they map to filenames without
+path traversal.
+
+The **`push` command uses only the standard library** (`urllib`), so reporting repos do not need
+the `web` extra (the server side does). Ingest auth reuses the existing `AUTH_MODE` contract.
+
+---
