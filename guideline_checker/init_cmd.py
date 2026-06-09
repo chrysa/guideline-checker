@@ -34,6 +34,20 @@ description: "TypeScript / React coding standards"
 - No inline styles in JSX components
 - No TODO or FIXME comments in production code
 """,
+    "django.instructions.md": """\
+---
+applyTo: "**/*.py"
+description: "Django / DRF coding standards"
+---
+
+- No DEBUG = True in committed settings
+- No wildcard ALLOWED_HOSTS (no ["*"])
+- No CORS_ALLOW_ALL_ORIGINS = True
+- No raw SQL (no .raw( or .extra()
+- No hardcoded SECRET_KEY (load secret_key from env)
+- No print() calls in production code
+- No bare except clauses
+""",
     "security.instructions.md": """\
 ---
 applyTo: "**/*"
