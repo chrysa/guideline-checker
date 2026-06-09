@@ -7,6 +7,20 @@ description: 'Check project compliance against .github/instructions/ rules. Gene
 
   '
 inputs:
+  central-api-key:
+    default: ''
+    description: 'API key sent to the central server as X-Api-Key. Leave empty to skip
+      the push.
+
+      '
+    required: false
+  central-server:
+    default: ''
+    description: 'Base URL of a central guideline server to push the JSON report to.
+      Empty disables the push.
+
+      '
+    required: false
   fail-on:
     default: error
     description: 'Severity threshold that causes the action to fail. Accepted values:
@@ -61,7 +75,7 @@ runs:
       GC_SARIF: ${{ inputs.sarif-output }}
     id: run
     name: Run guideline-checker
-    run: "ARGS=(check --root \"$GC_ROOT\" --sarif \"$GC_SARIF\" --markdown guideline-report.md)\n\
+    run: "ARGS=(check --root \"$GC_ROOT\" --sarif \"$GC_SARIF\" --markdown guideline-report.md --json guideline-report.json)\n\
       \nif [[ -n \"$GC_INSTRUCTIONS\" ]]; then\n  ARGS+=(--instructions \"$GC_INSTRUCTIONS\"\
       )\nfi\n\nARGS+=(--fail-on \"$GC_FAIL_ON\")\n\nset +e\nOUTPUT=$(guideline-checker\
       \ \"${ARGS[@]}\" 2>&1)\nEXIT_CODE=$?\nset -e\n\necho \"$OUTPUT\"\n\nVIOLATIONS=$(echo\
@@ -69,6 +83,15 @@ runs:
       \ \"violations=${VIOLATIONS:-0}\" >> \"$GITHUB_OUTPUT\"\necho \"sarif-path=$(realpath\
       \ \"$GC_SARIF\" 2>/dev/null || echo \"$GC_SARIF\")\" >> \"$GITHUB_OUTPUT\"\n\
       \nexit $EXIT_CODE\n"
+    shell: bash
+  - continue-on-error: true
+    env:
+      GC_CENTRAL_KEY: ${{ inputs.central-api-key }}
+      GC_CENTRAL_SERVER: ${{ inputs.central-server }}
+    if: ${{ inputs.central-server != '' && !cancelled() }}
+    name: Push report to central server
+    run: "guideline-checker push --server \"$GC_CENTRAL_SERVER\" --report guideline-report.json\
+      \ --api-key \"$GC_CENTRAL_KEY\"\n"
     shell: bash
   - if: ${{ inputs.upload-sarif == 'true' && !cancelled() }}
     name: Upload SARIF to GitHub Code Scanning
@@ -83,6 +106,8 @@ runs:
       if-no-files-found: warn
       name: guideline-report
       path: 'guideline-report.md
+
+        guideline-report.json
 
         ${{ inputs.sarif-output }}
 
