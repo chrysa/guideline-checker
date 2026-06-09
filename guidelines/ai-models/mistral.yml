@@ -1,0 +1,13 @@
+# Rules specific to Mistral models.
+model_target: mistral
+rules:
+  - id: mistral-tool-calling
+    category: architecture
+    severity: warning
+    rule: "Use native function calling for tool use, never prompt-encoded JSON conventions"
+    rationale: "Native tool calls are validated by the API; hand-rolled JSON in prose is not"
+  - id: mistral-no-system-priming
+    category: prompt-format
+    severity: info
+    rule: "Keep instructions in dedicated roles rather than priming through a fake assistant turn"
+    rationale: "Role-based prompting is more robust than conversational priming tricks"
