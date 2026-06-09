@@ -16,6 +16,7 @@ Teams and solo developers who maintain AI-agent instruction files (`.github/inst
 
 - **Multi-source rule discovery** — automatically loads rules from `.github/instructions/*.instructions.md`, `.github/copilot-instructions.md`, `CLAUDE.md` / `.claude/CLAUDE.md`, and `AGENTS.md` / `.claude/agents/*.md`. One set of guidelines, no duplication.
 - **Pattern-based anti-pattern detection** — recognises rule phrasing (e.g. "no print", "no bare except", "no `any`", "no `@ts-ignore`", "run as non-root", "no `:latest` tag", "no hardcoded secrets", max file/function length) and flags matching lines with `error` / `warning` / `info` severity.
+- **Structured YAML referential** — author rules as data in `guidelines/<dimension>/*.yml` (dimensions `ai-models/` and `languages/`) with explicit `id` / `category` / `severity` / `rationale`. The explicit `severity` overrides the phrasing-derived default, a shared `categories.yml` keeps dimensions from diverging, and discovery is by folder convention (drop a file → it's loaded).
 - **`applyTo` scoping** — rules apply only to the files their glob targets; generic rules are auto-narrowed by filename (a `python.instructions.md` rule won't fire on JSON files).
 - **Inline suppression** — add a `guideline: disable` comment on any line to skip it.
 - **`--diff` mode** — check only files changed in the git working tree for fast incremental pre-commit runs.
@@ -36,7 +37,7 @@ From source (with dev tooling):
 pip install -e '.[dev]'
 ```
 
-Requires Python ≥ 3.14. No runtime dependencies for the core CLI; the optional web dashboard needs the `web` extra (see below).
+Requires Python ≥ 3.14. The core CLI has a single runtime dependency (`PyYAML`, for the YAML rule referential); the optional web dashboard needs the `web` extra (see below).
 
 ## Usage
 
@@ -137,6 +138,35 @@ Configure via environment variables (see [`.env.example`](.env.example)): `SCAN_
 ## How rules are extracted
 
 Rules are pulled from markdown bullet lists, numbered lists, and table rows containing constraint keywords (`must`, `never`, `always`, `forbidden`, `required`, `mandatory`). For `.instructions.md` files, the YAML frontmatter `applyTo` glob scopes which files a rule set targets. Detection is pattern-based (line and whole-file matching), not a full AST analysis.
+
+### Structured YAML referential
+
+Alongside markdown sources, a `guidelines/` directory at the project root provides a structured, machine-authored rule set, discovered by folder convention:
+
+```
+guidelines/
+  categories.yml         # shared category registry (validated against)
+  ai-models/             # rules keyed by model_target (claude, gpt, …)
+    _common.yml          #   model_target: "*"  → transverse
+    claude.yml
+  languages/             # rules keyed by language_target (python, typescript, react)
+    _common.yml          #   language_target: "*"  → transverse
+    python.yml
+```
+
+Each rule is a mapping:
+
+```yaml
+language_target: python
+rules:
+  - id: py-async-fastapi      # stable, unique (kebab-case)
+    category: stack           # must exist in categories.yml
+    severity: warning         # error | warning | info — overrides the phrasing default
+    rule: "Define FastAPI route handlers as async def"
+    rationale: "Consistent non-blocking I/O"
+```
+
+The `<dimension>` directory sets the target field (`model_target` / `language_target`); a rule may override it (e.g. `"*"` for a transverse rule living in a targeted file). The target maps to an `applyTo` glob (`python → **/*.py`, `typescript → **/*.ts,**/*.tsx`, `*`/model → `**/*`). Unknown categories fail the load; duplicate `id`s resolve first-match-wins and are logged. The referential is filesystem-only — no external registry, no source links.
 
 ## Development
 
