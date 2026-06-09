@@ -1,18 +1,18 @@
-# Rules specific to Python.
+apply_to_glob: '**/*.py'
 language_target: python
 rules:
-  - id: py-pydantic-v2
-    category: stack
-    severity: error
-    rule: "Use Pydantic v2 models exclusively; v1 syntax is forbidden"
-    rationale: "chrysa stack convention"
-  - id: py-async-fastapi
-    category: stack
-    severity: warning
-    rule: "Define FastAPI route handlers as async def"
-    rationale: "Consistent non-blocking I/O"
-  - id: py-structured-logging
-    category: stack
-    severity: warning
-    rule: "Emit operational output through the logging module"
-    rationale: "Structured logging beats ad-hoc stdout writes in production"
+- category: stack
+  id: py-pydantic-v2
+  rationale: chrysa stack convention
+  rule: Use Pydantic v2 models exclusively; v1 syntax is forbidden
+  severity: error
+- category: stack
+  id: py-async-fastapi
+  rationale: Consistent non-blocking I/O
+  rule: Define FastAPI route handlers as async def
+  severity: warning
+- category: stack
+  id: py-structured-logging
+  rationale: Structured logging beats ad-hoc stdout writes in production
+  rule: Emit operational output through the logging module
+  severity: warning

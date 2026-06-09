@@ -1,0 +1,13 @@
+# Rules specific to Google Gemini models.
+model_target: gemini
+rules:
+  - id: gemini-system-instruction
+    category: prompt-format
+    severity: warning
+    rule: "Pass durable instructions through system_instruction, not a prepended user turn"
+    rationale: "system_instruction is the supported channel for persistent guidance"
+  - id: gemini-safety-explicit
+    category: security
+    severity: warning
+    rule: "Set safety settings explicitly instead of relying on provider defaults"
+    rationale: "Default thresholds drift across model versions; pin them to your use case"
