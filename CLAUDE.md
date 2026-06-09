@@ -67,7 +67,8 @@ guideline_checker/
   checker.py            # Core check engine — runs rules against source files
   cli.py                # CLI entry point (argparse) — init/check/synthesize/web subcommands
   hook.py               # Pre-commit hook entry point (delegates to cli.main)
-  loader.py             # Instruction file loader and parser
+  loader.py             # Instruction file loader and parser (markdown sources)
+  guidelines.py         # Structured YAML rule referential loader (guidelines/<dimension>/*.yml)
   linters.py            # External linter integration (ruff / mypy / eslint / biome)
   reporters/
     html.py             # HTML report generator (string templates)
@@ -83,6 +84,7 @@ tests/
   test_html_reporter.py # HTML reporter tests
   test_json_reporter.py # JSON reporter tests
   test_loader.py        # Loader tests
+  test_guidelines.py    # YAML referential loader + severity-override tests
 ```
 
 ## Hook configuration

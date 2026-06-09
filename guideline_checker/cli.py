@@ -258,7 +258,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if use_all_sources:
-        print("[guideline-checker] Multi-source mode: loading Copilot instructions, CLAUDE.md, AGENTS.md.")
+        print(
+            "[guideline-checker] Multi-source mode: loading Copilot instructions, CLAUDE.md, AGENTS.md, "
+            "and the guidelines/ YAML referential.",
+        )
 
     # --diff: restrict to git-modified files
     diff_files: list[Path] | None = None
