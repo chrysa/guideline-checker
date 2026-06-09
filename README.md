@@ -135,6 +135,30 @@ uvicorn guideline_checker.web.app:app --host 0.0.0.0 --port 8000
 
 Configure via environment variables (see [`.env.example`](.env.example)): `SCAN_ROOT`, and `AUTH_MODE` = `disabled` | `api_key` (default) | `local` | `ldap` | `oidc`, with the matching credential vars (`API_KEY`, `LOCAL_USERNAME`/`LOCAL_PASSWORD`, `LDAP_*`, `OIDC_*`).
 
+## Central server (multi-repo)
+
+The single-repo dashboard above shows one project. The **central server** aggregates compliance across *every* repo: each repo runs `check --json` in CI and pushes the report; the server keeps the latest snapshot per repo and renders a combined view.
+
+Run the server (needs the `web` extra; reuses the same `AUTH_MODE` contract):
+
+```bash
+guideline-checker central --store ./central-store --host 0.0.0.0 --port 8090
+```
+
+It exposes `POST /api/ingest` (auth), `GET /api/repos`, `GET /api/repos/{repo}`, and an aggregated dashboard at `/`. Reports are stored as one JSON file per repo under `CENTRAL_STORE` (default `./central-store`).
+
+Push a report from a repo's CI (or anywhere):
+
+```bash
+guideline-checker check --root . --json guideline-report.json
+guideline-checker push --server https://guidelines.example.com \
+                       --report guideline-report.json \
+                       --api-key "$GUIDELINE_API_KEY"
+# --repo / --commit / --branch default to the git remote name and current HEAD.
+```
+
+`push` uses only the standard library, so it works without the `web` extra. In a GitHub Actions step it is a single command after the check; the server URL and key live in repo/org secrets.
+
 ## How rules are extracted
 
 Rules are pulled from markdown bullet lists, numbered lists, and table rows containing constraint keywords (`must`, `never`, `always`, `forbidden`, `required`, `mandatory`). For `.instructions.md` files, the YAML frontmatter `applyTo` glob scopes which files a rule set targets. Detection is pattern-based (line and whole-file matching), not a full AST analysis.

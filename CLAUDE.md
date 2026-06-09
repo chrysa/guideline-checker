@@ -65,7 +65,7 @@ For projects using `chrysa/pre-commit-tools`, add both repos to `.pre-commit-con
 guideline_checker/
   __init__.py           # Package version
   checker.py            # Core check engine — runs rules against source files
-  cli.py                # CLI entry point (argparse) — init/check/synthesize/web subcommands
+  cli.py                # CLI entry point (argparse) — init/check/synthesize/web/central/push subcommands
   hook.py               # Pre-commit hook entry point (delegates to cli.main)
   loader.py             # Instruction file loader and parser (markdown sources)
   guidelines.py         # Structured YAML rule referential loader (guidelines/<dimension>/*.yml)
@@ -74,7 +74,8 @@ guideline_checker/
     html.py             # HTML report generator (string templates)
     json_reporter.py    # JSON report output
   web/
-    app.py              # FastAPI dashboard (web subcommand / Docker)
+    app.py              # FastAPI single-repo dashboard (web subcommand / Docker)
+    central.py          # FastAPI central server — ingest + multi-repo aggregate (central subcommand)
     auth.py             # Pluggable auth (api_key / local / ldap / oidc)
 .pre-commit-hooks.yaml  # Hook definition for pre-commit framework
 tests/
@@ -85,6 +86,7 @@ tests/
   test_json_reporter.py # JSON reporter tests
   test_loader.py        # Loader tests
   test_guidelines.py    # YAML referential loader + severity-override tests
+  test_central.py       # Central server ingest/aggregate + push command tests
 ```
 
 ## Hook configuration
