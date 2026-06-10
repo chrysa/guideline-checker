@@ -109,6 +109,56 @@ def test_ingest_rejects_unsafe_repo_name(client: TestClient, bad: str) -> None:
     assert res.status_code == 422
 
 
+# ── history & trend ──────────────────────────────────────────────────────────────
+
+
+def test_history_accumulates_oldest_first(client: TestClient, store: Path) -> None:
+    client.post("/api/ingest", json=_ingest_body(commit="c1", summary={**_SUMMARY, "errors": 5}))
+    client.post("/api/ingest", json=_ingest_body(commit="c2", summary={**_SUMMARY, "errors": 3}))
+    assert (store / "history" / "demo-repo.jsonl").is_file()
+
+    body = client.get("/api/repos/demo-repo/history").json()
+    assert body["count"] == 2
+    assert [e["commit"] for e in body["history"]] == ["c1", "c2"]  # oldest first
+    assert [e["summary"]["errors"] for e in body["history"]] == [5, 3]
+    # full report is not retained in history points
+    assert "report" not in body["history"][0]
+
+
+def test_history_limit_keeps_most_recent(client: TestClient) -> None:
+    for i in range(4):
+        client.post("/api/ingest", json=_ingest_body(commit=f"c{i}"))
+    body = client.get("/api/repos/demo-repo/history", params={"limit": 2}).json()
+    assert [e["commit"] for e in body["history"]] == ["c2", "c3"]
+
+
+def test_history_empty_for_unknown_repo(client: TestClient) -> None:
+    body = client.get("/api/repos/never-seen/history").json()
+    assert body == {"repo": "never-seen", "history": [], "count": 0}
+
+
+def test_history_rejects_unsafe_repo_name(client: TestClient) -> None:
+    assert client.get("/api/repos/..%2Fevil/history").status_code == 404
+
+
+def test_history_capped_at_limit(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("guideline_checker.web.central._HISTORY_LIMIT", 3)
+    for i in range(5):
+        client.post("/api/ingest", json=_ingest_body(commit=f"c{i}"))
+    body = client.get("/api/repos/demo-repo/history").json()
+    assert body["count"] == 3
+    assert [e["commit"] for e in body["history"]] == ["c2", "c3", "c4"]
+
+
+def test_error_trend_in_listing(client: TestClient) -> None:
+    # single snapshot → no trend yet
+    client.post("/api/ingest", json=_ingest_body(summary={**_SUMMARY, "errors": 4}))
+    assert client.get("/api/repos").json()["repos"][0]["error_trend"] is None
+    # second snapshot with fewer errors → negative delta
+    client.post("/api/ingest", json=_ingest_body(summary={**_SUMMARY, "errors": 1}))
+    assert client.get("/api/repos").json()["repos"][0]["error_trend"] == -3
+
+
 # ── auth ─────────────────────────────────────────────────────────────────────────
 
 
