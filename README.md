@@ -149,7 +149,7 @@ Run the server (needs the `web` extra; reuses the same `AUTH_MODE` contract):
 guideline-checker central --store ./central-store --host 0.0.0.0 --port 8090
 ```
 
-It exposes `POST /api/ingest` (auth), `GET /api/repos`, `GET /api/repos/{repo}`, and an aggregated dashboard at `/`. Reports are stored as one JSON file per repo under `CENTRAL_STORE` (default `./central-store`).
+It exposes `POST /api/ingest` (auth), `GET /api/repos` (latest snapshot + error trend per repo), `GET /api/repos/{repo}`, `GET /api/repos/{repo}/history?limit=N` (compliance over time), and an aggregated dashboard at `/` (with ▲/▼ trend arrows). Reports are stored as one JSON file per repo under `CENTRAL_STORE` (default `./central-store`), plus a bounded `history/<repo>.jsonl` log.
 
 Push a report from a repo's CI (or anywhere):
 

@@ -2,17 +2,20 @@
 
 Each chrysa repo runs ``guideline-checker check --json`` in CI and pushes the
 report here (``guideline-checker push`` or a plain HTTP POST). The server keeps
-the latest snapshot per repo and presents a single multi-repo compliance view.
+the latest snapshot per repo plus a bounded per-repo history, and presents a
+single multi-repo compliance view with an error trend.
 
 Storage is intentionally dependency-free: one JSON file per repo under
-``CENTRAL_STORE`` (default ``./central-store``). Authentication reuses the same
-env-driven contract as the single-repo dashboard (see
+``CENTRAL_STORE`` (default ``./central-store``), plus an append-only
+``history/<repo>.jsonl`` capped at ``_HISTORY_LIMIT`` points. Authentication
+reuses the same env-driven contract as the single-repo dashboard (see
 :mod:`guideline_checker.web.auth`).
 """
 
 from __future__ import annotations
 
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -33,6 +36,10 @@ _REPO_PATTERN = r"^[A-Za-z0-9._-]+$"
 def _store_dir() -> Path:
     """Return the (env-configurable) directory backing the report store."""
     return Path(os.environ.get("CENTRAL_STORE", "./central-store"))
+
+
+# Maximum history points kept per repo (oldest are dropped). Bounds file growth.
+_HISTORY_LIMIT = 200
 
 
 # ── Models ─────────────────────────────────────────────────────────────────────
@@ -72,6 +79,15 @@ class RepoRecord(BaseModel):
     report: dict[str, Any] | None = None
 
 
+class HistoryEntry(BaseModel):
+    """One point in a repo's compliance history (the full report is not kept)."""
+
+    received_at: str
+    commit: str | None = None
+    branch: str | None = None
+    summary: ReportSummary
+
+
 # ── Store ──────────────────────────────────────────────────────────────────────
 
 
@@ -109,6 +125,37 @@ def _all_records() -> list[RepoRecord]:
     return records
 
 
+def _history_path(repo: str) -> Path:
+    """Return the append-only history log path for a repo (one JSON object per line)."""
+    return _store_dir() / "history" / f"{repo}.jsonl"
+
+
+def _append_history(entry: HistoryEntry, repo: str) -> None:
+    """Append a point to the repo history, trimming to the last ``_HISTORY_LIMIT``."""
+    path = _history_path(repo)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    lines.append(entry.model_dump_json())
+    path.write_text("\n".join(lines[-_HISTORY_LIMIT:]) + "\n", encoding="utf-8")
+
+
+def _load_history(repo: str, limit: int | None = None) -> list[HistoryEntry]:
+    """Return a repo's history oldest-first; ``limit`` keeps only the most recent points."""
+    path = _history_path(repo)
+    if not path.is_file():
+        return []
+    entries: list[HistoryEntry] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(HistoryEntry.model_validate_json(line))
+        except ValueError:
+            continue
+    return entries[-limit:] if limit is not None and limit > 0 else entries
+
+
 # ── App ────────────────────────────────────────────────────────────────────────
 
 central_app: FastAPI = FastAPI(
@@ -140,12 +187,26 @@ def ingest(payload: IngestPayload) -> dict[str, str]:
         report=payload.report,
     )
     _save_record(record)
+    _append_history(
+        HistoryEntry(
+            received_at=record.received_at, commit=record.commit, branch=record.branch, summary=record.summary
+        ),
+        record.repo,
+    )
     return {"status": "stored", "repo": record.repo}
+
+
+def _error_trend(repo: str) -> int | None:
+    """Return the error-count delta vs the previous snapshot (None if no prior point)."""
+    history = _load_history(repo, limit=2)
+    if len(history) < 2:
+        return None
+    return history[-1].summary.errors - history[-2].summary.errors
 
 
 @central_app.get("/api/repos", response_model=None, dependencies=[Depends(require_auth)])
 def list_repos() -> JSONResponse:
-    """Return the latest snapshot summary for every known repo."""
+    """Return the latest snapshot summary for every known repo, with an error trend."""
     repos = [
         {
             "repo": r.repo,
@@ -154,10 +215,20 @@ def list_repos() -> JSONResponse:
             "generated_at": r.generated_at,
             "received_at": r.received_at,
             "summary": r.summary.model_dump(),
+            "error_trend": _error_trend(r.repo),
         }
         for r in _all_records()
     ]
     return JSONResponse({"repos": repos, "count": len(repos)})
+
+
+@central_app.get("/api/repos/{repo}/history", response_model=None, dependencies=[Depends(require_auth)])
+def repo_history(repo: str, limit: int = 0) -> JSONResponse:
+    """Return a repo's compliance history oldest-first (``limit`` keeps the most recent points)."""
+    if not re.fullmatch(_REPO_PATTERN, repo):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown repo {repo!r}")
+    entries = _load_history(repo, limit=limit or None)
+    return JSONResponse({"repo": repo, "history": [e.model_dump() for e in entries], "count": len(entries)})
 
 
 @central_app.get("/api/repos/{repo}", response_model=None, dependencies=[Depends(require_auth)])
@@ -223,6 +294,12 @@ _CENTRAL_HTML: str = """<!DOCTYPE html>
       return k;
     }
     function fmt(ts) { return ts ? new Date(ts).toLocaleString() : '—'; }
+    function trend(t) {
+      if (t === null || t === undefined) return '';
+      if (t > 0) return ` <span class="err" title="+${t} vs previous">▲</span>`;
+      if (t < 0) return ` <span class="ok" title="${t} vs previous">▼</span>`;
+      return ' <span class="muted" title="no change">→</span>';
+    }
     async function load() {
       const msg = document.getElementById('msg');
       try {
@@ -243,7 +320,7 @@ _CENTRAL_HTML: str = """<!DOCTYPE html>
           tr.innerHTML =
             `<td>${r.repo}</td>` +
             `<td class="muted">${r.branch || '—'}</td>` +
-            `<td class="num ${cls}">${s.errors}</td>` +
+            `<td class="num ${cls}">${s.errors}${trend(r.error_trend)}</td>` +
             `<td class="num">${s.warnings}</td>` +
             `<td class="num muted">${s.files_checked}</td>` +
             `<td class="muted">${fmt(r.received_at)}</td>`;
