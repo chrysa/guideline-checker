@@ -57,4 +57,9 @@ path traversal.
 The **`push` command uses only the standard library** (`urllib`), so reporting repos do not need
 the `web` extra (the server side does). Ingest auth reuses the existing `AUTH_MODE` contract.
 
+*Update 2026-06-10*: added a bounded per-repo **history** alongside the latest snapshot — an
+append-only `history/<repo>.jsonl` capped at `_HISTORY_LIMIT` points (oldest dropped). It powers
+`GET /api/repos/{repo}/history` and the error trend (`▲/▼`) in the aggregated view. Still
+file-backed and swappable; the cap keeps growth bounded without a database.
+
 ---
