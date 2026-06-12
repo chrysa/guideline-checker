@@ -201,9 +201,9 @@ def test_shipped_pydantic_rule_fires_on_v1_import(tmp_path: Path) -> None:
         tmp_path,
         "  - id: py-pydantic-v2\n    category: stack\n    severity: error\n"
         '    rule: "Use Pydantic v2 models exclusively; v1 syntax is forbidden"\n'
-        "    detect:\n      forbid:\n        - 'from pydantic import validator'\n",
+        "    detect:\n      forbid:\n        - 'from pydantic import validator'\n",  # guideline: disable
     )
-    _write(tmp_path / "models.py", "from pydantic import validator\n")
+    _write(tmp_path / "models.py", "from pydantic import validator\n")  # guideline: disable
     results = run_checks(tmp_path, all_sources=True)
     flagged = [v for r in results for v in r.violations if "pydantic" in v.rule.lower()]
     assert flagged
