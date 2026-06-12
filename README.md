@@ -196,6 +196,29 @@ rules:
 
 The `<dimension>` directory sets the target field (`model_target` / `language_target`); a rule may override it (e.g. `"*"` for a transverse rule living in a targeted file). The target maps to an `applyTo` glob (`python → **/*.py`, `typescript → **/*.ts,**/*.tsx`, `*`/model → `**/*`). Unknown categories fail the load; duplicate `id`s resolve first-match-wins and are logged. The referential is filesystem-only — no external registry, no source links.
 
+#### Declarative detectors (`detect:`)
+
+By default a rule only produces violations when its prose matches one of the checker's built-in trigger phrases (`"no print"`, `"no bare except"`, …). A rule whose wording the checker doesn't recognise loads and is reported, but silently never fires. Add an optional `detect:` block to make a rule carry its own detector — so any rule fires without a code change:
+
+```yaml
+rules:
+  - id: py-pydantic-v2
+    category: stack
+    severity: error
+    rule: "Use Pydantic v2 models exclusively; v1 syntax is forbidden"
+    detect:
+      forbid:                       # per-line, case-insensitive substrings
+        - "from pydantic import validator"
+        - "@root_validator"
+      forbid_regex:                 # per-line, case-insensitive regexes
+        - "\\.parse_obj\\("
+      file_regex:                   # whole-file regexes (MULTILINE | IGNORECASE) — structural/multiline
+        - "@(?:app|router)\\.(?:get|post)\\([^\\n]*\\)\\s*\\n\\s*def\\s"
+      match_in_comments: false      # default false; applies to forbid / forbid_regex
+```
+
+All keys are optional but a `detect:` block must declare at least one pattern. A declared violation inherits the rule's own `severity`. Inline `guideline: disable` suppression and the `applyTo` scoping apply to declared detectors exactly as to the built-in ones. Phrase-derived detection still runs alongside, so the two can coexist on one rule.
+
 ## Development
 
 ```bash

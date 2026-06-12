@@ -12,7 +12,7 @@ from dataclasses import replace as dataclass_replace
 from pathlib import Path
 from typing import NamedTuple
 
-from guideline_checker.loader import InstructionFile, load_all_sources, load_instructions
+from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources, load_instructions
 
 IGNORE_DIRS = {
     ".git",
@@ -384,8 +384,8 @@ def _check_file(
     for rule in instruction.rules:
         # Whole-file checks (presence/absence)
         rule_violations = _check_presence_rules(file_path, lines, file_content, rule)
-        # Per-line checks
-        rule_violations.extend(_evaluate_rule(file_path, lines, rule))
+        # Per-line checks (phrase-derived + any declarative detector the rule carries)
+        rule_violations.extend(_evaluate_rule(file_path, lines, rule, instruction.rule_detectors.get(rule)))
 
         # Structured sources (YAML referential) carry an explicit severity that
         # overrides the phrasing-derived default. Markdown sources leave
@@ -400,14 +400,23 @@ def _check_file(
     return violations
 
 
-def _evaluate_rule(file_path: Path, lines: list[str], rule: str) -> list[Violation]:
-    """Evaluate a natural-language rule against file lines (basic pattern matching)."""
+def _evaluate_rule(
+    file_path: Path,
+    lines: list[str],
+    rule: str,
+    detector: RuleDetector | None = None,
+) -> list[Violation]:
+    """Evaluate a rule against file lines: phrase-derived checks plus, when the
+    rule carries one, its declarative detector. Both paths can fire."""
     violations: list[Violation] = []
     rule_lower = rule.lower()
 
-    # Length-based rules are handled separately (need the full file)
+    # Length-based rules are handled separately (need the full file). A declared
+    # detector still runs even for a length rule, so collect it before returning.
     length_violations = _check_length_rules(file_path, lines, rule_lower)
     if length_violations:
+        if detector is not None:
+            length_violations.extend(_declared_violations(file_path, lines, rule, detector))
         return length_violations
 
     # Detect common anti-patterns based on rule text
@@ -430,7 +439,77 @@ def _evaluate_rule(file_path: Path, lines: list[str], rule: str) -> list[Violati
                 )
                 break  # one violation per line per rule
 
+    if detector is not None:
+        violations.extend(_declared_violations(file_path, lines, rule, detector))
+
     return violations
+
+
+def _declared_violations(
+    file_path: Path,
+    lines: list[str],
+    rule: str,
+    detector: RuleDetector,
+) -> list[Violation]:
+    """Run a rule's declarative detector. Severity is left as ``"warning"`` and
+    overridden by the rule's own severity in :func:`_check_file`."""
+    violations: list[Violation] = []
+
+    # Per-line patterns: substrings (forbid) and regexes (forbid_regex).
+    regexes = tuple(_compile_regex(p) for p in detector.forbid_regex)
+    for lineno, line in enumerate(lines, start=1):
+        if DISABLE_COMMENT in line:
+            continue
+        matched = any(
+            _line_matches(line, pat, match_in_comments=detector.match_in_comments) for pat in detector.forbid
+        ) or _line_passes_regex(line, regexes, match_in_comments=detector.match_in_comments)
+        if matched:
+            violations.append(
+                Violation(
+                    file=file_path,
+                    line_number=lineno,
+                    line_content=line.strip()[:120],
+                    rule=rule,
+                    severity="warning",
+                ),
+            )
+
+    # Whole-file (structural / multiline) patterns.
+    if detector.file_regex:
+        content = "\n".join(lines)
+        for pattern in detector.file_regex:
+            for match in _compile_regex(pattern).finditer(content):
+                lineno = content.count("\n", 0, match.start()) + 1
+                line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
+                if DISABLE_COMMENT in line:
+                    continue
+                violations.append(
+                    Violation(
+                        file=file_path,
+                        line_number=lineno,
+                        line_content=line.strip()[:120],
+                        rule=rule,
+                        severity="warning",
+                    ),
+                )
+
+    return violations
+
+
+def _line_passes_regex(line: str, regexes: tuple[re.Pattern[str], ...], *, match_in_comments: bool) -> bool:
+    """Return True if any compiled regex matches the line (comment rules as for substrings)."""
+    if not regexes:
+        return False
+    stripped = line.strip()
+    if not match_in_comments and stripped.startswith(("#", "//", "*", "'")):
+        return False
+    return any(rx.search(line) for rx in regexes)
+
+
+@functools.cache
+def _compile_regex(pattern: str) -> re.Pattern[str]:
+    """Compile (and cache) a declarative-detector regex, case-insensitive and multiline."""
+    return re.compile(pattern, re.IGNORECASE | re.MULTILINE)
 
 
 @functools.cache
