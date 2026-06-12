@@ -71,7 +71,12 @@ guideline-checker check --no-multi-source --instructions .github/instructions/
 
 # Include external linter results in the report
 guideline-checker check --linters ruff mypy      # or --linters with no args to auto-detect
+
+# Skip paths from the scan (repeatable; each value may be comma-separated)
+guideline-checker check --exclude tests --exclude 'scripts/**,**/*.md'
 ```
+
+`--exclude` takes globs relative to `--root`. A bare directory name (`tests`) excludes everything beneath it; `**` matches recursively (`scripts/**/*.py`). It also narrows `--diff` runs.
 
 `--fail-on` accepts `error` (default), `warning`, or `never`.
 
@@ -105,6 +110,7 @@ The repo ships a composite action (`action.yml`) that installs the tool, runs `c
   uses: chrysa/guideline-checker@v1
   with:
     fail-on: error          # error | warning | never
+    # exclude: 'tests, scripts/**'   # comma-separated globs to skip
     # instructions: ''      # defaults to <root>/.github/instructions
     # upload-sarif: 'true'
     # central-server: ''     # e.g. https://guidelines.example.com — set to enable the push

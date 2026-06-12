@@ -9,7 +9,7 @@ import re
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources, load_instructions
@@ -145,6 +145,7 @@ def run_checks(
     instructions_dir: Path | None = None,
     diff_files: list[Path] | None = None,
     all_sources: bool = True,
+    exclude: list[str] | None = None,
 ) -> list[RuleResult]:
     """Check all files in root against instruction files.
 
@@ -158,6 +159,9 @@ def run_checks(
         all_sources: When True (default), use :func:`load_all_sources` to
             discover all instruction sources (Copilot, Claude, Agents).
             When False, load only ``*.instructions.md`` from ``instructions_dir``.
+        exclude: Glob patterns (relative to ``root``) whose matching files are
+            skipped. Each entry may be comma-separated; a bare directory name
+            excludes everything beneath it. Applies to ``--diff`` files too.
     """
     if all_sources:
         instructions = load_all_sources(root)
@@ -166,6 +170,10 @@ def run_checks(
     else:
         instructions = load_all_sources(root)
     all_files = diff_files if diff_files is not None else _collect_files(root)
+
+    exclude_patterns = [p for raw in (exclude or []) for p in _split_patterns(raw)]
+    if exclude_patterns:
+        all_files = [f for f in all_files if not _is_excluded(f, root, exclude_patterns)]
 
     # Narrow apply_to for instructions whose filename hints at a specific language
     instructions = [_narrow_apply_to(instr) for instr in instructions]
@@ -288,6 +296,30 @@ def _collect_files(root: Path) -> list[Path]:
         and path.name not in IGNORE_FILES
         and _is_text_file(path)
     ]
+
+
+def _is_excluded(file_path: Path, root: Path, patterns: list[str]) -> bool:
+    """Return True if ``file_path`` (relative to ``root``) matches any exclude pattern.
+
+    A pattern matches when the relative POSIX path equals it, lives beneath it
+    (bare-directory exclusion, e.g. ``tests`` skips ``tests/a/b.py``), or matches
+    it as a recursive glob (``**`` supported via :meth:`PurePath.full_match`,
+    e.g. ``scripts/**/*.py`` or ``**/*.md``).
+    """
+    try:
+        rel = file_path.relative_to(root).as_posix()
+    except ValueError:
+        return False
+    rel_path = PurePosixPath(rel)
+    for raw in patterns:
+        pat = raw.strip().rstrip("/")
+        if not pat:
+            continue
+        if rel == pat or rel.startswith(pat + "/"):
+            return True
+        if rel_path.full_match(pat):
+            return True
+    return False
 
 
 def _split_patterns(pattern: str) -> list[str]:
