@@ -88,6 +88,33 @@ def test_bare_and_unknown_owner_decorators_ignored() -> None:
     assert run_ast_checks(["sync-fastapi-route"], src) == []
 
 
+# ─── mutable-default-arg ──────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "default",
+    ["[]", "{}", "{1, 2}", "list()", "dict()", "set()"],
+)
+def test_mutable_default_flagged(default: str) -> None:
+    src = f"def f(x={default}):\n    return x\n"
+    found = run_ast_checks(["mutable-default-arg"], src)
+    assert [lineno for lineno, _ in found] == [1]
+
+
+def test_mutable_default_keyword_only_and_async() -> None:
+    src = "async def f(*, items=[]):\n    return items\n"
+    assert run_ast_checks(["mutable-default-arg"], src)
+
+
+@pytest.mark.parametrize(
+    "default",
+    ["None", "5", "'s'", "()", "(1, 2)", "frozenset()", "MY_CONST"],
+)
+def test_immutable_default_ignored(default: str) -> None:
+    src = f"def f(x={default}):\n    return x\n"
+    assert run_ast_checks(["mutable-default-arg"], src) == []
+
+
 # ─── run_ast_checks behaviour ─────────────────────────────────────────────────
 
 
@@ -101,7 +128,7 @@ def test_unknown_name_ignored_at_runtime() -> None:
 
 def test_unknown_checks_helper() -> None:
     assert unknown_checks(["pydantic-v1", "nope"]) == ["nope"]
-    assert set(VALID_AST_CHECKS) == {"pydantic-v1", "sync-fastapi-route"}
+    assert set(VALID_AST_CHECKS) == {"pydantic-v1", "sync-fastapi-route", "mutable-default-arg"}
 
 
 # ─── YAML wiring + end-to-end ─────────────────────────────────────────────────
