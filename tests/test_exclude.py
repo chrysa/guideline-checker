@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from guideline_checker import cli
-from guideline_checker.checker import _is_excluded, run_checks
+from guideline_checker.checker import _is_excluded, _read_ignore_file, run_checks
 
 _CATEGORIES = """\
 categories:
@@ -109,3 +109,30 @@ def test_cli_accepts_repeated_exclude(tmp_path: Path) -> None:
     )
     # Both violating files excluded → no error-level violations → exit 0.
     assert code == 0
+
+
+# ─── .guidelineignore file ────────────────────────────────────────────────────
+
+
+def test_read_ignore_file_absent_is_empty(tmp_path: Path) -> None:
+    assert _read_ignore_file(tmp_path) == []
+
+
+def test_read_ignore_file_skips_comments_and_blanks(tmp_path: Path) -> None:
+    _write(tmp_path / ".guidelineignore", "# a comment\n\ntests\n  scripts/**  \n")
+    assert _read_ignore_file(tmp_path) == ["tests", "scripts/**"]
+
+
+def test_guidelineignore_excludes_files(tmp_path: Path) -> None:
+    _project(tmp_path)
+    _write(tmp_path / ".guidelineignore", "# skip the test tree\ntests\n")
+    flagged = _foo_violations(tmp_path)
+    assert len(flagged) == 1
+    assert all("tests" not in f for f in flagged)
+
+
+def test_guidelineignore_and_exclude_arg_combine(tmp_path: Path) -> None:
+    _project(tmp_path)
+    _write(tmp_path / ".guidelineignore", "tests\n")
+    # File ignores tests/, the arg ignores src/ → both violating files skipped.
+    assert _foo_violations(tmp_path, exclude=["src"]) == []

@@ -78,6 +78,15 @@ guideline-checker check --exclude tests --exclude 'scripts/**,**/*.md'
 
 `--exclude` takes globs relative to `--root`. A bare directory name (`tests`) excludes everything beneath it; `**` matches recursively (`scripts/**/*.py`). It also narrows `--diff` runs.
 
+To scope the scan without passing `--exclude` on every run (e.g. for the pre-commit hook, which runs with no arguments), drop a **`.guidelineignore`** file at the project root — one glob per line, `#` comments and blank lines ignored, same pattern semantics as `--exclude`. Its patterns are merged with any `--exclude` values.
+
+```gitignore
+# .guidelineignore
+tests
+scripts/**
+**/*.generated.ts
+```
+
 `--fail-on` accepts `error` (default), `warning`, or `never`.
 
 ### Multi-repo synthesis
