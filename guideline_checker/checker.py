@@ -163,6 +163,7 @@ def run_checks(
         exclude: Glob patterns (relative to ``root``) whose matching files are
             skipped. Each entry may be comma-separated; a bare directory name
             excludes everything beneath it. Applies to ``--diff`` files too.
+            Patterns from a ``<root>/.guidelineignore`` file are merged in.
     """
     if all_sources:
         instructions = load_all_sources(root)
@@ -173,6 +174,7 @@ def run_checks(
     all_files = diff_files if diff_files is not None else _collect_files(root)
 
     exclude_patterns = [p for raw in (exclude or []) for p in _split_patterns(raw)]
+    exclude_patterns.extend(_read_ignore_file(root))
     if exclude_patterns:
         all_files = [f for f in all_files if not _is_excluded(f, root, exclude_patterns)]
 
@@ -297,6 +299,28 @@ def _collect_files(root: Path) -> list[Path]:
         and path.name not in IGNORE_FILES
         and _is_text_file(path)
     ]
+
+
+IGNORE_FILE_NAME = ".guidelineignore"
+
+
+def _read_ignore_file(root: Path) -> list[str]:
+    """Read ``<root>/.guidelineignore`` — one glob per line, ``#`` comments and blanks ignored.
+
+    Same pattern semantics as ``--exclude`` (see :func:`_is_excluded`). Absent or
+    unreadable file yields no patterns, so the feature is purely opt-in.
+    """
+    ignore_path = root / IGNORE_FILE_NAME
+    try:
+        text = ignore_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    patterns: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            patterns.append(stripped)
+    return patterns
 
 
 def _is_excluded(file_path: Path, root: Path, patterns: list[str]) -> bool:
