@@ -87,9 +87,36 @@ def _check_sync_fastapi_route(tree: ast.Module) -> list[tuple[int, str]]:
     return findings
 
 
+# Builtins whose call produces a fresh mutable container (``def f(x=dict())``).
+_MUTABLE_FACTORIES = frozenset({"list", "dict", "set"})
+
+
+def _is_mutable_default(node: ast.expr) -> bool:
+    """True for a default that is a shared mutable: ``[]`` / ``{}`` / ``set()`` etc."""
+    if isinstance(node, (ast.List, ast.Dict, ast.Set)):
+        return True
+    return isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _MUTABLE_FACTORIES
+
+
+def _check_mutable_default(tree: ast.Module) -> list[tuple[int, str]]:
+    """Flag function parameters whose default value is a shared mutable container."""
+    findings: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        defaults = [*node.args.defaults, *node.args.kw_defaults]
+        findings.extend(
+            (d.lineno, f"mutable default argument in {node.name}()")
+            for d in defaults
+            if d is not None and _is_mutable_default(d)
+        )
+    return findings
+
+
 _AST_CHECKS: dict[str, AstCheck] = {
     "pydantic-v1": _check_pydantic_v1,
     "sync-fastapi-route": _check_sync_fastapi_route,
+    "mutable-default-arg": _check_mutable_default,
 }
 
 # Exposed for the YAML loader to validate ``detect.ast`` names against.
