@@ -1,0 +1,28 @@
+---
+name: Deploy
+
+on:
+    release:
+        types: [published]
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: Image tag to deploy (e.g. v1.2.0)
+                required: true
+
+permissions:
+    contents: read
+    packages: write
+
+jobs:
+    deploy:
+        uses: chrysa/github-actions/.github/workflows/deploy.yml@main
+        with:
+            image-base: ghcr.io/chrysa/guideline-checker
+            tag: ${{ inputs.tag }}
+            backend-context: .
+            target: web
+            gitops: true
+            api-values-path: apps/dev/guideline-checker/values.yaml
+        secrets:
+            release-token: ${{ secrets.RELEASE_TOKEN }}
