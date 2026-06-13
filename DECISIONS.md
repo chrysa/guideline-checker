@@ -63,3 +63,29 @@ append-only `history/<repo>.jsonl` capped at `_HISTORY_LIMIT` points (oldest dro
 file-backed and swappable; the cap keeps growth bounded without a database.
 
 ---
+
+## D-0004 — Declarative per-rule detectors in the YAML referential
+
+**Date**: 2026-06-12
+**Status**: accepted
+
+Detection was 100 % coupled to rule **prose**: `checker._build_checks(rule_lower)` scans a rule's
+text for a fixed vocabulary of hardcoded trigger phrases and only then emits a check. A structured
+YAML rule contributed its `severity` but **no detector**, so a rule whose wording the checker did
+not recognise loaded, appeared in reports, and silently never fired — three shipped Python rules
+(`py-pydantic-v2`, `py-async-fastapi`, `py-structured-logging`) were exactly this dead weight.
+
+A rule may now carry an optional **`detect:`** block (`forbid` substrings, `forbid_regex` /
+`file_regex` regexes, `match_in_comments`). The detector type (`loader.RuleDetector`) lives in the
+loader so `guidelines` and `checker` share it without an import cycle; it flows through
+`InstructionFile.rule_detectors` (keyed by rule text, mirroring `rule_severity`) and runs in
+`checker._declared_violations` **alongside** the phrase-derived path. A declared violation inherits
+the rule's own severity. This closes the "rules as data" loop: authoring a rule that actually fires
+no longer requires editing `checker.py`.
+
+*Rejected alternatives*: (a) keep phrase-coupling and just add trigger phrases for the three rules —
+the next authored rule hits the same wall; (b) adopt a full Python AST analyser now — larger scope,
+deferred to a later increment. Backward compatible: `detect:` is optional and markdown sources never
+populate `rule_detectors`, so phrase-derived detection is unchanged for them.
+
+---

@@ -115,6 +115,17 @@ def build_parser() -> argparse.ArgumentParser:
             "Example: --linters ruff mypy"
         ),
     )
+    check_cmd.add_argument(
+        "--exclude",
+        action="append",
+        default=None,
+        metavar="GLOB",
+        help=(
+            "Skip files matching this glob (relative to --root). Repeatable, and each value "
+            "may be comma-separated. A bare directory name excludes everything beneath it. "
+            "Examples: --exclude tests --exclude 'scripts/**,**/*.md'"
+        ),
+    )
 
     # ── synthesize subcommand ────────────────────────────────────────────────
     syn_cmd = sub.add_parser(
@@ -355,6 +366,7 @@ def main(argv: list[str] | None = None) -> int:
         instructions_dir=instructions_dir,
         diff_files=diff_files,
         all_sources=use_all_sources,
+        exclude=args.exclude,
     )
 
     # ── Optional linter integration ──────────────────────────────────────────

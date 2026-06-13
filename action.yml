@@ -21,6 +21,13 @@ inputs:
 
       '
     required: false
+  exclude:
+    default: ''
+    description: 'Comma-separated globs (relative to root) to skip. A bare directory
+      name excludes everything beneath it. Example: tests, scripts/**, **/*.md
+
+      '
+    required: false
   fail-on:
     default: error
     description: 'Severity threshold that causes the action to fail. Accepted values:
@@ -69,20 +76,42 @@ runs:
     run: pip install --quiet "${{ github.action_path }}"
     shell: bash
   - env:
+      GC_EXCLUDE: ${{ inputs.exclude }}
       GC_FAIL_ON: ${{ inputs.fail-on }}
       GC_INSTRUCTIONS: ${{ inputs.instructions }}
       GC_ROOT: ${{ inputs.root }}
       GC_SARIF: ${{ inputs.sarif-output }}
     id: run
     name: Run guideline-checker
-    run: "ARGS=(check --root \"$GC_ROOT\" --sarif \"$GC_SARIF\" --markdown guideline-report.md --json guideline-report.json)\n\
-      \nif [[ -n \"$GC_INSTRUCTIONS\" ]]; then\n  ARGS+=(--instructions \"$GC_INSTRUCTIONS\"\
-      )\nfi\n\nARGS+=(--fail-on \"$GC_FAIL_ON\")\n\nset +e\nOUTPUT=$(guideline-checker\
-      \ \"${ARGS[@]}\" 2>&1)\nEXIT_CODE=$?\nset -e\n\necho \"$OUTPUT\"\n\nVIOLATIONS=$(echo\
-      \ \"$OUTPUT\" | grep -oP '\\d+(?= violation)' | head -1 || echo \"0\")\necho\
-      \ \"violations=${VIOLATIONS:-0}\" >> \"$GITHUB_OUTPUT\"\necho \"sarif-path=$(realpath\
-      \ \"$GC_SARIF\" 2>/dev/null || echo \"$GC_SARIF\")\" >> \"$GITHUB_OUTPUT\"\n\
-      \nexit $EXIT_CODE\n"
+    run: |
+      ARGS=(check --root "$GC_ROOT" --sarif "$GC_SARIF" --markdown guideline-report.md --json guideline-report.json)
+
+      if [[ -n "$GC_INSTRUCTIONS" ]]; then
+        ARGS+=(--instructions "$GC_INSTRUCTIONS")
+      fi
+
+      if [[ -n "$GC_EXCLUDE" ]]; then
+        IFS=',' read -ra _EXCLUDES <<< "$GC_EXCLUDE"
+        for _glob in "${_EXCLUDES[@]}"; do
+          _glob="$(echo "$_glob" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          [[ -n "$_glob" ]] && ARGS+=(--exclude "$_glob")
+        done
+      fi
+
+      ARGS+=(--fail-on "$GC_FAIL_ON")
+
+      set +e
+      OUTPUT=$(guideline-checker "${ARGS[@]}" 2>&1)
+      EXIT_CODE=$?
+      set -e
+
+      echo "$OUTPUT"
+
+      VIOLATIONS=$(echo "$OUTPUT" | grep -oP '\d+(?= violation)' | head -1 || echo "0")
+      echo "violations=${VIOLATIONS:-0}" >> "$GITHUB_OUTPUT"
+      echo "sarif-path=$(realpath "$GC_SARIF" 2>/dev/null || echo "$GC_SARIF")" >> "$GITHUB_OUTPUT"
+
+      exit $EXIT_CODE
     shell: bash
   - continue-on-error: true
     env:

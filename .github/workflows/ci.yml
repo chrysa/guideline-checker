@@ -173,6 +173,9 @@ jobs:
               with:
                   root: ${{ github.workspace }}
                   fail-on: error
+                  # Stack rules target consumer source; our own tests/scripts embed
+                  # anti-patterns as fixtures or print as CLI output (dogfooding noise).
+                  exclude: tests, scripts, tests/fixtures
                   sarif-output: guideline-results.sarif
                   upload-sarif: 'true'
                   python-version: '3.14'
