@@ -89,3 +89,28 @@ deferred to a later increment. Backward compatible: `detect:` is optional and ma
 populate `rule_detectors`, so phrase-derived detection is unchanged for them.
 
 ---
+
+## D-0005 — AST-backed Python detectors (`detect.ast`)
+
+**Date**: 2026-06-13
+**Status**: accepted
+
+The declarative detectors from D-0004 match **text** (`forbid` substrings, `forbid_regex`,
+`file_regex`). That is blunt for two shipped Python rules: `from pydantic import validator`
+matched even inside a string literal (we had to inline-suppress the project's own test fixtures),
+and the sync-vs-async route check was a brittle regex sensitive to spacing and multiline
+decorator arguments.
+
+Added a **`detect.ast`** key listing *named* checks resolved from `guideline_checker.ast_python`
+(stdlib `ast`, zero new deps). Two checks ship: `pydantic-v1` and `sync-fastapi-route`. A file is
+parsed once; non-Python or syntax-error files yield nothing (detection never crashes the scan).
+The two shipped rules migrated from text patterns to AST — eliminating the string-literal false
+positives and the regex brittleness. The `ast_python` module depends only on stdlib, so importing
+it from both `guidelines` (validation) and `checker` (execution) adds no cycle.
+
+*Rejected alternatives*: keep the text patterns (false positives + brittle); make AST the *only*
+detector path (would drop the cross-language `forbid`/`regex` value — the two coexist; a rule
+picks whichever fits). The named-check registry keeps the "rules as data" contract: wiring a
+shipped rule to AST is a YAML edit, not a checker edit.
+
+---
