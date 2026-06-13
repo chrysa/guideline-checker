@@ -34,6 +34,7 @@ from pathlib import Path
 
 import yaml
 
+from guideline_checker.ast_python import VALID_AST_CHECKS, unknown_checks
 from guideline_checker.loader import InstructionFile, RuleDetector, SourceType
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,8 @@ _APPLY_TO_GLOB_FIELD = "apply_to_glob"
 _DETECT_FIELD = "detect"
 # The list-of-pattern keys a ``detect:`` block may carry (all optional).
 _DETECT_PATTERN_KEYS = ("forbid", "forbid_regex", "file_regex")
+# Named Python AST checks (validated against ast_python.VALID_AST_CHECKS).
+_DETECT_AST_KEY = "ast"
 
 
 class GuidelineError(ValueError):
@@ -249,31 +252,40 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
     if not isinstance(block, dict):
         raise GuidelineError(f"{path}: rule {raw['id']!r} 'detect' must be a mapping.")
 
-    unknown = set(block) - {*_DETECT_PATTERN_KEYS, "match_in_comments"}
+    allowed = {*_DETECT_PATTERN_KEYS, _DETECT_AST_KEY, "match_in_comments"}
+    unknown = set(block) - allowed
     if unknown:
         raise GuidelineError(
-            f"{path}: rule {raw['id']!r} 'detect' has unknown key(s) {sorted(unknown)} "
-            f"(allowed: {sorted((*_DETECT_PATTERN_KEYS, 'match_in_comments'))}).",
+            f"{path}: rule {raw['id']!r} 'detect' has unknown key(s) {sorted(unknown)} (allowed: {sorted(allowed)}).",
         )
 
     patterns: dict[str, tuple[str, ...]] = {}
     for key in _DETECT_PATTERN_KEYS:
         patterns[key] = _coerce_pattern_list(path, raw["id"], key, block.get(key, []))
 
+    ast_checks = _coerce_pattern_list(path, raw["id"], _DETECT_AST_KEY, block.get(_DETECT_AST_KEY, []))
+    bad = unknown_checks(ast_checks)
+    if bad:
+        raise GuidelineError(
+            f"{path}: rule {raw['id']!r} 'detect.ast' has unknown check(s) {bad} "
+            f"(available: {sorted(VALID_AST_CHECKS)}).",
+        )
+
     match_in_comments = block.get("match_in_comments", False)
     if not isinstance(match_in_comments, bool):
         raise GuidelineError(f"{path}: rule {raw['id']!r} 'detect.match_in_comments' must be a boolean.")
 
-    if not any(patterns.values()):
+    if not any(patterns.values()) and not ast_checks:
         raise GuidelineError(
             f"{path}: rule {raw['id']!r} 'detect' declares no patterns — "
-            f"add at least one of {sorted(_DETECT_PATTERN_KEYS)} or drop the block.",
+            f"add at least one of {sorted((*_DETECT_PATTERN_KEYS, _DETECT_AST_KEY))} or drop the block.",
         )
 
     return RuleDetector(
         forbid=patterns["forbid"],
         forbid_regex=patterns["forbid_regex"],
         file_regex=patterns["file_regex"],
+        ast_checks=ast_checks,
         match_in_comments=match_in_comments,
     )
 

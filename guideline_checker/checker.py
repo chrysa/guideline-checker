@@ -12,6 +12,7 @@ from dataclasses import replace as dataclass_replace
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
+from guideline_checker.ast_python import run_ast_checks
 from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources, load_instructions
 
 IGNORE_DIRS = {
@@ -524,6 +525,23 @@ def _declared_violations(
                         severity="warning",
                     ),
                 )
+
+    # Precise AST checks (Python only). Parses once; non-Python / syntax errors
+    # yield nothing. Findings carry the AST snippet but keep the file's actual line.
+    if detector.ast_checks and file_path.suffix == ".py":
+        for lineno, snippet in run_ast_checks(detector.ast_checks, "\n".join(lines)):
+            line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
+            if DISABLE_COMMENT in line:
+                continue
+            violations.append(
+                Violation(
+                    file=file_path,
+                    line_number=lineno,
+                    line_content=(line.strip() or snippet)[:120],
+                    rule=rule,
+                    severity="warning",
+                ),
+            )
 
     return violations
 
