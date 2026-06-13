@@ -30,3 +30,12 @@ rules:
     forbid:
     - 'print('
     - 'pprint('
+- category: correctness
+  id: py-no-mutable-default
+  rationale: A shared mutable default is reused across calls — a classic aliasing bug
+  rule: Do not use mutable default arguments; default to None and build inside the body
+  severity: warning
+  detect:
+    # AST: a [] / {} / set()/list()/dict() default — precise, unlike a '=[]' substring.
+    ast:
+    - mutable-default-arg

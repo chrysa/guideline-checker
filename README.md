@@ -233,6 +233,7 @@ All keys are optional but a `detect:` block must declare at least one pattern (o
 |------|-------|
 | `pydantic-v1` | Pydantic v1 imports (`validator`, `root_validator`, `BaseSettings`, `pydantic.v1.*`) and `@validator` / `@root_validator` decorators |
 | `sync-fastapi-route` | a route decorator (`@app.get` / `@router.post` …) applied to a non-`async def` handler |
+| `mutable-default-arg` | a function parameter whose default is a shared mutable (`[]`, `{}`, `set()`, `list()`, `dict()`) |
 
 ## Development
 

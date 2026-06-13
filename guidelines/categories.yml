@@ -14,3 +14,5 @@ categories:
     description: "Testing practices"
   - id: security
     description: "Security and secrets"
+  - id: correctness
+    description: "Correctness and common bug patterns"
