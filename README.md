@@ -220,10 +220,19 @@ rules:
         - "\\.parse_obj\\("
       file_regex:                   # whole-file regexes (MULTILINE | IGNORECASE) — structural/multiline
         - "@(?:app|router)\\.(?:get|post)\\([^\\n]*\\)\\s*\\n\\s*def\\s"
+      ast:                          # named Python AST checks (precise; .py files only)
+        - pydantic-v1
       match_in_comments: false      # default false; applies to forbid / forbid_regex
 ```
 
-All keys are optional but a `detect:` block must declare at least one pattern. A declared violation inherits the rule's own `severity`. Inline `guideline: disable` suppression and the `applyTo` scoping apply to declared detectors exactly as to the built-in ones. Phrase-derived detection still runs alongside, so the two can coexist on one rule.
+All keys are optional but a `detect:` block must declare at least one pattern (or `ast` check). A declared violation inherits the rule's own `severity`. Inline `guideline: disable` suppression and the `applyTo` scoping apply to declared detectors exactly as to the built-in ones. Phrase-derived detection still runs alongside, so the two can coexist on one rule.
+
+**`ast` checks** parse the file with Python's `ast` module instead of matching text, so they fire only on the real construct — never on the same text inside a string literal or comment, and robustly across whitespace/multiline forms. They run on `.py` files only; a file that doesn't parse yields nothing. Available checks:
+
+| name | flags |
+|------|-------|
+| `pydantic-v1` | Pydantic v1 imports (`validator`, `root_validator`, `BaseSettings`, `pydantic.v1.*`) and `@validator` / `@root_validator` decorators |
+| `sync-fastapi-route` | a route decorator (`@app.get` / `@router.post` …) applied to a non-`async def` handler |
 
 ## Development
 

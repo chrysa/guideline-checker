@@ -7,23 +7,20 @@ rules:
   rule: Use Pydantic v2 models exclusively; v1 syntax is forbidden
   severity: error
   detect:
-    forbid:
-    - 'from pydantic import validator'
-    - 'from pydantic import root_validator'
-    - 'from pydantic import BaseSettings'
-    - 'from pydantic.class_validators'
-    - '@validator('
-    - '@root_validator'
-    - '.parse_obj('
+    # AST: real v1 imports / @validator decorators only — no false positives on
+    # the same text inside a string literal or comment.
+    ast:
+    - pydantic-v1
 - category: stack
   id: py-async-fastapi
   rationale: Consistent non-blocking I/O
   rule: Define FastAPI route handlers as async def
   severity: warning
   detect:
-    # A route decorator immediately followed by a plain (non-async) handler.
-    file_regex:
-    - '@(?:app|router)\.(?:get|post|put|patch|delete|head|options)\([^\n]*\)\s*\n\s*def\s'
+    # AST: a route decorator on a plain (non-async) handler, robust to spacing
+    # and multiline decorator arguments.
+    ast:
+    - sync-fastapi-route
 - category: stack
   id: py-structured-logging
   rationale: Structured logging beats ad-hoc stdout writes in production
