@@ -6,13 +6,30 @@ rules:
   rationale: chrysa stack convention
   rule: Use Pydantic v2 models exclusively; v1 syntax is forbidden
   severity: error
+  detect:
+    forbid:
+    - 'from pydantic import validator'
+    - 'from pydantic import root_validator'
+    - 'from pydantic import BaseSettings'
+    - 'from pydantic.class_validators'
+    - '@validator('
+    - '@root_validator'
+    - '.parse_obj('
 - category: stack
   id: py-async-fastapi
   rationale: Consistent non-blocking I/O
   rule: Define FastAPI route handlers as async def
   severity: warning
+  detect:
+    # A route decorator immediately followed by a plain (non-async) handler.
+    file_regex:
+    - '@(?:app|router)\.(?:get|post|put|patch|delete|head|options)\([^\n]*\)\s*\n\s*def\s'
 - category: stack
   id: py-structured-logging
   rationale: Structured logging beats ad-hoc stdout writes in production
   rule: Emit operational output through the logging module
   severity: warning
+  detect:
+    forbid:
+    - 'print('
+    - 'pprint('

@@ -25,6 +25,22 @@ class SourceType(StrEnum):
     GUIDELINES_YAML = "guidelines"  # guidelines/<dimension>/*.yml structured referential
 
 
+@dataclass(frozen=True)
+class RuleDetector:
+    """A declarative detector a structured rule carries inline.
+
+    Lets a YAML rule say *how* it is detected instead of relying on the
+    checker recognising its prose. Lives in the loader (not the checker) so
+    both ``guidelines`` and ``checker`` can reference it without a cycle. The
+    detector inherits the rule's own severity — it carries none of its own.
+    """
+
+    forbid: tuple[str, ...] = ()  # per-line, case-insensitive substring
+    forbid_regex: tuple[str, ...] = ()  # per-line, case-insensitive regex
+    file_regex: tuple[str, ...] = ()  # whole-file regex (MULTILINE | IGNORECASE)
+    match_in_comments: bool = False  # applies to forbid / forbid_regex
+
+
 @dataclass
 class InstructionFile:
     path: Path
@@ -37,6 +53,10 @@ class InstructionFile:
     # Populated only by structured sources (YAML referential); empty for markdown
     # sources, where severity stays pattern-derived in the checker.
     rule_severity: dict[str, str] = field(default_factory=dict)
+    # Maps a rule statement to its declarative detector. Populated only by YAML
+    # rules that carry a ``detect:`` block; empty otherwise, so phrase-derived
+    # detection stays the sole path for markdown sources.
+    rule_detectors: dict[str, RuleDetector] = field(default_factory=dict)
 
 
 def load_instructions(instructions_dir: Path) -> list[InstructionFile]:

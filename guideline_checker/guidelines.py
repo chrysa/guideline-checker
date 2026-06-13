@@ -34,7 +34,7 @@ from pathlib import Path
 
 import yaml
 
-from guideline_checker.loader import InstructionFile, SourceType
+from guideline_checker.loader import InstructionFile, RuleDetector, SourceType
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,9 @@ _VALID_SEVERITIES = frozenset({"error", "warning", "info"})
 
 _CATEGORIES_FILE = "categories.yml"
 _APPLY_TO_GLOB_FIELD = "apply_to_glob"
+_DETECT_FIELD = "detect"
+# The list-of-pattern keys a ``detect:`` block may carry (all optional).
+_DETECT_PATTERN_KEYS = ("forbid", "forbid_regex", "file_regex")
 
 
 class GuidelineError(ValueError):
@@ -65,6 +68,7 @@ class GuidelineRule:
     severity: str
     rule: str
     rationale: str = ""
+    detect: RuleDetector | None = None
 
 
 @dataclass
@@ -228,7 +232,62 @@ def _build_rule(
         severity=severity,
         rule=raw["rule"].strip(),
         rationale=str(raw.get("rationale", "")).strip(),
+        detect=_build_detector(path, raw),
     )
+
+
+def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
+    """Validate a rule's optional ``detect:`` block into a :class:`RuleDetector`.
+
+    All keys are optional; an absent or empty block returns ``None`` so the rule
+    falls back to phrase-derived detection. Pattern keys must be lists of
+    non-empty strings; ``match_in_comments`` must be a bool.
+    """
+    if _DETECT_FIELD not in raw:
+        return None
+    block = raw[_DETECT_FIELD]
+    if not isinstance(block, dict):
+        raise GuidelineError(f"{path}: rule {raw['id']!r} 'detect' must be a mapping.")
+
+    unknown = set(block) - {*_DETECT_PATTERN_KEYS, "match_in_comments"}
+    if unknown:
+        raise GuidelineError(
+            f"{path}: rule {raw['id']!r} 'detect' has unknown key(s) {sorted(unknown)} "
+            f"(allowed: {sorted((*_DETECT_PATTERN_KEYS, 'match_in_comments'))}).",
+        )
+
+    patterns: dict[str, tuple[str, ...]] = {}
+    for key in _DETECT_PATTERN_KEYS:
+        patterns[key] = _coerce_pattern_list(path, raw["id"], key, block.get(key, []))
+
+    match_in_comments = block.get("match_in_comments", False)
+    if not isinstance(match_in_comments, bool):
+        raise GuidelineError(f"{path}: rule {raw['id']!r} 'detect.match_in_comments' must be a boolean.")
+
+    if not any(patterns.values()):
+        raise GuidelineError(
+            f"{path}: rule {raw['id']!r} 'detect' declares no patterns — "
+            f"add at least one of {sorted(_DETECT_PATTERN_KEYS)} or drop the block.",
+        )
+
+    return RuleDetector(
+        forbid=patterns["forbid"],
+        forbid_regex=patterns["forbid_regex"],
+        file_regex=patterns["file_regex"],
+        match_in_comments=match_in_comments,
+    )
+
+
+def _coerce_pattern_list(path: Path, rule_id: object, key: str, value: object) -> tuple[str, ...]:
+    """Validate a ``detect`` pattern key into a tuple of non-empty strings."""
+    if not isinstance(value, list):
+        raise GuidelineError(f"{path}: rule {rule_id!r} 'detect.{key}' must be a list.")
+    out: list[str] = []
+    for entry in value:
+        if not isinstance(entry, str) or not entry.strip():
+            raise GuidelineError(f"{path}: rule {rule_id!r} 'detect.{key}' entries must be non-empty strings.")
+        out.append(entry)
+    return tuple(out)
 
 
 def _to_instruction_files(df: _DimensionFile) -> list[InstructionFile]:
@@ -253,6 +312,7 @@ def _to_instruction_files(df: _DimensionFile) -> list[InstructionFile]:
                 source_type=SourceType.GUIDELINES_YAML,
                 rules=[r.rule for r in rules],
                 rule_severity={r.rule: r.severity for r in rules},
+                rule_detectors={r.rule: r.detect for r in rules if r.detect is not None},
             ),
         )
     return instruction_files

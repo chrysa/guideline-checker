@@ -1,5 +1,7 @@
 config-variables:
 - GITHUB_TOKEN
+- SONAR_ORGANIZATION
+- SONAR_PROJECT_KEY
 self-hosted-runner:
   labels:
   - ubuntu-22.04
