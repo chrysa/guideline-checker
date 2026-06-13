@@ -23,6 +23,8 @@ WORKDIR /app
 RUN pip install --no-cache-dir ".[dev]"
 
 COPY tests/ ./tests/
+# The shipped referential — tests assert against it (test_guidelines, test_declarative_detectors).
+COPY guidelines/ ./guidelines/
 
 CMD ["pytest", "tests", "-v", \
     "--cov=guideline_checker", \

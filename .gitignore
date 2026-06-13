@@ -217,3 +217,7 @@ __marimo__/
 graphify-out/
 graphify
 sys
+
+# Local-only run artifacts
+.playwright-mcp/
+.quality-gate-last-report.json
