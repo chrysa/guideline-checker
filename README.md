@@ -71,7 +71,12 @@ guideline-checker check --no-multi-source --instructions .github/instructions/
 
 # Include external linter results in the report
 guideline-checker check --linters ruff mypy      # or --linters with no args to auto-detect
+
+# Skip paths from the scan (repeatable; each value may be comma-separated)
+guideline-checker check --exclude tests --exclude 'scripts/**,**/*.md'
 ```
+
+`--exclude` takes globs relative to `--root`. A bare directory name (`tests`) excludes everything beneath it; `**` matches recursively (`scripts/**/*.py`). It also narrows `--diff` runs.
 
 `--fail-on` accepts `error` (default), `warning`, or `never`.
 
@@ -105,6 +110,7 @@ The repo ships a composite action (`action.yml`) that installs the tool, runs `c
   uses: chrysa/guideline-checker@v1
   with:
     fail-on: error          # error | warning | never
+    # exclude: 'tests, scripts/**'   # comma-separated globs to skip
     # instructions: ''      # defaults to <root>/.github/instructions
     # upload-sarif: 'true'
     # central-server: ''     # e.g. https://guidelines.example.com — set to enable the push
@@ -195,6 +201,29 @@ rules:
 ```
 
 The `<dimension>` directory sets the target field (`model_target` / `language_target`); a rule may override it (e.g. `"*"` for a transverse rule living in a targeted file). The target maps to an `applyTo` glob (`python → **/*.py`, `typescript → **/*.ts,**/*.tsx`, `*`/model → `**/*`). Unknown categories fail the load; duplicate `id`s resolve first-match-wins and are logged. The referential is filesystem-only — no external registry, no source links.
+
+#### Declarative detectors (`detect:`)
+
+By default a rule only produces violations when its prose matches one of the checker's built-in trigger phrases (`"no print"`, `"no bare except"`, …). A rule whose wording the checker doesn't recognise loads and is reported, but silently never fires. Add an optional `detect:` block to make a rule carry its own detector — so any rule fires without a code change:
+
+```yaml
+rules:
+  - id: py-pydantic-v2
+    category: stack
+    severity: error
+    rule: "Use Pydantic v2 models exclusively; v1 syntax is forbidden"
+    detect:
+      forbid:                       # per-line, case-insensitive substrings
+        - "from pydantic import validator"
+        - "@root_validator"
+      forbid_regex:                 # per-line, case-insensitive regexes
+        - "\\.parse_obj\\("
+      file_regex:                   # whole-file regexes (MULTILINE | IGNORECASE) — structural/multiline
+        - "@(?:app|router)\\.(?:get|post)\\([^\\n]*\\)\\s*\\n\\s*def\\s"
+      match_in_comments: false      # default false; applies to forbid / forbid_regex
+```
+
+All keys are optional but a `detect:` block must declare at least one pattern. A declared violation inherits the rule's own `severity`. Inline `guideline: disable` suppression and the `applyTo` scoping apply to declared detectors exactly as to the built-in ones. Phrase-derived detection still runs alongside, so the two can coexist on one rule.
 
 ## Development
 
