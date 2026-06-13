@@ -96,16 +96,16 @@ web-local: ## Run the web dashboard natively (no Docker, port 8080)
 	$(PYTHON) -m guideline_checker.cli web
 
 web-up: ## Start the web dashboard (containerised, port 8080)
-	docker compose up -d web
+	docker compose up -d frontend
 
 web-down: ## Stop the web dashboard
-	docker compose stop web
+	docker compose stop frontend
 
 web-logs: ## Tail dashboard logs
-	docker compose logs -f web
+	docker compose logs -f frontend
 
 web-build: ## Build the web Docker image
-	docker compose build web
+	docker compose build frontend
 
 # ─── Cleanup ─────────────────────────────────────────────────────────────────
 
