@@ -84,10 +84,19 @@ docker-down: ## Stop services
 	docker compose down
 
 docker-test: ## Run tests inside Docker container
-	docker compose run --rm test
+	@# The test service bind-mounts ./coverage.xml into the container so pytest-cov can
+	@# write the report to the host. Docker auto-creates a *directory* for a missing
+	@# bind source, which then makes coverage's `open(path, "w")` fail (IsADirectoryError)
+	@# and crashes the whole run. Pre-create it as a file so the mount maps file -> file.
+	@rm -rf coverage.xml
+	@touch coverage.xml
+	@# -T disables pseudo-TTY allocation so the target also runs from non-interactive
+	@# contexts (CI, the run-tests pre-push hook), which otherwise fail with
+	@# "the input device is not a TTY".
+	docker compose run --rm -T test
 
 docker-lint: ## Run lint + type-check inside Docker container
-	docker compose run --rm lint
+	docker compose run --rm -T lint
 
 docker-clean: ## Remove Docker images and containers for this project
 	docker compose down --rmi local --volumes --remove-orphans
