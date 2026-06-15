@@ -114,3 +114,38 @@ picks whichever fits). The named-check registry keeps the "rules as data" contra
 shipped rule to AST is a YAML edit, not a checker edit.
 
 ---
+
+## D-0006 — JS/TS AST detection via tree-sitter
+
+**Date**: 2026-06-15
+**Status**: accepted
+
+D-0005's AST engine is stdlib `ast` — Python only. The shipped TypeScript and React rules
+(`ts-strict-types`, `ts-no-suppressions`, `react-hooks-top-level`, `react-stable-keys`,
+`react-no-inline-component-defs`) carried **no `detect:` block at all**, so they loaded,
+appeared in reports, and silently never fired — the exact dead-weight failure D-0004
+described, now for JS/TS. Three of them (the `any` type, conditional-hook, and
+inline-component rules) cannot be detected reliably with `forbid`/regex: `: any` matches
+inside strings, a conditional `useState()` is invisible to a line regex, and a component
+nested in another component's render is a structural fact no substring can see.
+
+Added a second AST engine, `guideline_checker.ast_javascript`, backed by **tree-sitter**
+(`tree-sitter` + `tree-sitter-typescript` for TS/TSX + `tree-sitter-javascript` for JS/JSX).
+It mirrors `ast_python`'s contract — named checks, `run_js_ast_checks`, `VALID_JS_AST_CHECKS`
+— so `guidelines` (validation) and `checker` (dispatch by file suffix) integrate uniformly.
+Five checks ship: `ts-any-type`, `ts-suppression`, `react-hook-order`, `react-index-key`,
+`react-inline-component`. Parsing never raises (malformed input yields an `ERROR` tree), so
+detection cannot crash the scan. The five shipped rules are now wired via `detect.ast`,
+keeping the "rules as data" contract — adding a JS/TS check is a YAML edit, not a checker edit.
+
+This adds the **first non-stdlib *detection* dependency** (`PyYAML` is data-only;
+`ast_python` is stdlib). tree-sitter is moved into the **core** `dependencies` (not the
+`web` extra) because detection is the CLI's core job. It ships prebuilt wheels, so the
+slim Docker image needs no C toolchain.
+
+*Rejected alternatives*: (a) pure-Python parsers (`esprima`, `pyjsparser`) — no TSX/JSX
+support, the very dialects the React rules target; (b) regex-only detectors — the three
+structural rules above are not regex-expressible without unacceptable false positives;
+(c) keep the rules undetected — leaves five shipped rules as permanent dead weight.
+
+---

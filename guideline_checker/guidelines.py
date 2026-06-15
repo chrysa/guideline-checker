@@ -29,15 +29,27 @@ from __future__ import annotations
 import logging
 import re
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
+from guideline_checker.ast_javascript import VALID_JS_AST_CHECKS, unknown_js_checks
 from guideline_checker.ast_python import VALID_AST_CHECKS, unknown_checks
 from guideline_checker.loader import InstructionFile, RuleDetector, SourceType
 
 logger = logging.getLogger(__name__)
+
+# Every named AST check, Python (stdlib ast) and JS/TS (tree-sitter). Names are disjoint;
+# dispatch is by file suffix at scan time, so a ``detect.ast`` list may name either engine.
+_ALL_AST_CHECKS: frozenset[str] = VALID_AST_CHECKS | VALID_JS_AST_CHECKS
+
+
+def _unknown_ast_checks(names: Sequence[str]) -> list[str]:
+    """Names that are not a registered check in either AST engine."""
+    return [n for n in unknown_checks(names) if n in unknown_js_checks(names)]
+
 
 # A dimension file declares its target via a "<dim>_target" key (model_target,
 # language_target, framework_target, …). The loader reads whichever one is present.
@@ -53,7 +65,7 @@ _APPLY_TO_GLOB_FIELD = "apply_to_glob"
 _DETECT_FIELD = "detect"
 # The list-of-pattern keys a ``detect:`` block may carry (all optional).
 _DETECT_PATTERN_KEYS = ("forbid", "forbid_regex", "file_regex")
-# Named Python AST checks (validated against ast_python.VALID_AST_CHECKS).
+# Named AST checks (validated against _ALL_AST_CHECKS: Python + JS/TS engines).
 _DETECT_AST_KEY = "ast"
 
 
@@ -264,11 +276,11 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
         patterns[key] = _coerce_pattern_list(path, raw["id"], key, block.get(key, []))
 
     ast_checks = _coerce_pattern_list(path, raw["id"], _DETECT_AST_KEY, block.get(_DETECT_AST_KEY, []))
-    bad = unknown_checks(ast_checks)
+    bad = _unknown_ast_checks(ast_checks)
     if bad:
         raise GuidelineError(
             f"{path}: rule {raw['id']!r} 'detect.ast' has unknown check(s) {bad} "
-            f"(available: {sorted(VALID_AST_CHECKS)}).",
+            f"(available: {sorted(_ALL_AST_CHECKS)}).",
         )
 
     match_in_comments = block.get("match_in_comments", False)

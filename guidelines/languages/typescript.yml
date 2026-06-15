@@ -6,8 +6,17 @@ rules:
   rationale: any disables the type checker
   rule: Prefer precise types over the any escape hatch
   severity: error
+  detect:
+    # AST: an `any` type node (annotation, `as any`, generic arg) — never a false
+    # positive on the word "any" inside a string or identifier.
+    ast:
+    - ts-any-type
 - category: stack
   id: ts-no-suppressions
   rationale: Suppression comments hide real type bugs
   rule: Resolve type errors instead of suppressing them
   severity: warning
+  detect:
+    # AST: a @ts-ignore / @ts-nocheck comment (not @ts-expect-error, which self-clears).
+    ast:
+    - ts-suppression

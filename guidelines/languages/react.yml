@@ -7,13 +7,25 @@ rules:
   rule: Call hooks only at the top level of a component or custom hook, never in loops,
     conditions, or nested functions
   severity: error
+  detect:
+    # AST: a use…() call reached through an if/loop/ternary/&& within its component.
+    ast:
+    - react-hook-order
 - category: naming
   id: react-stable-keys
   rationale: Index keys corrupt state and DOM when the list reorders
   rule: Key dynamic lists by a stable identity, never by array index
   severity: warning
+  detect:
+    # AST: a JSX key bound to the index parameter of the enclosing .map() callback.
+    ast:
+    - react-index-key
 - category: architecture
   id: react-no-inline-component-defs
   rationale: Nested definitions remount the subtree on every render, losing state
   rule: Define components at module scope, never inside another component's render
   severity: warning
+  detect:
+    # AST: a PascalCase component defined inside another component's body.
+    ast:
+    - react-inline-component
