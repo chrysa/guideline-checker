@@ -316,12 +316,45 @@ def _check_inline_component(root: Node) -> list[tuple[int, str]]:
     return out
 
 
+# ─── react-missing-effect-deps ────────────────────────────────────────────────
+
+# Hooks whose second argument is the dependency array. Omitting it re-runs the effect
+# on every render (useEffect/useLayoutEffect) or defeats memoisation (useMemo/useCallback).
+_DEPS_HOOKS = frozenset({"useEffect", "useLayoutEffect", "useMemo", "useCallback"})
+
+
+def _arg_nodes(call: Node) -> list[Node]:
+    """Non-comment argument nodes of a call expression (a trailing comment is an extra)."""
+    args = call.child_by_field_name("arguments")
+    if args is None:
+        return []
+    return [child for child in args.named_children if child.type != "comment"]
+
+
+def _check_missing_effect_deps(root: Node) -> list[tuple[int, str]]:
+    """Flag a useEffect/useLayoutEffect/useMemo/useCallback call with no dependency-array
+    second argument — it runs (or recomputes) on every render. An *empty* ``[]`` array is
+    a deliberate run-once and is not flagged; only the missing argument is."""
+    out: list[tuple[int, str]] = []
+    for node in _walk(root):
+        if node.type != "call_expression":
+            continue
+        callee = node.child_by_field_name("function")
+        if callee is None or callee.type != "identifier":
+            continue
+        name = _text(callee)
+        if name in _DEPS_HOOKS and len(_arg_nodes(node)) < 2:
+            out.append((_line(node), f"{name}() missing dependency array"))
+    return out
+
+
 _JS_AST_CHECKS: dict[str, JsAstCheck] = {
     "ts-any-type": _check_any_type,
     "ts-suppression": _check_suppression,
     "react-hook-order": _check_hook_order,
     "react-index-key": _check_index_key,
     "react-inline-component": _check_inline_component,
+    "react-missing-effect-deps": _check_missing_effect_deps,
 }
 
 # Exposed for the YAML loader to validate ``detect.ast`` names against.
