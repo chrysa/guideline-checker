@@ -316,9 +316,24 @@ def _check_inline_component(root: Node) -> list[tuple[int, str]]:
     return out
 
 
+# ─── ts-non-null-assertion ────────────────────────────────────────────────────
+
+
+def _check_non_null_assertion(root: Node) -> list[tuple[int, str]]:
+    """Flag the postfix non-null assertion ``x!`` — it silences the strict null check at
+    compile time, asserting non-null without proof.
+
+    ``non_null_expression`` is a distinct node from ``!x`` negation (``unary_expression``)
+    and ``!=``/``!==`` comparison (``binary_expression``), so this has none of the false
+    positives a ``!`` substring would hit.
+    """
+    return [(_line(node), "non-null assertion") for node in _walk(root) if node.type == "non_null_expression"]
+
+
 _JS_AST_CHECKS: dict[str, JsAstCheck] = {
     "ts-any-type": _check_any_type,
     "ts-suppression": _check_suppression,
+    "ts-non-null-assertion": _check_non_null_assertion,
     "react-hook-order": _check_hook_order,
     "react-index-key": _check_index_key,
     "react-inline-component": _check_inline_component,

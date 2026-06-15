@@ -55,6 +55,28 @@ def test_plain_comment_not_flagged() -> None:
     assert run_js_ast_checks(["ts-suppression"], "// just a note\nconst x = 1;\n", ".ts") == []
 
 
+# ─── ts-non-null-assertion ────────────────────────────────────────────────────
+
+
+def test_non_null_assertion_flagged() -> None:
+    found = run_js_ast_checks(["ts-non-null-assertion"], "const v = x!;\n", ".ts")
+    assert [lineno for lineno, _ in found] == [1]
+
+
+def test_non_null_assertion_member_access_flagged() -> None:
+    found = run_js_ast_checks(["ts-non-null-assertion"], "const v = obj!.prop;\n", ".ts")
+    assert [lineno for lineno, _ in found] == [1]
+
+
+def test_negation_not_flagged() -> None:
+    # `!x` is unary negation, not a non-null assertion.
+    assert run_js_ast_checks(["ts-non-null-assertion"], "const v = !x;\n", ".ts") == []
+
+
+def test_inequality_not_flagged() -> None:
+    assert run_js_ast_checks(["ts-non-null-assertion"], "const v = a !== b;\n", ".ts") == []
+
+
 # ─── react-hook-order ─────────────────────────────────────────────────────────
 
 
@@ -153,6 +175,7 @@ def test_unknown_js_checks_helper() -> None:
     assert set(VALID_JS_AST_CHECKS) == {
         "ts-any-type",
         "ts-suppression",
+        "ts-non-null-assertion",
         "react-hook-order",
         "react-index-key",
         "react-inline-component",
@@ -223,4 +246,7 @@ def test_shipped_js_rules_use_ast(tmp_path: Path) -> None:
     ast_by_rule = {r: d.ast_checks for i in instructions for r, d in i.rule_detectors.items()}
     assert ast_by_rule.get("Prefer precise types over the any escape hatch") == ("ts-any-type",)
     assert ast_by_rule.get("Resolve type errors instead of suppressing them") == ("ts-suppression",)
+    assert ast_by_rule.get(
+        "Prove non-null with a check instead of asserting it with the non-null operator",
+    ) == ("ts-non-null-assertion",)
     assert ast_by_rule.get("Key dynamic lists by a stable identity, never by array index") == ("react-index-key",)
