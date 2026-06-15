@@ -7,4 +7,4 @@ on:
 
 jobs:
     call:
-        uses: chrysa/github-actions/.github/workflows/dependencies.yml@main
+        uses: chrysa/github-actions/.github/workflows/dependencies.yml@v1.2.0
