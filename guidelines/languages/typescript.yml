@@ -20,3 +20,12 @@ rules:
     # AST: a @ts-ignore / @ts-nocheck comment (not @ts-expect-error, which self-clears).
     ast:
     - ts-suppression
+- category: stack
+  id: ts-no-non-null-assertion
+  rationale: The non-null assertion asserts non-null without proof, defeating strict null checks
+  rule: Prove non-null with a check instead of asserting it with the non-null operator
+  severity: warning
+  detect:
+    # AST: a postfix `x!` non_null_expression — distinct from `!x` and `!=`/`!==`.
+    ast:
+    - ts-non-null-assertion
