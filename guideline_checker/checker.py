@@ -12,6 +12,7 @@ from dataclasses import replace as dataclass_replace
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
+from guideline_checker.ast_javascript import JS_SUFFIXES, run_js_ast_checks
 from guideline_checker.ast_python import run_ast_checks
 from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources, load_instructions
 
@@ -550,10 +551,18 @@ def _declared_violations(
                     ),
                 )
 
-    # Precise AST checks (Python only). Parses once; non-Python / syntax errors
-    # yield nothing. Findings carry the AST snippet but keep the file's actual line.
-    if detector.ast_checks and file_path.suffix == ".py":
-        for lineno, snippet in run_ast_checks(detector.ast_checks, "\n".join(lines)):
+    # Precise AST checks. Python uses the stdlib ``ast`` engine, JS/TS the tree-sitter
+    # engine; each parses once and an unmatched suffix / syntax error yields nothing.
+    # Findings carry the AST snippet but keep the file's actual line.
+    if detector.ast_checks:
+        joined = "\n".join(lines)
+        if file_path.suffix == ".py":
+            ast_findings = run_ast_checks(detector.ast_checks, joined)
+        elif file_path.suffix in JS_SUFFIXES:
+            ast_findings = run_js_ast_checks(detector.ast_checks, joined, file_path.suffix)
+        else:
+            ast_findings = []
+        for lineno, snippet in ast_findings:
             line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
             if DISABLE_COMMENT in line:
                 continue
