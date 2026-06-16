@@ -153,6 +153,28 @@ def test_lowercase_render_helper_not_flagged() -> None:
     assert run_js_ast_checks(["react-inline-component"], src, ".tsx") == []
 
 
+# ─── react-missing-effect-deps ────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("hook", ["useEffect", "useLayoutEffect", "useMemo", "useCallback"])
+def test_missing_effect_deps_flagged(hook: str) -> None:
+    found = run_js_ast_checks(["react-missing-effect-deps"], f"{hook}(() => doThing());\n", ".tsx")
+    assert [lineno for lineno, _ in found] == [1]
+
+
+def test_effect_with_deps_not_flagged() -> None:
+    assert run_js_ast_checks(["react-missing-effect-deps"], "useEffect(() => doThing(), [x]);\n", ".tsx") == []
+
+
+def test_effect_empty_deps_array_not_flagged() -> None:
+    # An explicit [] is a deliberate run-once; only the *missing* argument is the smell.
+    assert run_js_ast_checks(["react-missing-effect-deps"], "useEffect(() => doThing(), []);\n", ".tsx") == []
+
+
+def test_non_hook_single_arg_call_ignored() -> None:
+    assert run_js_ast_checks(["react-missing-effect-deps"], "subscribe(() => doThing());\n", ".tsx") == []
+
+
 # ─── run_js_ast_checks behaviour ──────────────────────────────────────────────
 
 
@@ -179,6 +201,7 @@ def test_unknown_js_checks_helper() -> None:
         "react-hook-order",
         "react-index-key",
         "react-inline-component",
+        "react-missing-effect-deps",
     }
 
 
@@ -250,3 +273,6 @@ def test_shipped_js_rules_use_ast(tmp_path: Path) -> None:
         "Prove non-null with a check instead of asserting it with the non-null operator",
     ) == ("ts-non-null-assertion",)
     assert ast_by_rule.get("Key dynamic lists by a stable identity, never by array index") == ("react-index-key",)
+    assert ast_by_rule.get(
+        "Pass a dependency array to useEffect, useLayoutEffect, useMemo, and useCallback",
+    ) == ("react-missing-effect-deps",)
