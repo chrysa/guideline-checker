@@ -29,3 +29,12 @@ rules:
     # AST: a PascalCase component defined inside another component's body.
     ast:
     - react-inline-component
+- category: stack
+  id: react-effect-deps
+  rationale: A hook with no dependency array re-runs or recomputes on every render
+  rule: Pass a dependency array to useEffect, useLayoutEffect, useMemo, and useCallback
+  severity: warning
+  detect:
+    # AST: a deps-taking hook call with no second (dependency-array) argument.
+    ast:
+    - react-missing-effect-deps
