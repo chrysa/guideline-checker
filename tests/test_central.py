@@ -58,6 +58,15 @@ def test_index_html(client: TestClient) -> None:
     assert "Central" in res.text
 
 
+def test_index_dashboard_consumes_history_endpoint(client: TestClient) -> None:
+    # Drift guard: the dashboard must render the per-repo trend by fetching the
+    # history endpoint — otherwise that endpoint is dead UI weight.
+    html = client.get("/").text
+    assert "/history?limit=" in html
+    assert "sparkline" in html
+    assert "Error trend" in html
+
+
 def test_repos_empty_initially(client: TestClient) -> None:
     res = client.get("/api/repos")
     assert res.status_code == 200
