@@ -3,7 +3,7 @@
 Each chrysa repo runs ``guideline-checker check --json`` in CI and pushes the
 report here (``guideline-checker push`` or a plain HTTP POST). The server keeps
 the latest snapshot per repo plus a bounded per-repo history, and presents a
-single multi-repo compliance view with an error trend.
+single multi-repo compliance view with per-repo error-trend sparklines.
 
 Storage is intentionally dependency-free: one JSON file per repo under
 ``CENTRAL_STORE`` (default ``./central-store``), plus an append-only
@@ -268,6 +268,7 @@ _CENTRAL_HTML: str = """<!DOCTYPE html>
     .warn { color: #b80; }
     .ok { color: #2a2; }
     .muted { opacity: .6; }
+    .spark { vertical-align: middle; }
     #msg { padding: 1rem; opacity: .7; }
   </style>
 </head>
@@ -279,7 +280,7 @@ _CENTRAL_HTML: str = """<!DOCTYPE html>
     <thead>
       <tr>
         <th>Repo</th><th>Branch</th><th class="num">Errors</th>
-        <th class="num">Warnings</th><th class="num">Files</th><th>Last report</th>
+        <th class="num">Warnings</th><th class="num">Files</th><th>Error trend</th><th>Last report</th>
       </tr>
     </thead>
     <tbody id="rows"></tbody>
@@ -300,6 +301,40 @@ _CENTRAL_HTML: str = """<!DOCTYPE html>
       if (t < 0) return ` <span class="ok" title="${t} vs previous">▼</span>`;
       return ' <span class="muted" title="no change">→</span>';
     }
+    function sparkline(points) {
+      // Inline SVG polyline of the error count over the repo's report history.
+      if (points.length < 2) return '<span class="muted" title="not enough history">—</span>';
+      const w = 84, h = 18, pad = 2;
+      const max = Math.max(...points), min = Math.min(...points);
+      const span = (max - min) || 1;
+      const stepX = (w - pad * 2) / (points.length - 1);
+      const coords = points.map((v, i) => {
+        const x = pad + i * stepX;
+        const y = h - pad - ((v - min) / span) * (h - pad * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      const cls = points[points.length - 1] ? 'err' : 'ok';
+      const label = `Error history (${points.length} reports): ${points[0]} → ${points[points.length - 1]}`;
+      return `<svg class="spark ${cls}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" ` +
+             `role="img" aria-label="${label}"><title>${label}</title>` +
+             `<polyline fill="none" stroke="currentColor" stroke-width="1.5" ` +
+             `stroke-linejoin="round" stroke-linecap="round" points="${coords}"/></svg>`;
+    }
+    async function loadSparklines(cells) {
+      // Lazily fill each repo's trend cell from /api/repos/{repo}/history.
+      await Promise.all(cells.map(async ({ repo, cell }) => {
+        try {
+          const res = await fetch(`/api/repos/${encodeURIComponent(repo)}/history?limit=20`,
+                                  { headers: { 'X-Api-Key': getKey() } });
+          if (!res.ok) { cell.textContent = '—'; return; }
+          const data = await res.json();
+          cell.classList.remove('muted');
+          cell.innerHTML = sparkline(data.history.map(e => e.summary.errors));
+        } catch (e) {
+          cell.textContent = '—';
+        }
+      }));
+    }
     async function load() {
       const msg = document.getElementById('msg');
       try {
@@ -313,6 +348,7 @@ _CENTRAL_HTML: str = """<!DOCTYPE html>
         const rows = document.getElementById('rows');
         rows.innerHTML = '';
         data.repos.sort((a, b) => (b.summary.errors - a.summary.errors) || a.repo.localeCompare(b.repo));
+        const sparkCells = [];
         for (const r of data.repos) {
           const s = r.summary;
           const cls = s.errors ? 'err' : (s.warnings ? 'warn' : 'ok');
@@ -322,13 +358,22 @@ _CENTRAL_HTML: str = """<!DOCTYPE html>
             `<td class="muted">${r.branch || '—'}</td>` +
             `<td class="num ${cls}">${s.errors}${trend(r.error_trend)}</td>` +
             `<td class="num">${s.warnings}</td>` +
-            `<td class="num muted">${s.files_checked}</td>` +
-            `<td class="muted">${fmt(r.received_at)}</td>`;
+            `<td class="num muted">${s.files_checked}</td>`;
+          const sparkTd = document.createElement('td');
+          sparkTd.className = 'muted';
+          sparkTd.textContent = '…';
+          tr.appendChild(sparkTd);
+          const lastTd = document.createElement('td');
+          lastTd.className = 'muted';
+          lastTd.textContent = fmt(r.received_at);
+          tr.appendChild(lastTd);
           rows.appendChild(tr);
+          sparkCells.push({ repo: r.repo, cell: sparkTd });
         }
         msg.hidden = true;
         document.getElementById('tbl').hidden = false;
         if (!data.repos.length) { msg.hidden = false; msg.textContent = 'No reports yet.'; }
+        loadSparklines(sparkCells);
       } catch (e) {
         msg.textContent = 'Failed to load: ' + e;
       }
