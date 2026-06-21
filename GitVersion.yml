@@ -1,25 +1,26 @@
 branches:
+  chore:
+    increment: Patch
+    mode: ContinuousDeployment
+    regex: ^chore/
+    tag: alpha
   feature:
     increment: Minor
-    regex: ^feature[/-].*$
-    source_branches:
-    - main
+    mode: ContinuousDeployment
+    regex: ^feat/
     tag: alpha
   fix:
     increment: Patch
-    regex: ^fix[/-].*$
-    source_branches:
-    - main
+    mode: ContinuousDeployment
+    regex: ^fix/
     tag: beta
   main:
     increment: Patch
-    prevent_increment_of_merged_branch_version: false
+    mode: ContinuousDelivery
     regex: ^main$
     tag: ''
-  release:
-    increment: Minor
-    regex: ^release[/-].*$
-    source_branches:
-    - main
-    tag: rc
+increment: Inherit
+major-version-bump-message: ^(feat|fix|refactor)(\(.+\))?!:.+
+minor-version-bump-message: ^feat(\(.+\))?:.+
 mode: ContinuousDeployment
+patch-version-bump-message: ^(fix|refactor|perf|docs|chore)(\(.+\))?:.+
