@@ -234,6 +234,32 @@ def test_duplicate_id_first_match_wins_and_logs(tmp_path: Path, caplog: pytest.L
     assert "duplicate rule id 'dup'" in caplog.text
 
 
+def test_duplicate_id_within_same_file_raises(tmp_path: Path) -> None:
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    # Two rules sharing an id *inside one file* is an authoring bug, not an
+    # override — it must fail hard (unlike the cross-file override case).
+    _write(
+        g / "languages" / "python.yml",
+        "language_target: python\nrules:\n"
+        '  - id: dup\n    category: stack\n    severity: error\n    rule: "First"\n'
+        '  - id: dup\n    category: stack\n    severity: warning\n    rule: "Second"\n',
+    )
+    with pytest.raises(GuidelineError, match="duplicate rule id 'dup'"):
+        load_yaml_guidelines(tmp_path)
+
+
+def test_unknown_category_error_lists_valid_categories(tmp_path: Path) -> None:
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    _write(
+        g / "languages" / "python.yml",
+        'language_target: python\nrules:\n  - id: bad\n    category: stak\n    severity: error\n    rule: "X"\n',
+    )
+    with pytest.raises(GuidelineError, match=r"known categories.*stack"):
+        load_yaml_guidelines(tmp_path)
+
+
 def test_no_guidelines_dir_returns_empty(tmp_path: Path) -> None:
     assert load_yaml_guidelines(tmp_path) == []
 

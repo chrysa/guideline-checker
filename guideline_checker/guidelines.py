@@ -105,8 +105,9 @@ def load_yaml_guidelines(root: Path) -> list[InstructionFile]:
     2. Read each file's own ``*_target`` field, overridable per rule;
        ``"*"`` / ``_common.yml`` provide transverse rules.
     3. Validate every ``category`` against ``guidelines/categories.yml``.
-    4. Merge rules with *first-match-wins* on ``id`` — collisions are logged,
-       not silently swallowed.
+    4. Merge rules with *first-match-wins* on ``id`` across files (the intentional
+       transverse override, logged). A duplicate ``id`` *within a single file* is
+       an authoring bug and raises :class:`GuidelineError`.
     5. Map the effective target to an ``apply_to`` glob (the file's
        ``apply_to_glob``, or ``**/*`` for the wildcard target) and emit one
        ``InstructionFile`` per ``(file, target)`` group.
@@ -193,11 +194,23 @@ def _parse_dimension_file(
         raise GuidelineError(f"{path}: 'rules' must be a list.")
 
     rules: list[GuidelineRule] = []
+    file_ids: set[str] = set()
     for raw in raw_rules:
         rule = _build_rule(path, raw, target_field, file_target, categories)
+        if rule.id in file_ids:
+            # A duplicate id *within a single file* is always an authoring bug —
+            # there is no override intent, so fail hard.
+            raise GuidelineError(f"{path}: duplicate rule id {rule.id!r} declared twice in the same file.")
         if rule.id in seen_ids:
-            logger.warning("guidelines: duplicate rule id %r in %s — keeping first, skipping this one", rule.id, path)
+            # Cross-file collision is the intentional transverse override
+            # (e.g. _common.yml parsed first wins); keep the winner, log it.
+            logger.warning(
+                "guidelines: duplicate rule id %r in %s — keeping first (cross-file override), skipping this one",
+                rule.id,
+                path,
+            )
             continue
+        file_ids.add(rule.id)
         seen_ids.add(rule.id)
         rules.append(rule)
     return _DimensionFile(path=path, dimension=dimension, apply_to_glob=apply_to_glob, rules=rules)
@@ -222,7 +235,7 @@ def _build_rule(
     if category not in categories:
         raise GuidelineError(
             f"{path}: rule {raw['id']!r} uses unknown category {category!r} — "
-            f"add it to {_CATEGORIES_FILE} or fix the typo.",
+            f"known categories are {sorted(categories)}; add it to {_CATEGORIES_FILE} or fix the typo.",
         )
 
     severity = raw["severity"]
