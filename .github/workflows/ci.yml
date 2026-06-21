@@ -77,6 +77,6 @@ jobs:
                   project-key: chrysa_target
                   organization: chrysa
                   project-name: target
-                  sources: .
+                  sources: guideline_checker
                   tests: tests
                   coverage-report: coverage.xml
