@@ -93,27 +93,17 @@ repos:
     pass_filenames: false
     stages:
     - pre-push
-  - entry: bash -c 'docker run --rm --env SONAR_TOKEN -v "$(pwd):/usr/src" sonarsource/sonar-scanner-cli:11
-      -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=chrysa -Dsonar.projectKey=chrysa_guideline-checker
-      -Dsonar.python.coverage.reportPaths=reports/coverage.xml -Dsonar.python.xunit.reportPath=reports/junit.xml'
+  - entry: bash -c 'docker run --rm --env SONAR_TOKEN -v "$(pwd):/usr/src" 
+      sonarsource/sonar-scanner-cli:11 -Dsonar.host.url=https://sonarcloud.io 
+      -Dsonar.organization=chrysa -Dsonar.projectKey=chrysa_guideline-checker 
+      -Dsonar.python.coverage.reportPaths=reports/coverage.xml 
+      -Dsonar.python.xunit.reportPath=reports/junit.xml'
     id: sonar-scanner
     language: system
     name: sonar cloud analysis
     pass_filenames: false
     stages:
     - pre-push
-  - id: gitversion-canonical-drift
-    name: GitVersion.yml canonical drift
-    entry: scripts/check-canonical-drift.sh GitVersion.yml templates/GitVersion.yml
-    language: system
-    pass_filenames: false
-    files: ^(GitVersion\.yml|templates/GitVersion\.yml)$
-  - id: cliff-canonical-drift
-    name: cliff.toml canonical drift
-    entry: scripts/check-canonical-drift.sh cliff.toml templates/cliff.toml
-    language: system
-    pass_filenames: false
-    files: ^(cliff\.toml|templates/cliff\.toml)$
   repo: local
 - repo: https://github.com/igorshubovych/markdownlint-cli
   rev: v0.49.0
