@@ -74,9 +74,9 @@ jobs:
                   python-version: "3.14"
                   sonar-token: ${{ secrets.SONAR_TOKEN }}
                   github-token: ${{ secrets.GITHUB_TOKEN }}
-                  project-key: chrysa_guideline-checker
+                  project-key: chrysa_target
                   organization: chrysa
-                  project-name: guideline-checker
-                  sources: guideline_checker
+                  project-name: target
+                  sources: .
                   tests: tests
                   coverage-report: coverage.xml
