@@ -63,7 +63,7 @@ repos:
   - id: fastapi-missing-links
     exclude: ^tests/
   repo: https://github.com/chrysa/pre-commit-tools
-  rev: v0.1.1-94
+  rev: v0.1.1-95
 - hooks:
   - id: gitleaks
   repo: https://github.com/gitleaks/gitleaks
@@ -93,11 +93,9 @@ repos:
     pass_filenames: false
     stages:
     - pre-push
-  - entry: bash -c 'docker run --rm --env SONAR_TOKEN -v "$(pwd):/usr/src" 
-      sonarsource/sonar-scanner-cli:11 -Dsonar.host.url=https://sonarcloud.io 
-      -Dsonar.organization=chrysa -Dsonar.projectKey=chrysa_guideline-checker 
-      -Dsonar.python.coverage.reportPaths=reports/coverage.xml 
-      -Dsonar.python.xunit.reportPath=reports/junit.xml'
+  - entry: bash -c 'docker run --rm --env SONAR_TOKEN -v "$(pwd):/usr/src" sonarsource/sonar-scanner-cli:11
+      -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=chrysa -Dsonar.projectKey=chrysa_guideline-checker
+      -Dsonar.python.coverage.reportPaths=reports/coverage.xml -Dsonar.python.xunit.reportPath=reports/junit.xml'
     id: sonar-scanner
     language: system
     name: sonar cloud analysis
