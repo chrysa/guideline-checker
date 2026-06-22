@@ -773,6 +773,12 @@ class TestMaxFileSize:
         monkeypatch.setenv("GUIDELINE_MAX_FILE_SIZE", bad)
         assert _resolve_max_file_size() == self._DEFAULT
 
+    @pytest.mark.parametrize("bad_override", [0, -1, -200_000])
+    def test_non_positive_override_falls_back(self, monkeypatch: pytest.MonkeyPatch, bad_override: int) -> None:
+        """A non-positive CLI override is rejected (would disable the size filter)."""
+        monkeypatch.delenv("GUIDELINE_MAX_FILE_SIZE", raising=False)
+        assert _resolve_max_file_size(bad_override) == self._DEFAULT
+
     def test_is_text_file_respects_limit(self, tmp_path: Path) -> None:
         """A file above the limit is rejected; below the limit it is accepted."""
         big = tmp_path / "big.py"

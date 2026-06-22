@@ -107,8 +107,13 @@ _MAX_FILE_SIZE_ENV = "GUIDELINE_MAX_FILE_SIZE"
 
 
 def _resolve_max_file_size(override: int | None = None) -> int:
-    """Resolve the max scannable file size: explicit override > env var > default."""
-    if override is not None:
+    """Resolve the max scannable file size: explicit override > env var > default.
+
+    A non-positive override (e.g. ``--max-file-size -1``) is rejected and falls
+    through to the env var / default, mirroring the env-var handling below — a
+    negative cap would otherwise disable the size filter entirely.
+    """
+    if override is not None and override > 0:
         return override
     raw = os.environ.get(_MAX_FILE_SIZE_ENV)
     if raw:
