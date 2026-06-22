@@ -43,10 +43,16 @@ class TestSecretAssignmentScanner:
         # High-entropy value, but the key does not name a secret.
         assert run_scans(["secret-assignment"], 'commit_hash = "4eC39HqLyjWDarjtT1zdp7dc"') == []
 
-    def test_allowed_value_substring_is_skipped(self) -> None:
+    def test_exact_allowed_value_is_skipped(self) -> None:
         line = 'secret = "super-secret-should-not-leak"'
         assert run_scans(["secret-assignment"], line) != []  # flagged without allowlist
         assert run_scans(["secret-assignment"], line, frozenset({"super-secret-should-not-leak"})) == []
+
+    def test_partial_allowlist_entry_does_not_suppress_real_secret(self) -> None:
+        # The allowlist matches the WHOLE value, never a substring — otherwise a short
+        # entry like "super-secret" would mask every value that merely contains it.
+        line = 'secret = "super-secret-should-not-leak"'
+        assert run_scans(["secret-assignment"], line, frozenset({"super-secret"})) != []
 
     def test_reports_each_offending_line(self) -> None:
         content = f"{_FAKE_KEY_LINE}\nx = 1\nclient_secret = 'Zx9Qm2Lp7Vt4Rk8Nw1Yb6Hs3Df'\n"

@@ -75,7 +75,7 @@ def _scan_secret_assignment(content: str, allowed_values: frozenset[str]) -> lis
         key, value = match.group("key"), match.group("value")
         if not _SECRET_KEY_RE.search(key):
             continue
-        if value in allowed_values or any(allowed in value for allowed in allowed_values):
+        if value in allowed_values:
             continue
         if _ENV_REF_RE.search(value):
             continue
