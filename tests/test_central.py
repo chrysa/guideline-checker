@@ -302,3 +302,47 @@ def test_central_missing_uvicorn(monkeypatch: pytest.MonkeyPatch, capsys: pytest
     code = main(["central", "--store", "x"])
     assert code == 1
     assert "guideline-checker[web]" in capsys.readouterr().err
+
+
+# --- L1.5 configurable history limit ---
+
+
+def test_resolve_history_limit_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No env var falls back to the 200-point default."""
+    from guideline_checker.web import central as central_mod
+
+    monkeypatch.delenv("CENTRAL_HISTORY_LIMIT", raising=False)
+    assert central_mod._resolve_history_limit() == 200
+
+
+def test_resolve_history_limit_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A positive env value overrides the default."""
+    from guideline_checker.web import central as central_mod
+
+    monkeypatch.setenv("CENTRAL_HISTORY_LIMIT", "5")
+    assert central_mod._resolve_history_limit() == 5
+
+
+@pytest.mark.parametrize("bad", ["not-a-number", "0", "-3", ""])
+def test_resolve_history_limit_invalid_falls_back(monkeypatch: pytest.MonkeyPatch, bad: str) -> None:
+    """A non-positive or non-numeric env value falls back to the default."""
+    from guideline_checker.web import central as central_mod
+
+    monkeypatch.setenv("CENTRAL_HISTORY_LIMIT", bad)
+    assert central_mod._resolve_history_limit() == 200
+
+
+def test_append_history_trims_to_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """_append_history keeps only the most recent _HISTORY_LIMIT points."""
+    from guideline_checker.web import central as central_mod
+
+    monkeypatch.setenv("CENTRAL_STORE", str(tmp_path))
+    monkeypatch.setattr(central_mod, "_HISTORY_LIMIT", 3)
+    for i in range(5):
+        entry = central_mod.HistoryEntry(
+            received_at="2026-01-01T00:00:00Z",
+            summary=central_mod.ReportSummary(errors=i),
+        )
+        central_mod._append_history(entry, "demo")
+    entries = central_mod._load_history("demo")
+    assert [e.summary.errors for e in entries] == [2, 3, 4]

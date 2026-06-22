@@ -11,9 +11,11 @@ from guideline_checker.checker import (
     PatternCheck,
     _collect_files,
     _expand_brace_pattern,
+    _is_text_file,
     _line_matches,
     _matches_pattern,
     _narrow_apply_to,
+    _resolve_max_file_size,
     _split_patterns,
     run_checks,
 )
@@ -740,3 +742,67 @@ class TestDjangoChecks:
         )
         results = run_checks(root=root, instructions_dir=inst)
         assert all(len(r.violations) == 0 for r in results)
+
+
+# --- L1.5 configurable max file size ---
+
+
+class TestMaxFileSize:
+    """Unit tests for the configurable scan size limit (_resolve_max_file_size)."""
+
+    _DEFAULT = 200 * 1024
+
+    def test_default_when_no_override_or_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No override and no env var falls back to the 200 KiB default."""
+        monkeypatch.delenv("GUIDELINE_MAX_FILE_SIZE", raising=False)
+        assert _resolve_max_file_size() == self._DEFAULT
+
+    def test_explicit_override_wins_over_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An explicit override takes precedence over the env var."""
+        monkeypatch.setenv("GUIDELINE_MAX_FILE_SIZE", "9999")
+        assert _resolve_max_file_size(500_000) == 500_000
+
+    def test_env_var_used_when_no_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The env var is honoured when no explicit override is given."""
+        monkeypatch.setenv("GUIDELINE_MAX_FILE_SIZE", "500000")
+        assert _resolve_max_file_size() == 500_000
+
+    @pytest.mark.parametrize("bad", ["not-a-number", "0", "-5", ""])
+    def test_invalid_env_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch, bad: str) -> None:
+        """A non-positive or non-numeric env value falls back to the default."""
+        monkeypatch.setenv("GUIDELINE_MAX_FILE_SIZE", bad)
+        assert _resolve_max_file_size() == self._DEFAULT
+
+    @pytest.mark.parametrize("bad_override", [0, -1, -200_000])
+    def test_non_positive_override_falls_back(self, monkeypatch: pytest.MonkeyPatch, bad_override: int) -> None:
+        """A non-positive CLI override is rejected (would disable the size filter)."""
+        monkeypatch.delenv("GUIDELINE_MAX_FILE_SIZE", raising=False)
+        assert _resolve_max_file_size(bad_override) == self._DEFAULT
+
+    def test_is_text_file_respects_limit(self, tmp_path: Path) -> None:
+        """A file above the limit is rejected; below the limit it is accepted."""
+        big = tmp_path / "big.py"
+        big.write_text("x = 1\n" * 40_000)  # ~240 KB, above the default
+        assert _is_text_file(big, self._DEFAULT) is False
+        assert _is_text_file(big, 500_000) is True
+
+    def test_collect_files_skips_oversized_file_by_default(self, tmp_path: Path) -> None:
+        """_collect_files drops files larger than the default limit."""
+        (tmp_path / "big.py").write_text("x = 1\n" * 40_000)
+        (tmp_path / "small.py").write_text("x = 1\n")
+        names = [p.name for p in _collect_files(tmp_path)]
+        assert "big.py" not in names
+        assert "small.py" in names
+
+    def test_collect_files_includes_oversized_when_limit_raised(self, tmp_path: Path) -> None:
+        """A raised limit lets _collect_files return a previously-skipped large file."""
+        (tmp_path / "big.py").write_text("x = 1\n" * 40_000)
+        names = [p.name for p in _collect_files(tmp_path, max_file_size=500_000)]
+        assert "big.py" in names
+
+    def test_collect_files_honours_env_var(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """_collect_files resolves the limit from the env var when no arg is passed."""
+        (tmp_path / "big.py").write_text("x = 1\n" * 40_000)
+        monkeypatch.setenv("GUIDELINE_MAX_FILE_SIZE", "500000")
+        names = [p.name for p in _collect_files(tmp_path)]
+        assert "big.py" in names
