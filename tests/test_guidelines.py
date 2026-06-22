@@ -308,6 +308,81 @@ def test_shipped_referential_covers_spec_targets() -> None:
     assert react.apply_to == "**/*.tsx,**/*.jsx"
 
 
+# --- L1.1 secret-scanner via detect.scan ---
+
+_FAKE_KEY_LINE = 'api_key = "Zx9Qm2Lp7Vt4Rk8Nw1Yb6Hs3DfAa5Cc"\n'
+
+
+def test_detect_scan_accepted_and_recorded(tmp_path: Path) -> None:
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    _write(
+        g / "languages" / "_common.yml",
+        'language_target: "*"\nrules:\n  - id: secrets\n    category: stack\n    severity: error\n'
+        '    rule: "Secrets must come from configuration"\n    detect:\n      scan: [secret-assignment]\n',
+    )
+    instructions = load_yaml_guidelines(tmp_path)
+    detector = next(i.rule_detectors["Secrets must come from configuration"] for i in instructions if i.rule_detectors)
+    assert detector.scan_checks == ("secret-assignment",)
+
+
+def test_detect_scan_unknown_scanner_raises(tmp_path: Path) -> None:
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    _write(
+        g / "languages" / "_common.yml",
+        'language_target: "*"\nrules:\n  - id: secrets\n    category: stack\n    severity: error\n'
+        '    rule: "X"\n    detect:\n      scan: [no-such-scanner]\n',
+    )
+    with pytest.raises(GuidelineError, match="unknown scanner"):
+        load_yaml_guidelines(tmp_path)
+
+
+class TestSecretScanEndToEnd:
+    def _ref(self, tmp_path: Path) -> Path:
+        g = tmp_path / "guidelines"
+        _write(g / "categories.yml", _CATEGORIES)
+        _write(
+            g / "languages" / "_common.yml",
+            'language_target: "*"\nrules:\n  - id: secrets\n    category: stack\n    severity: error\n'
+            '    rule: "Secrets must come from configuration"\n    detect:\n      scan: [secret-assignment]\n',
+        )
+        return tmp_path
+
+    def _hits(self, root: Path) -> list:
+        results = run_checks(root, all_sources=True)
+        return [v for r in results for v in r.violations if v.rule == "Secrets must come from configuration"]
+
+    def test_flags_real_secret_as_error(self, tmp_path: Path) -> None:
+        root = self._ref(tmp_path)
+        _write(root / "src" / "app.py", _FAKE_KEY_LINE)
+        hits = self._hits(root)
+        assert len(hits) == 1
+        assert hits[0].severity == "error"
+
+    def test_allowlisted_path_skipped(self, tmp_path: Path) -> None:
+        root = self._ref(tmp_path)
+        _write(root / "pkg" / "fixture.py", _FAKE_KEY_LINE)
+        _write(root / ".secrets-allowlist", "paths:\n  - pkg/**\n")
+        assert self._hits(root) == []
+
+    def test_allowlisted_value_skipped(self, tmp_path: Path) -> None:
+        root = self._ref(tmp_path)
+        _write(root / "src" / "app.py", 'secret = "super-secret-should-not-leak"\n')
+        _write(root / ".secrets-allowlist", "values:\n  - super-secret-should-not-leak\n")
+        assert self._hits(root) == []
+
+    def test_inline_disable_skipped(self, tmp_path: Path) -> None:
+        root = self._ref(tmp_path)
+        _write(root / "src" / "app.py", 'api_key = "Zx9Qm2Lp7Vt4Rk8Nw1Yb6Hs3DfAa5Cc"  # guideline: disable\n')
+        assert self._hits(root) == []
+
+    def test_env_lookup_not_flagged(self, tmp_path: Path) -> None:
+        root = self._ref(tmp_path)
+        _write(root / "src" / "app.py", 'api_key = "${API_KEY}"\n')
+        assert self._hits(root) == []
+
+
 # --- L1.4 rule inheritance via extends: ---
 
 
