@@ -18,5 +18,9 @@ permissions:
 
 jobs:
     call:
-        uses: chrysa/github-actions/.github/workflows/release.yml@v1.2.0
+        # Pinned to the commit that fixes clean SemVer tagging (majorMinorPatch).
+        # github-actions tag versioning is currently stuck (v1.2.1 is off-mainline),
+        # so no release tag carries the fix yet; SHA-pin is immutable and secure.
+        # Re-pin to a version tag once github-actions cuts one past this commit.
+        uses: chrysa/github-actions/.github/workflows/release.yml@f4b936d69bb60983ac465a6ba25a1902b502fd70
         secrets: inherit
