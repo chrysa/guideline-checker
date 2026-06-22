@@ -12,5 +12,4 @@ on:
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/release.yml@v1.2.0
-        secrets:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        secrets: inherit
