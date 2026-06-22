@@ -78,6 +78,9 @@ addopts = "--cov=guideline_checker --cov-report=xml --cov-report=term-missing --
 [tool.coverage.run]
 source = ["guideline_checker"]
 branch = true
+# Emit repo-relative file paths in coverage.xml so SonarCloud can map them
+# to source files (otherwise paths are absolute and resolve to nothing).
+relative_files = true
 
 [tool.coverage.report]
 show_missing = true

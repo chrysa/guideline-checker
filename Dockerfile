@@ -20,7 +20,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir ".[dev]"
+# Editable install so coverage records repo-relative paths (guideline_checker/…)
+# instead of site-packages paths, which SonarCloud cannot map to source files.
+RUN pip install --no-cache-dir -e ".[dev]"
 
 COPY tests/ ./tests/
 # The shipped referential — tests assert against it (test_guidelines, test_declarative_detectors).
