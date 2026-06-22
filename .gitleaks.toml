@@ -1,0 +1,15 @@
+# gitleaks configuration for guideline-checker.
+# Extends the default ruleset; allowlists the secret-scanner test fixtures, which
+# intentionally embed fake high-entropy secrets to exercise detect.scan / the
+# secret-assignment scanner. These values never reach any real system.
+title = "guideline-checker gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake secrets in secret-scanner test fixtures"
+paths = [
+  '''tests/test_scanners\.py''',
+  '''tests/test_guidelines\.py''',
+]

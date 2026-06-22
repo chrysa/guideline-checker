@@ -12,9 +12,12 @@ from dataclasses import replace as dataclass_replace
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
+import yaml
+
 from guideline_checker.ast_javascript import JS_SUFFIXES, run_js_ast_checks
 from guideline_checker.ast_python import run_ast_checks
 from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources, load_instructions
+from guideline_checker.scanners import run_scans
 
 IGNORE_DIRS = {
     ".git",
@@ -288,7 +291,7 @@ def _file_batch_worker(
         matched = [f for f in file_batch if _matches_pattern(f, root, apply_to)]
         violations: list[Violation] = []
         for fp in matched:
-            violations.extend(_check_file(fp, instr))
+            violations.extend(_check_file(fp, instr, root=root))
         batch_results.append((idx, len(matched), violations))
     return batch_results
 
@@ -303,7 +306,7 @@ def _instruction_worker(
     matched_files = [f for f in all_files if _matches_pattern(f, root, instruction.apply_to)]
     result.files_checked = len(matched_files)
     for file_path in matched_files:
-        violations = _check_file(file_path, instruction)
+        violations = _check_file(file_path, instruction, root=root)
         result.violations.extend(violations)
     return result
 
@@ -351,6 +354,33 @@ def _read_ignore_file(root: Path) -> list[str]:
         if stripped and not stripped.startswith("#"):
             patterns.append(stripped)
     return patterns
+
+
+SECRETS_ALLOWLIST_FILE = ".secrets-allowlist"
+
+
+@functools.cache
+def _load_secrets_allowlist(root: Path) -> tuple[tuple[str, ...], frozenset[str]]:
+    """Read ``<root>/.secrets-allowlist`` → ``(path globs, value substrings)``.
+
+    A YAML file with optional ``paths`` and ``values`` lists. Files on an
+    allowlisted path are exempted from the secret scan (but still scanned for
+    every other rule); listed value substrings never count as a secret. Absent,
+    unreadable, or malformed file yields no allowances, so the feature is opt-in.
+    """
+    try:
+        text = (root / SECRETS_ALLOWLIST_FILE).read_text(encoding="utf-8")
+    except OSError:
+        return (), frozenset()
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return (), frozenset()
+    if not isinstance(data, dict):
+        return (), frozenset()
+    paths = tuple(p for p in data.get("paths", []) if isinstance(p, str) and p.strip())
+    values = frozenset(v for v in data.get("values", []) if isinstance(v, str) and v.strip())
+    return paths, values
 
 
 def _is_excluded(file_path: Path, root: Path, patterns: list[str]) -> bool:
@@ -455,6 +485,7 @@ def _check_file(
     instruction: InstructionFile,
     *,
     cached_lines: list[str] | None = None,
+    root: Path | None = None,
 ) -> list[Violation]:
     """Check a single file against an instruction's rules."""
     violations: list[Violation] = []
@@ -472,7 +503,7 @@ def _check_file(
         # Whole-file checks (presence/absence)
         rule_violations = _check_presence_rules(file_path, lines, file_content, rule)
         # Per-line checks (phrase-derived + any declarative detector the rule carries)
-        rule_violations.extend(_evaluate_rule(file_path, lines, rule, instruction.rule_detectors.get(rule)))
+        rule_violations.extend(_evaluate_rule(file_path, lines, rule, instruction.rule_detectors.get(rule), root))
 
         # Structured sources (YAML referential) carry an explicit severity that
         # overrides the phrasing-derived default. Markdown sources leave
@@ -492,6 +523,7 @@ def _evaluate_rule(
     lines: list[str],
     rule: str,
     detector: RuleDetector | None = None,
+    root: Path | None = None,
 ) -> list[Violation]:
     """Evaluate a rule against file lines: phrase-derived checks plus, when the
     rule carries one, its declarative detector. Both paths can fire."""
@@ -503,7 +535,7 @@ def _evaluate_rule(
     length_violations = _check_length_rules(file_path, lines, rule_lower)
     if length_violations:
         if detector is not None:
-            length_violations.extend(_declared_violations(file_path, lines, rule, detector))
+            length_violations.extend(_declared_violations(file_path, lines, rule, detector, root))
         return length_violations
 
     # Detect common anti-patterns based on rule text
@@ -527,7 +559,7 @@ def _evaluate_rule(
                 break  # one violation per line per rule
 
     if detector is not None:
-        violations.extend(_declared_violations(file_path, lines, rule, detector))
+        violations.extend(_declared_violations(file_path, lines, rule, detector, root))
 
     return violations
 
@@ -537,6 +569,7 @@ def _declared_violations(
     lines: list[str],
     rule: str,
     detector: RuleDetector,
+    root: Path | None = None,
 ) -> list[Violation]:
     """Run a rule's declarative detector. Severity is left as ``"warning"`` and
     overridden by the rule's own severity in :func:`_check_file`."""
@@ -604,6 +637,27 @@ def _declared_violations(
                     severity="warning",
                 ),
             )
+
+    # Named content scanners (e.g. entropy-based secret detection). The repo-level
+    # ``.secrets-allowlist`` exempts whole paths from the scan and suppresses values.
+    if detector.scan_checks:
+        allow_paths, allow_values = _load_secrets_allowlist(root) if root is not None else ((), frozenset())
+        path_allowed = root is not None and bool(allow_paths) and _is_excluded(file_path, root, list(allow_paths))
+        if not path_allowed:
+            content = "\n".join(lines)
+            for lineno, snippet in run_scans(detector.scan_checks, content, allow_values):
+                line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
+                if DISABLE_COMMENT in line:
+                    continue
+                violations.append(
+                    Violation(
+                        file=file_path,
+                        line_number=lineno,
+                        line_content=(line.strip() or snippet)[:120],
+                        rule=rule,
+                        severity="warning",
+                    ),
+                )
 
     return violations
 

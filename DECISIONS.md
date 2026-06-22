@@ -149,3 +149,85 @@ structural rules above are not regex-expressible without unacceptable false posi
 (c) keep the rules undetected — leaves five shipped rules as permanent dead weight.
 
 ---
+
+## D-0007 — Rule inheritance via `extends:` (same-file composition)
+
+**Date**: 2026-06-22
+**Status**: accepted
+
+Authoring families of related YAML rules (a shared secret pattern, a base "no console"
+detector specialised per environment) meant copy-pasting `detect:`, `severity`, `category`,
+and `rule` text across near-identical entries — the duplication D-0004 set out to avoid, now
+in the referential itself.
+
+Added an `extends: <base-rule-id>` key so a child rule inherits from a base declared **in the
+same file**, overriding selectively:
+
+- **Inheritable fields** — `category`, `severity`, `rule`, `rationale`, and the `*_target`:
+  the child's value wins when present, else the base's. A child carrying `extends` may omit
+  the otherwise-required `category`/`severity`/`rule` and inherit them; the *merged* rule must
+  still satisfy every requirement (enforced after the chain is resolved).
+- **`detect` merge is union** — the child's `forbid`/`forbid_regex`/`file_regex`/`ast` lists
+  are appended to the base's (deduplicated, first-seen order); `match_in_comments` is OR-ed.
+  A child cannot *remove* a base pattern (acceptable for v1: families specialise by *adding*).
+- **`abstract: true`** marks a template — a valid base that is usable as an `extends` target
+  but is itself never emitted or checked. It lets a pure base exist without also firing.
+- **Chains** (`a` extends `b` extends `c`) resolve recursively and memoised; **cycles** and
+  **unknown bases** are hard `GuidelineError`s.
+
+Loading became two passes inside `_parse_dimension_file`: parse every rule into a `_RawRule`
+(so a child may reference a base declared later), then resolve each. L1.3's guarantee that
+intra-file ids are unique makes same-file base resolution unambiguous and needs no global index.
+
+*Scope — same-file only (v1)*. Cross-file `extends` is deferred: cross-file ids already carry
+intentional transverse-override semantics (`_common.yml`-wins, kept-first), and resolving an
+`extends` against that keep-first set would entangle two distinct mechanisms. Same-file keeps
+the feature self-contained and the unambiguous-base guarantee intact.
+
+*Rejected alternatives*: (a) **replace** semantics for `detect` (child wholly overrides the
+base's block) — forces re-stating shared patterns, which is the duplication this removes;
+(b) **no `abstract`**, every base also fires — forces bases to be rules you actually want
+reported, or pollutes reports with template scaffolding; (c) **cross-file `extends`** now —
+adds a global resolution pass and a collision with transverse-override semantics for no
+demonstrated need (families are authored together, in one file).
+
+---
+
+## D-0008 — Entropy-based secret detection via a named content-scanner registry
+
+**Date**: 2026-06-22
+**Status**: accepted
+
+The transverse `secrets-via-env` rule carried **no detector**, so it loaded and never
+fired (the dead-weight failure D-0006 named). The only secret detection was
+`_credential_checks`, a phrase-triggered set of `secret =`/`password =` substring patterns:
+it missed every assignment shape it did not hardcode and false-positived on test fixtures
+(`secret = "super-secret-should-not-leak"`).
+
+Added a **named content-scanner registry** — `guideline_checker/scanners.py` — mirroring the
+AST-check registries of D-0005/6: a rule lists scanners in `detect.scan`, `guidelines`
+validates them against `VALID_SCANS`, and the checker runs them over file content. Scanners
+are stdlib-only and never raise. The shipped `secret-assignment` scanner finds
+`<key> = "<value>"` assignments whose key names a secret, then applies a **Shannon-entropy
+gate** to the value — random keys/tokens sit at ~4-5 bits/char, dictionary placeholders at
+~2-3 — skipping low-entropy placeholders, environment lookups (`os.environ`, `getenv`,
+`${VAR}`, `<...>`), and short values. This is the first detector that reasons about a value's
+*content* rather than matching a fixed pattern, which is why it warranted a registry rather
+than another `forbid_regex`.
+
+False positives on legitimate fixtures are handled by a **repo-level `.secrets-allowlist`**
+(YAML: `paths` globs + `values` substrings), mirroring `.guidelineignore` but secrets-specific
+so an allowlisted file stays scanned for every *other* rule. Inline `# guideline: disable`
+suppression continues to work. The allowlist is threaded via the existing `root` already held
+by the per-instruction worker, so only `_check_file`/`_evaluate_rule`/`_declared_violations`
+gained an optional `root` argument.
+
+*Scope note*: this lot does **not** extract the detect-schema parser out of `guidelines.py`.
+On `main` the file is well under the 500-line cap; the extraction becomes necessary only once
+**both** D-0007 (which rewrote the loader) and this lot land, at which point `guidelines.py`
+approaches the cap — tracked as the reconciliation follow-up when the two branches merge.
+
+*Rejected alternatives*: (a) a dedicated `detect.secret:` block — a one-off schema branch that
+does not generalise to future content scanners (license headers, TODO budgets, banned APIs);
+(b) a `forbid_regex` for secrets — no entropy reasoning, so it re-introduces the placeholder
+false positives; (c) keeping `_credential_checks` — misses real secrets and is un-allowlistable.

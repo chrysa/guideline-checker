@@ -6,3 +6,5 @@ rules:
     severity: error
     rule: "Load secrets from environment variables, not source files"
     rationale: "Secrets committed to source leak through git history"
+    detect:
+      scan: [secret-assignment]

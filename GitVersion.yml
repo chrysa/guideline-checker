@@ -22,5 +22,9 @@ branches:
 increment: Inherit
 major-version-bump-message: ^(feat|fix|refactor)(\(.+\))?!:.+
 minor-version-bump-message: ^feat(\(.+\))?:.+
-mode: ContinuousDeployment
+# Fallback mode for the main line: ContinuousDelivery keeps the build height in
+# build metadata (1.0.0+148) instead of a pre-release suffix (1.0.0-148), so the
+# released tag is a clean SemVer. Feature/fix/chore branches keep
+# ContinuousDeployment for their alpha/beta pre-releases.
+mode: ContinuousDelivery
 patch-version-bump-message: ^(fix|refactor|perf|docs|chore)(\(.+\))?:.+

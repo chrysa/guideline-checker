@@ -306,3 +306,226 @@ def test_shipped_referential_covers_spec_targets() -> None:
         assert f"Guidelines — {dim}/{stem} [{stem}]" in descriptions
     react = next(i for i in instructions if i.description == "Guidelines — languages/react [react]")
     assert react.apply_to == "**/*.tsx,**/*.jsx"
+
+
+# --- L1.1 secret-scanner via detect.scan ---
+
+_FAKE_KEY_LINE = 'api_key = "Zx9Qm2Lp7Vt4Rk8Nw1Yb6Hs3DfAa5Cc"\n'
+
+
+def test_detect_scan_accepted_and_recorded(tmp_path: Path) -> None:
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    _write(
+        g / "languages" / "_common.yml",
+        'language_target: "*"\nrules:\n  - id: secrets\n    category: stack\n    severity: error\n'
+        '    rule: "Secrets must come from configuration"\n    detect:\n      scan: [secret-assignment]\n',
+    )
+    instructions = load_yaml_guidelines(tmp_path)
+    detector = next(i.rule_detectors["Secrets must come from configuration"] for i in instructions if i.rule_detectors)
+    assert detector.scan_checks == ("secret-assignment",)
+
+
+def test_detect_scan_unknown_scanner_raises(tmp_path: Path) -> None:
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    _write(
+        g / "languages" / "_common.yml",
+        'language_target: "*"\nrules:\n  - id: secrets\n    category: stack\n    severity: error\n'
+        '    rule: "X"\n    detect:\n      scan: [no-such-scanner]\n',
+    )
+    with pytest.raises(GuidelineError, match="unknown scanner"):
+        load_yaml_guidelines(tmp_path)
+
+
+class TestSecretScanEndToEnd:
+    def _ref(self, tmp_path: Path) -> Path:
+        g = tmp_path / "guidelines"
+        _write(g / "categories.yml", _CATEGORIES)
+        _write(
+            g / "languages" / "_common.yml",
+            'language_target: "*"\nrules:\n  - id: secrets\n    category: stack\n    severity: error\n'
+            '    rule: "Secrets must come from configuration"\n    detect:\n      scan: [secret-assignment]\n',
+        )
+        return tmp_path
+
+    def _hits(self, root: Path) -> list:
+        results = run_checks(root, all_sources=True)
+        return [v for r in results for v in r.violations if v.rule == "Secrets must come from configuration"]
+
+    def test_flags_real_secret_as_error(self, tmp_path: Path) -> None:
+        root = self._ref(tmp_path)
+        _write(root / "src" / "app.py", _FAKE_KEY_LINE)
+        hits = self._hits(root)
+        assert len(hits) == 1
+        assert hits[0].severity == "error"
+
+    def test_allowlisted_path_skipped(self, tmp_path: Path) -> None:
+        root = self._ref(tmp_path)
+        _write(root / "pkg" / "fixture.py", _FAKE_KEY_LINE)
+        _write(root / ".secrets-allowlist", "paths:\n  - pkg/**\n")
+        assert self._hits(root) == []
+
+    def test_allowlisted_value_skipped(self, tmp_path: Path) -> None:
+        root = self._ref(tmp_path)
+        _write(root / "src" / "app.py", 'secret = "super-secret-should-not-leak"\n')
+        _write(root / ".secrets-allowlist", "values:\n  - super-secret-should-not-leak\n")
+        assert self._hits(root) == []
+
+    def test_inline_disable_skipped(self, tmp_path: Path) -> None:
+        root = self._ref(tmp_path)
+        _write(root / "src" / "app.py", 'api_key = "Zx9Qm2Lp7Vt4Rk8Nw1Yb6Hs3DfAa5Cc"  # guideline: disable\n')
+        assert self._hits(root) == []
+
+    def test_env_lookup_not_flagged(self, tmp_path: Path) -> None:
+        root = self._ref(tmp_path)
+        _write(root / "src" / "app.py", 'api_key = "${API_KEY}"\n')
+        assert self._hits(root) == []
+
+
+# --- L1.4 rule inheritance via extends: ---
+
+
+def _py_referential(tmp_path: Path, rules_yaml: str) -> Path:
+    """A python.yml referential whose rules block is supplied verbatim."""
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    _write(
+        g / "languages" / "python.yml",
+        'language_target: python\napply_to_glob: "**/*.py"\nrules:\n' + rules_yaml,
+    )
+    return tmp_path
+
+
+def _rule_severity(instructions: list, rule_text: str) -> str | None:
+    """Return the reported severity for a rule across all instruction files."""
+    for instr in instructions:
+        if rule_text in instr.rule_severity:
+            return instr.rule_severity[rule_text]
+    return None
+
+
+def _all_rules(instructions: list) -> set[str]:
+    return {r for i in instructions for r in i.rules}
+
+
+class TestRuleInheritance:
+    """L1.4 — ``extends:`` composition (same-file, union detect, abstract bases)."""
+
+    def test_child_inherits_scalar_fields(self, tmp_path: Path) -> None:
+        # Child declares only its own rule text + extends; category/severity inherited.
+        root = _py_referential(
+            tmp_path,
+            "  - id: base-print\n    category: stack\n    severity: error\n"
+            '    rule: "No print"\n    detect: {forbid: ["print("]}\n'
+            "  - id: child-print\n    extends: base-print\n"
+            '    rule: "No print in child code"\n',
+        )
+        instructions = load_yaml_guidelines(root)
+        assert _rule_severity(instructions, "No print in child code") == "error"
+
+    def test_child_overrides_severity(self, tmp_path: Path) -> None:
+        root = _py_referential(
+            tmp_path,
+            "  - id: base-abs\n    abstract: true\n    category: stack\n    severity: error\n"
+            '    rule: "Base"\n    detect: {forbid: ["AAA"]}\n'
+            "  - id: child-warn\n    extends: base-abs\n    severity: warning\n"
+            '    rule: "Child warns"\n',
+        )
+        instructions = load_yaml_guidelines(root)
+        assert _rule_severity(instructions, "Child warns") == "warning"
+
+    def test_abstract_base_not_emitted(self, tmp_path: Path) -> None:
+        root = _py_referential(
+            tmp_path,
+            "  - id: base-abs\n    abstract: true\n    category: stack\n    severity: error\n"
+            '    rule: "Abstract base rule"\n    detect: {forbid: ["AAA"]}\n'
+            "  - id: child\n    extends: base-abs\n"
+            '    rule: "Concrete child rule"\n',
+        )
+        rules = _all_rules(load_yaml_guidelines(root))
+        assert "Concrete child rule" in rules
+        assert "Abstract base rule" not in rules
+
+    def test_union_detect_fires_on_both_inherited_and_own_patterns(self, tmp_path: Path) -> None:
+        root = _py_referential(
+            tmp_path,
+            "  - id: base-abs\n    abstract: true\n    category: stack\n    severity: error\n"
+            '    rule: "Base"\n    detect: {forbid: ["AAA"]}\n'
+            "  - id: child\n    extends: base-abs\n"
+            '    rule: "No forbidden tokens"\n    detect: {forbid: ["BBB"]}\n',
+        )
+        _write(root / "src" / "inherited.py", "x = 'AAA'\n")
+        _write(root / "src" / "own.py", "y = 'BBB'\n")
+        results = run_checks(root, all_sources=True)
+        flagged = {v.file.name for r in results for v in r.violations if v.rule == "No forbidden tokens"}
+        # Union: child fires on the inherited base pattern AND its own pattern.
+        assert flagged == {"inherited.py", "own.py"}
+
+    def test_extends_chain_unions_all_levels(self, tmp_path: Path) -> None:
+        root = _py_referential(
+            tmp_path,
+            "  - id: a\n    abstract: true\n    category: stack\n    severity: error\n"
+            '    rule: "A"\n    detect: {forbid: ["AAA"]}\n'
+            "  - id: b\n    abstract: true\n    extends: a\n"
+            '    rule: "B"\n    detect: {forbid: ["BBB"]}\n'
+            "  - id: c\n    extends: b\n"
+            '    rule: "Chain leaf"\n    detect: {forbid: ["CCC"]}\n',
+        )
+        _write(root / "src" / "f.py", "v = 'AAA' + 'BBB' + 'CCC'\n")
+        results = run_checks(root, all_sources=True)
+        hits = sum(1 for r in results for v in r.violations if v.rule == "Chain leaf")
+        assert hits >= 1
+
+    def test_abstract_scalar_only_template(self, tmp_path: Path) -> None:
+        # Abstract base with no detect block; child supplies the detector.
+        root = _py_referential(
+            tmp_path,
+            "  - id: base-scalar\n    abstract: true\n    category: stack\n    severity: warning\n"
+            '    rule: "Scalar template"\n'
+            "  - id: child\n    extends: base-scalar\n"
+            '    rule: "No TODO markers"\n    detect: {forbid: ["TODO"]}\n',
+        )
+        _write(root / "src" / "f.py", "# TODO fix\n")
+        results = run_checks(root, all_sources=True)
+        violations = [v for r in results for v in r.violations if v.rule == "No TODO markers"]
+        assert violations
+        assert all(v.severity == "warning" for v in violations)
+
+    def test_unknown_base_raises(self, tmp_path: Path) -> None:
+        root = _py_referential(
+            tmp_path,
+            '  - id: child\n    extends: does-not-exist\n    rule: "Orphan"\n    detect: {forbid: ["X"]}\n',
+        )
+        with pytest.raises(GuidelineError, match="extends unknown base 'does-not-exist'"):
+            load_yaml_guidelines(root)
+
+    def test_extends_cycle_raises(self, tmp_path: Path) -> None:
+        root = _py_referential(
+            tmp_path,
+            '  - id: a\n    extends: b\n    category: stack\n    severity: error\n    rule: "A"\n'
+            '  - id: b\n    extends: a\n    category: stack\n    severity: error\n    rule: "B"\n',
+        )
+        with pytest.raises(GuidelineError, match="cycle"):
+            load_yaml_guidelines(root)
+
+    def test_child_missing_inherited_required_field_resolves(self, tmp_path: Path) -> None:
+        # Child omits category entirely; it must resolve from the base, not raise.
+        root = _py_referential(
+            tmp_path,
+            "  - id: base\n    category: architecture\n    severity: info\n"
+            '    rule: "Base"\n    detect: {forbid: ["AAA"]}\n'
+            "  - id: child\n    extends: base\n"
+            '    rule: "Child no category"\n',
+        )
+        instructions = load_yaml_guidelines(root)
+        assert "Child no category" in _all_rules(instructions)
+
+    def test_missing_required_without_extends_still_raises(self, tmp_path: Path) -> None:
+        # Regression: a rule with no extends must still declare category/severity/rule.
+        root = _py_referential(
+            tmp_path,
+            '  - id: lonely\n    rule: "No category nor severity"\n',
+        )
+        with pytest.raises(GuidelineError):
+            load_yaml_guidelines(root)
