@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "guideline-checker"
-version = "0.2.0"
+version = "1.0.0"
 description = "Check project compliance against GitHub Copilot instruction rules and generate HTML reports"
 readme = "README.md"
 license = { text = "MIT" }
