@@ -39,7 +39,26 @@ def _store_dir() -> Path:
 
 
 # Maximum history points kept per repo (oldest are dropped). Bounds file growth.
-_HISTORY_LIMIT = 200
+# Override with the ``CENTRAL_HISTORY_LIMIT`` env var; a non-positive or non-numeric
+# value falls back to this default.
+_DEFAULT_HISTORY_LIMIT = 200
+_HISTORY_LIMIT_ENV = "CENTRAL_HISTORY_LIMIT"
+
+
+def _resolve_history_limit() -> int:
+    """Resolve the per-repo history cap from ``CENTRAL_HISTORY_LIMIT``, else the default."""
+    raw = os.environ.get(_HISTORY_LIMIT_ENV)
+    if raw:
+        try:
+            value = int(raw)
+        except ValueError:
+            return _DEFAULT_HISTORY_LIMIT
+        if value > 0:
+            return value
+    return _DEFAULT_HISTORY_LIMIT
+
+
+_HISTORY_LIMIT = _resolve_history_limit()
 
 
 # ── Models ─────────────────────────────────────────────────────────────────────

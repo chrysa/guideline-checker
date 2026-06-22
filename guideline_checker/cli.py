@@ -126,6 +126,18 @@ def build_parser() -> argparse.ArgumentParser:
             "Examples: --exclude tests --exclude 'scripts/**,**/*.md'"
         ),
     )
+    check_cmd.add_argument(
+        "--max-file-size",
+        type=int,
+        default=None,
+        dest="max_file_size",
+        metavar="BYTES",
+        help=(
+            "Maximum size in bytes for a file to be scanned (default: 204800 = 200 KiB). "
+            "Larger files are skipped as generated/compiled artefacts. "
+            "Also settable via the GUIDELINE_MAX_FILE_SIZE env var."
+        ),
+    )
 
     # ── synthesize subcommand ────────────────────────────────────────────────
     syn_cmd = sub.add_parser(
@@ -367,6 +379,7 @@ def main(argv: list[str] | None = None) -> int:
         diff_files=diff_files,
         all_sources=use_all_sources,
         exclude=args.exclude,
+        max_file_size=args.max_file_size,
     )
 
     # ── Optional linter integration ──────────────────────────────────────────
