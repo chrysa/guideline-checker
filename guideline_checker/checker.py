@@ -102,14 +102,37 @@ _TEXT_EXTENSIONS = {
     ".proto",
 }
 
-# Maximum size for scanned files — larger files are generated/compiled artefacts
-_MAX_FILE_SIZE: int = 200 * 1024
+# Default maximum size for scanned files — larger files are generated/compiled artefacts.
+# Override at runtime with the ``--max-file-size`` CLI flag or the ``GUIDELINE_MAX_FILE_SIZE``
+# env var (both in bytes); a non-positive or non-numeric value falls back to this default.
+_DEFAULT_MAX_FILE_SIZE: int = 200 * 1024
+_MAX_FILE_SIZE_ENV = "GUIDELINE_MAX_FILE_SIZE"
 
 
-def _is_text_file(path: Path) -> bool:
+def _resolve_max_file_size(override: int | None = None) -> int:
+    """Resolve the max scannable file size: explicit override > env var > default.
+
+    A non-positive override (e.g. ``--max-file-size -1``) is rejected and falls
+    through to the env var / default, mirroring the env-var handling below — a
+    negative cap would otherwise disable the size filter entirely.
+    """
+    if override is not None and override > 0:
+        return override
+    raw = os.environ.get(_MAX_FILE_SIZE_ENV)
+    if raw:
+        try:
+            value = int(raw)
+        except ValueError:
+            return _DEFAULT_MAX_FILE_SIZE
+        if value > 0:
+            return value
+    return _DEFAULT_MAX_FILE_SIZE
+
+
+def _is_text_file(path: Path, max_file_size: int) -> bool:
     """Return True if the file should be scanned (text-based extension and within size limit)."""
     try:
-        if path.stat().st_size > _MAX_FILE_SIZE:
+        if path.stat().st_size > max_file_size:
             return False
     except OSError:
         return False
@@ -151,6 +174,7 @@ def run_checks(
     diff_files: list[Path] | None = None,
     all_sources: bool = True,
     exclude: list[str] | None = None,
+    max_file_size: int | None = None,
 ) -> list[RuleResult]:
     """Check all files in root against instruction files.
 
@@ -168,6 +192,10 @@ def run_checks(
             skipped. Each entry may be comma-separated; a bare directory name
             excludes everything beneath it. Applies to ``--diff`` files too.
             Patterns from a ``<root>/.guidelineignore`` file are merged in.
+        max_file_size: Maximum size in bytes for a file to be scanned. When None,
+            resolved from the ``GUIDELINE_MAX_FILE_SIZE`` env var, else the 200 KiB
+            default. Files above the limit are skipped as generated/compiled artefacts.
+            Ignored when ``diff_files`` is provided (the diff list is checked as-is).
     """
     if all_sources:
         instructions = load_all_sources(root)
@@ -175,7 +203,7 @@ def run_checks(
         instructions = load_instructions(instructions_dir)
     else:
         instructions = load_all_sources(root)
-    all_files = diff_files if diff_files is not None else _collect_files(root)
+    all_files = diff_files if diff_files is not None else _collect_files(root, max_file_size)
 
     exclude_patterns = [p for raw in (exclude or []) for p in _split_patterns(raw)]
     exclude_patterns.extend(_read_ignore_file(root))
@@ -293,15 +321,16 @@ IGNORE_FILES = {
 }
 
 
-def _collect_files(root: Path) -> list[Path]:
+def _collect_files(root: Path, max_file_size: int | None = None) -> list[Path]:
     """Recursively collect text-based source files, ignoring known irrelevant directories."""
+    limit = _resolve_max_file_size(max_file_size)
     return [
         path
         for path in root.rglob("*")
         if path.is_file()
         and not any(part in IGNORE_DIRS or part.endswith(".egg-info") for part in path.parts)
         and path.name not in IGNORE_FILES
-        and _is_text_file(path)
+        and _is_text_file(path, limit)
     ]
 
 
