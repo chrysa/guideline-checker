@@ -105,8 +105,9 @@ def load_yaml_guidelines(root: Path) -> list[InstructionFile]:
     2. Read each file's own ``*_target`` field, overridable per rule;
        ``"*"`` / ``_common.yml`` provide transverse rules.
     3. Validate every ``category`` against ``guidelines/categories.yml``.
-    4. Merge rules with *first-match-wins* on ``id`` — collisions are logged,
-       not silently swallowed.
+    4. De-duplicate ``id``: a duplicate **within one file** is an authoring bug
+       and raises; a duplicate **across files** is an intentional transverse
+       override (``_common.yml`` parsed first wins) — first kept, collision logged.
     5. Map the effective target to an ``apply_to`` glob (the file's
        ``apply_to_glob``, or ``**/*`` for the wildcard target) and emit one
        ``InstructionFile`` per ``(file, target)`` group.
@@ -193,8 +194,17 @@ def _parse_dimension_file(
         raise GuidelineError(f"{path}: 'rules' must be a list.")
 
     rules: list[GuidelineRule] = []
+    local_ids: set[str] = set()
     for raw in raw_rules:
         rule = _build_rule(path, raw, target_field, file_target, categories)
+        # Intra-file duplicate: an authoring bug with no override intent — hard fail.
+        if rule.id in local_ids:
+            raise GuidelineError(
+                f"{path}: duplicate rule id {rule.id!r} within the file — "
+                f"each rule id must be unique inside a single referential file.",
+            )
+        local_ids.add(rule.id)
+        # Cross-file duplicate: intentional transverse override (_common.yml wins) — keep first, log.
         if rule.id in seen_ids:
             logger.warning("guidelines: duplicate rule id %r in %s — keeping first, skipping this one", rule.id, path)
             continue
@@ -221,8 +231,8 @@ def _build_rule(
     category = raw["category"]
     if category not in categories:
         raise GuidelineError(
-            f"{path}: rule {raw['id']!r} uses unknown category {category!r} — "
-            f"add it to {_CATEGORIES_FILE} or fix the typo.",
+            f"{path}: rule {raw['id']!r} uses unknown category {category!r} "
+            f"(known categories: {sorted(categories)}) — add it to {_CATEGORIES_FILE} or fix the typo.",
         )
 
     severity = raw["severity"]
