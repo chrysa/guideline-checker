@@ -149,3 +149,42 @@ structural rules above are not regex-expressible without unacceptable false posi
 (c) keep the rules undetected — leaves five shipped rules as permanent dead weight.
 
 ---
+
+## D-0008 — Entropy-based secret detection via a named content-scanner registry
+
+**Date**: 2026-06-22
+**Status**: accepted
+
+The transverse `secrets-via-env` rule carried **no detector**, so it loaded and never
+fired (the dead-weight failure D-0006 named). The only secret detection was
+`_credential_checks`, a phrase-triggered set of `secret =`/`password =` substring patterns:
+it missed every assignment shape it did not hardcode and false-positived on test fixtures
+(`secret = "super-secret-should-not-leak"`).
+
+Added a **named content-scanner registry** — `guideline_checker/scanners.py` — mirroring the
+AST-check registries of D-0005/6: a rule lists scanners in `detect.scan`, `guidelines`
+validates them against `VALID_SCANS`, and the checker runs them over file content. Scanners
+are stdlib-only and never raise. The shipped `secret-assignment` scanner finds
+`<key> = "<value>"` assignments whose key names a secret, then applies a **Shannon-entropy
+gate** to the value — random keys/tokens sit at ~4-5 bits/char, dictionary placeholders at
+~2-3 — skipping low-entropy placeholders, environment lookups (`os.environ`, `getenv`,
+`${VAR}`, `<...>`), and short values. This is the first detector that reasons about a value's
+*content* rather than matching a fixed pattern, which is why it warranted a registry rather
+than another `forbid_regex`.
+
+False positives on legitimate fixtures are handled by a **repo-level `.secrets-allowlist`**
+(YAML: `paths` globs + `values` substrings), mirroring `.guidelineignore` but secrets-specific
+so an allowlisted file stays scanned for every *other* rule. Inline `# guideline: disable`
+suppression continues to work. The allowlist is threaded via the existing `root` already held
+by the per-instruction worker, so only `_check_file`/`_evaluate_rule`/`_declared_violations`
+gained an optional `root` argument.
+
+*Scope note*: this lot does **not** extract the detect-schema parser out of `guidelines.py`.
+On `main` the file is well under the 500-line cap; the extraction becomes necessary only once
+**both** D-0007 (which rewrote the loader) and this lot land, at which point `guidelines.py`
+approaches the cap — tracked as the reconciliation follow-up when the two branches merge.
+
+*Rejected alternatives*: (a) a dedicated `detect.secret:` block — a one-off schema branch that
+does not generalise to future content scanners (license headers, TODO budgets, banned APIs);
+(b) a `forbid_regex` for secrets — no entropy reasoning, so it re-introduces the placeholder
+false positives; (c) keeping `_credential_checks` — misses real secrets and is un-allowlistable.

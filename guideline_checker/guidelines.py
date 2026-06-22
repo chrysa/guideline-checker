@@ -38,6 +38,7 @@ import yaml
 from guideline_checker.ast_javascript import VALID_JS_AST_CHECKS, unknown_js_checks
 from guideline_checker.ast_python import VALID_AST_CHECKS, unknown_checks
 from guideline_checker.loader import InstructionFile, RuleDetector, SourceType
+from guideline_checker.scanners import VALID_SCANS, unknown_scans
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,8 @@ _DETECT_FIELD = "detect"
 _DETECT_PATTERN_KEYS = ("forbid", "forbid_regex", "file_regex")
 # Named AST checks (validated against _ALL_AST_CHECKS: Python + JS/TS engines).
 _DETECT_AST_KEY = "ast"
+# Named content scanners (validated against scanners.VALID_SCANS).
+_DETECT_SCAN_KEY = "scan"
 
 
 class GuidelineError(ValueError):
@@ -274,7 +277,7 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
     if not isinstance(block, dict):
         raise GuidelineError(f"{path}: rule {raw['id']!r} 'detect' must be a mapping.")
 
-    allowed = {*_DETECT_PATTERN_KEYS, _DETECT_AST_KEY, "match_in_comments"}
+    allowed = {*_DETECT_PATTERN_KEYS, _DETECT_AST_KEY, _DETECT_SCAN_KEY, "match_in_comments"}
     unknown = set(block) - allowed
     if unknown:
         raise GuidelineError(
@@ -293,14 +296,23 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
             f"(available: {sorted(_ALL_AST_CHECKS)}).",
         )
 
+    scan_checks = _coerce_pattern_list(path, raw["id"], _DETECT_SCAN_KEY, block.get(_DETECT_SCAN_KEY, []))
+    bad_scans = unknown_scans(scan_checks)
+    if bad_scans:
+        raise GuidelineError(
+            f"{path}: rule {raw['id']!r} 'detect.scan' has unknown scanner(s) {bad_scans} "
+            f"(available: {sorted(VALID_SCANS)}).",
+        )
+
     match_in_comments = block.get("match_in_comments", False)
     if not isinstance(match_in_comments, bool):
         raise GuidelineError(f"{path}: rule {raw['id']!r} 'detect.match_in_comments' must be a boolean.")
 
-    if not any(patterns.values()) and not ast_checks:
+    if not any(patterns.values()) and not ast_checks and not scan_checks:
+        detect_keys = sorted((*_DETECT_PATTERN_KEYS, _DETECT_AST_KEY, _DETECT_SCAN_KEY))
         raise GuidelineError(
             f"{path}: rule {raw['id']!r} 'detect' declares no patterns — "
-            f"add at least one of {sorted((*_DETECT_PATTERN_KEYS, _DETECT_AST_KEY))} or drop the block.",
+            f"add at least one of {detect_keys} or drop the block.",
         )
 
     return RuleDetector(
@@ -308,6 +320,7 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
         forbid_regex=patterns["forbid_regex"],
         file_regex=patterns["file_regex"],
         ast_checks=ast_checks,
+        scan_checks=scan_checks,
         match_in_comments=match_in_comments,
     )
 
