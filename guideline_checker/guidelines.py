@@ -63,6 +63,8 @@ _VALID_SEVERITIES = frozenset({"error", "warning", "info"})
 
 _CATEGORIES_FILE = "categories.yml"
 _APPLY_TO_GLOB_FIELD = "apply_to_glob"
+_EXTENDS_FIELD = "extends"
+_ABSTRACT_FIELD = "abstract"
 _DETECT_FIELD = "detect"
 # The list-of-pattern keys a ``detect:`` block may carry (all optional).
 _DETECT_PATTERN_KEYS = ("forbid", "forbid_regex", "file_regex")
@@ -99,6 +101,22 @@ class _DimensionFile:
     rules: list[GuidelineRule] = field(default_factory=list)
 
 
+@dataclass
+class _RawRule:
+    """A rule before ``extends:`` resolution; inheritable fields may be ``None``."""
+
+    id: str
+    path: Path
+    extends: str | None
+    abstract: bool
+    target: str | None
+    category: str | None
+    severity: str | None
+    rule: str | None
+    rationale: str
+    detect: RuleDetector | None
+
+
 def load_yaml_guidelines(root: Path) -> list[InstructionFile]:
     """Load ``guidelines/<dimension>/*.yml`` into :class:`InstructionFile` objects.
 
@@ -107,7 +125,8 @@ def load_yaml_guidelines(root: Path) -> list[InstructionFile]:
     1. Scan every sub-directory of ``guidelines/`` for ``*.yml`` files.
     2. Read each file's own ``*_target`` field, overridable per rule;
        ``"*"`` / ``_common.yml`` provide transverse rules.
-    3. Validate every ``category`` against ``guidelines/categories.yml``.
+    3. Validate every ``category`` against ``guidelines/categories.yml`` and resolve
+       same-file ``extends:`` inheritance (``abstract: true`` bases are not emitted).
     4. De-duplicate ``id``: a duplicate **within one file** is an authoring bug
        and raises; a duplicate **across files** is an intentional transverse
        override (``_common.yml`` parsed first wins) — first kept, collision logged.
@@ -175,7 +194,11 @@ def _parse_dimension_file(
     categories: set[str],
     seen_ids: set[str],
 ) -> _DimensionFile:
-    """Parse one dimension file, validating and de-duplicating its rules."""
+    """Parse one dimension file, resolving same-file ``extends:`` and de-duplicating ids.
+
+    Two passes (parse all rules, then resolve) so a child may extend a base declared later;
+    ``abstract`` rules are templates and are not emitted.
+    """
     data = _safe_load(path)
     if not isinstance(data, dict):
         raise GuidelineError(f"{path}: expected a mapping at the top level.")
@@ -196,72 +219,173 @@ def _parse_dimension_file(
     if not isinstance(raw_rules, list):
         raise GuidelineError(f"{path}: 'rules' must be a list.")
 
-    rules: list[GuidelineRule] = []
-    local_ids: set[str] = set()
+    # Pass 1 — parse every rule; ``extends`` is resolved against this same-file index.
+    raw_by_id: dict[str, _RawRule] = {}
+    order: list[str] = []
     for raw in raw_rules:
-        rule = _build_rule(path, raw, target_field, file_target, categories)
+        rr = _parse_raw_rule(path, raw, target_field, categories)
         # Intra-file duplicate: an authoring bug with no override intent — hard fail.
-        if rule.id in local_ids:
+        if rr.id in raw_by_id:
             raise GuidelineError(
-                f"{path}: duplicate rule id {rule.id!r} within the file — "
+                f"{path}: duplicate rule id {rr.id!r} within the file — "
                 f"each rule id must be unique inside a single referential file.",
             )
-        local_ids.add(rule.id)
-        # Cross-file duplicate: intentional transverse override (_common.yml wins) — keep first, log.
-        if rule.id in seen_ids:
-            logger.warning("guidelines: duplicate rule id %r in %s — keeping first, skipping this one", rule.id, path)
+        raw_by_id[rr.id] = rr
+        order.append(rr.id)
+
+    # Pass 2 — resolve inheritance (memoised), then emit non-abstract rules.
+    resolved: dict[str, GuidelineRule] = {}
+    rules: list[GuidelineRule] = []
+    for rid in order:
+        rule = _resolve_rule(rid, raw_by_id, resolved, categories, file_target, ())
+        if raw_by_id[rid].abstract:
             continue
-        seen_ids.add(rule.id)
+        # Cross-file duplicate: intentional transverse override (_common.yml wins) — keep first, log.
+        if rid in seen_ids:
+            logger.warning("guidelines: duplicate rule id %r in %s — keeping first, skipping this one", rid, path)
+            continue
+        seen_ids.add(rid)
         rules.append(rule)
     return _DimensionFile(path=path, dimension=dimension, apply_to_glob=apply_to_glob, rules=rules)
 
 
-def _build_rule(
+def _parse_raw_rule(
     path: Path,
     raw: object,
     target_field: str | None,
-    file_target: str,
     categories: set[str],
-) -> GuidelineRule:
-    """Validate a single raw rule mapping into a :class:`GuidelineRule`."""
+) -> _RawRule:
+    """Parse a raw rule into a :class:`_RawRule`; required-field presence is enforced
+    later in :func:`_resolve_rule`, once any ``extends`` base has been merged in.
+    """
     if not isinstance(raw, dict):
         raise GuidelineError(f"{path}: each rule must be a mapping, got {type(raw).__name__}.")
-
-    for required in ("id", "category", "severity", "rule"):
-        if not isinstance(raw.get(required), str) or not raw[required].strip():
-            raise GuidelineError(f"{path}: rule is missing a non-empty string '{required}'.")
-
-    category = raw["category"]
-    if category not in categories:
+    rule_id = raw.get("id")
+    if not isinstance(rule_id, str) or not rule_id.strip():
+        raise GuidelineError(f"{path}: rule is missing a non-empty string 'id'.")
+    extends = raw.get(_EXTENDS_FIELD)
+    if extends is not None and (not isinstance(extends, str) or not extends.strip()):
+        raise GuidelineError(f"{path}: rule {rule_id!r} '{_EXTENDS_FIELD}' must be a non-empty string.")
+    abstract = raw.get(_ABSTRACT_FIELD, False)
+    if not isinstance(abstract, bool):
+        raise GuidelineError(f"{path}: rule {rule_id!r} '{_ABSTRACT_FIELD}' must be a boolean.")
+    category = _optional_str(path, rule_id, "category", raw)
+    if category is not None and category not in categories:
         raise GuidelineError(
-            f"{path}: rule {raw['id']!r} uses unknown category {category!r} "
+            f"{path}: rule {rule_id!r} uses unknown category {category!r} "
             f"(known categories: {sorted(categories)}) — add it to {_CATEGORIES_FILE} or fix the typo.",
         )
-
-    severity = raw["severity"]
-    if severity not in _VALID_SEVERITIES:
+    severity = _optional_str(path, rule_id, "severity", raw)
+    if severity is not None and severity not in _VALID_SEVERITIES:
         raise GuidelineError(
-            f"{path}: rule {raw['id']!r} has invalid severity {severity!r} "
+            f"{path}: rule {rule_id!r} has invalid severity {severity!r} "
             f"(expected one of {sorted(_VALID_SEVERITIES)}).",
         )
+    rule_text = _optional_str(path, rule_id, "rule", raw)
+    # A rule may carry a target only when the file declares a target field.
+    target: str | None = None
+    if target_field is not None and target_field in raw:
+        candidate = raw[target_field]
+        if not isinstance(candidate, str):
+            raise GuidelineError(f"{path}: rule {rule_id!r} '{target_field}' must be a string.")
+        target = candidate
 
-    # A rule may override its target only when the file declares a target field.
-    if target_field is None:
-        target = file_target
-    else:
-        target = raw.get(target_field, file_target)
-        if not isinstance(target, str):
-            raise GuidelineError(f"{path}: rule {raw['id']!r} '{target_field}' must be a string.")
-
-    return GuidelineRule(
-        id=raw["id"],
+    return _RawRule(
+        id=rule_id,
+        path=path,
+        extends=extends,
+        abstract=abstract,
         target=target,
         category=category,
         severity=severity,
-        rule=raw["rule"].strip(),
+        rule=rule_text.strip() if rule_text is not None else None,
         rationale=str(raw.get("rationale", "")).strip(),
         detect=_build_detector(path, raw),
     )
+
+
+def _optional_str(path: Path, rule_id: str, key: str, raw: dict[str, object]) -> str | None:
+    """Return ``raw[key]`` as a non-empty string, or ``None`` when the key is absent."""
+    if key not in raw:
+        return None
+    value = raw[key]
+    if not isinstance(value, str) or not value.strip():
+        raise GuidelineError(f"{path}: rule {rule_id!r} '{key}' must be a non-empty string.")
+    return value
+
+
+def _resolve_rule(
+    rule_id: str,
+    raw_by_id: dict[str, _RawRule],
+    resolved: dict[str, GuidelineRule],
+    categories: set[str],
+    file_target: str,
+    stack: tuple[str, ...],
+) -> GuidelineRule:
+    """Resolve a rule's ``extends`` chain into a merged :class:`GuidelineRule`.
+
+    Scalar fields take the child's value when present, else the base's; ``detect``
+    patterns are unioned. Cycles and unknown bases are hard failures.
+    """
+    if rule_id in resolved:
+        return resolved[rule_id]
+    rr = raw_by_id[rule_id]
+    if rule_id in stack:
+        chain = " -> ".join((*stack, rule_id))
+        raise GuidelineError(f"{rr.path}: 'extends' cycle detected: {chain}.")
+    base: GuidelineRule | None = None
+    if rr.extends is not None:
+        if rr.extends not in raw_by_id:
+            raise GuidelineError(
+                f"{rr.path}: rule {rule_id!r} extends unknown base {rr.extends!r} — "
+                f"the base must be a rule id declared in the same file.",
+            )
+        base = _resolve_rule(rr.extends, raw_by_id, resolved, categories, file_target, (*stack, rule_id))
+    category = rr.category or (base.category if base else None)
+    severity = rr.severity or (base.severity if base else None)
+    rule_text = rr.rule or (base.rule if base else None)
+    rationale = rr.rationale or (base.rationale if base else "")
+    target = rr.target or (base.target if base else None) or file_target
+    detect = _merge_detectors(base.detect if base else None, rr.detect)
+
+    if category is None:
+        raise GuidelineError(f"{rr.path}: rule {rule_id!r} is missing a 'category' (none declared or inherited).")
+    if severity is None:
+        raise GuidelineError(f"{rr.path}: rule {rule_id!r} is missing a 'severity' (none declared or inherited).")
+    if not rule_text:
+        raise GuidelineError(f"{rr.path}: rule {rule_id!r} is missing a 'rule' (none declared or inherited).")
+
+    rule = GuidelineRule(
+        id=rule_id,
+        target=target,
+        category=category,
+        severity=severity,
+        rule=rule_text,
+        rationale=rationale,
+        detect=detect,
+    )
+    resolved[rule_id] = rule
+    return rule
+
+
+def _merge_detectors(base: RuleDetector | None, child: RuleDetector | None) -> RuleDetector | None:
+    """Union two detectors: child patterns appended to the base's, order-preserving."""
+    if base is None:
+        return child
+    if child is None:
+        return base
+    return RuleDetector(
+        forbid=_union(base.forbid, child.forbid),
+        forbid_regex=_union(base.forbid_regex, child.forbid_regex),
+        file_regex=_union(base.file_regex, child.file_regex),
+        ast_checks=_union(base.ast_checks, child.ast_checks),
+        match_in_comments=base.match_in_comments or child.match_in_comments,
+    )
+
+
+def _union(base: tuple[str, ...], extra: tuple[str, ...]) -> tuple[str, ...]:
+    """Concatenate two tuples, dropping duplicates while preserving first-seen order."""
+    return tuple(dict.fromkeys((*base, *extra)))
 
 
 def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
