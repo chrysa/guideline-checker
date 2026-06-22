@@ -9,6 +9,13 @@ on:
             - .github/**
     workflow_dispatch:
 
+# The reusable release workflow requests contents: write to push the tag and
+# create the GitHub release. The repository default token is read-only, so the
+# caller must grant these scopes explicitly or the call fails at startup.
+permissions:
+    contents: write
+    pull-requests: read
+
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/release.yml@v1.2.0
