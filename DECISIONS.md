@@ -149,3 +149,44 @@ structural rules above are not regex-expressible without unacceptable false posi
 (c) keep the rules undetected — leaves five shipped rules as permanent dead weight.
 
 ---
+
+## D-0007 — Rule inheritance via `extends:` (same-file composition)
+
+**Date**: 2026-06-22
+**Status**: accepted
+
+Authoring families of related YAML rules (a shared secret pattern, a base "no console"
+detector specialised per environment) meant copy-pasting `detect:`, `severity`, `category`,
+and `rule` text across near-identical entries — the duplication D-0004 set out to avoid, now
+in the referential itself.
+
+Added an `extends: <base-rule-id>` key so a child rule inherits from a base declared **in the
+same file**, overriding selectively:
+
+- **Inheritable fields** — `category`, `severity`, `rule`, `rationale`, and the `*_target`:
+  the child's value wins when present, else the base's. A child carrying `extends` may omit
+  the otherwise-required `category`/`severity`/`rule` and inherit them; the *merged* rule must
+  still satisfy every requirement (enforced after the chain is resolved).
+- **`detect` merge is union** — the child's `forbid`/`forbid_regex`/`file_regex`/`ast` lists
+  are appended to the base's (deduplicated, first-seen order); `match_in_comments` is OR-ed.
+  A child cannot *remove* a base pattern (acceptable for v1: families specialise by *adding*).
+- **`abstract: true`** marks a template — a valid base that is usable as an `extends` target
+  but is itself never emitted or checked. It lets a pure base exist without also firing.
+- **Chains** (`a` extends `b` extends `c`) resolve recursively and memoised; **cycles** and
+  **unknown bases** are hard `GuidelineError`s.
+
+Loading became two passes inside `_parse_dimension_file`: parse every rule into a `_RawRule`
+(so a child may reference a base declared later), then resolve each. L1.3's guarantee that
+intra-file ids are unique makes same-file base resolution unambiguous and needs no global index.
+
+*Scope — same-file only (v1)*. Cross-file `extends` is deferred: cross-file ids already carry
+intentional transverse-override semantics (`_common.yml`-wins, kept-first), and resolving an
+`extends` against that keep-first set would entangle two distinct mechanisms. Same-file keeps
+the feature self-contained and the unambiguous-base guarantee intact.
+
+*Rejected alternatives*: (a) **replace** semantics for `detect` (child wholly overrides the
+base's block) — forces re-stating shared patterns, which is the duplication this removes;
+(b) **no `abstract`**, every base also fires — forces bases to be rules you actually want
+reported, or pollutes reports with template scaffolding; (c) **cross-file `extends`** now —
+adds a global resolution pass and a collision with transverse-override semantics for no
+demonstrated need (families are authored together, in one file).
