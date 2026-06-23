@@ -111,7 +111,12 @@ class MarkdownReporter:
                 rel_path = str(fpath.relative_to(root))
             except ValueError:
                 rel_path = str(fpath)
-            lines += [f"#### 📄 `{rel_path}`", "", "| Severity | Line | Code | Rule |", "|----------|-----:|------|------|"]
+            lines += [
+                f"#### 📄 `{rel_path}`",
+                "",
+                "| Severity | Line | Code | Rule |",
+                "|----------|-----:|------|------|",
+            ]
             for v in sorted(fviolations, key=lambda x: x.line_number):
                 emoji = _SEVERITY_EMOJI.get(v.severity, "⚪")
                 content_esc = v.line_content.replace("|", "\\|").replace("`", "'")
