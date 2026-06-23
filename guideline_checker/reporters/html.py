@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 # ─── Shared badge constants ───────────────────────────────────────────────────
 
-_BADGE_PASS = _BADGE_PASS
+_BADGE_PASS = '<span class="badge badge-ok">PASS</span>'
 
 # ─── Templates ────────────────────────────────────────────────────────────────
 
