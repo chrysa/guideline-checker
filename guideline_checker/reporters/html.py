@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 # ─── Shared badge constants ───────────────────────────────────────────────────
 
-_BADGE_PASS = '<span class="badge badge-ok">PASS</span>'
+_BADGE_STATUS_OK = '<span class="badge badge-ok">PASS</span>'
 
 # ─── Templates ────────────────────────────────────────────────────────────────
 
@@ -372,7 +372,7 @@ class HtmlReporter:
                 badge = '<span class="badge badge-warning">ERROR</span>'
                 body = f'<div class="linter-unavailable">&#9888; {_escape_html(lr.error)}</div>'
             elif total == 0:
-                badge = _BADGE_PASS
+                badge = _BADGE_STATUS_OK
                 body = '<div class="linter-ok">&#10003; No violations found</div>'
             else:
                 if n_err:
@@ -539,7 +539,7 @@ class HtmlReporter:
             elif n_warn:
                 status = '<span class="badge badge-warning">WARN</span>'
             else:
-                status = _BADGE_PASS
+                status = _BADGE_STATUS_OK
 
             err_cell = f'<span style="color:var(--clr-err);font-weight:600">{n_err}</span>' if n_err else "0"
             warn_cell = f'<span style="color:var(--clr-warn);font-weight:600">{n_warn}</span>' if n_warn else "0"
@@ -572,7 +572,7 @@ class HtmlReporter:
         elif n_warn:
             badge = f'<span class="badge badge-warning">{n_warn} warning(s)</span>'
         else:
-            badge = _BADGE_PASS
+            badge = _BADGE_STATUS_OK
 
         source_badge = (
             f'<span class="badge badge-neutral" style="font-size:.68rem">'
