@@ -181,6 +181,132 @@ footer {{ text-align: center; color: var(--clr-muted); font-size: .75rem;
 class SynthesisHtmlReporter:
     """Write a multi-repo synthesis HTML to *output_path*."""
 
+    @staticmethod
+    def _skipped_entry_html(name: str, reason: str) -> tuple[str, str]:
+        """Build the repo-row and status-item HTML for a skipped entry."""
+        safe_name = _escape_html(name)
+        safe_reason = _escape_html(reason)
+        row = (
+            f"<tr>"
+            f"<td><strong>{safe_name}</strong></td>"
+            f"<td><span class='badge badge-skip'>SKIP</span></td>"
+            f"<td><span style='color:var(--clr-muted);font-size:.8rem'>{safe_reason}</span></td>"
+            f"<td style='text-align:right'>—</td>"
+            f"<td style='text-align:right'>—</td>"
+            f"<td><span class='badge badge-skip'>skipped</span></td>"
+            f"</tr>"
+        )
+        item = (
+            f'<div class="status-item">'
+            f'<span class="status-icon">&#9940;</span>'
+            f'<span class="status-label"><strong>{safe_name}</strong>'
+            f' <span style="color:var(--clr-muted);font-size:.8rem">({safe_reason})</span></span>'
+            f'<span class="badge badge-skip">skipped</span>'
+            f"</div>"
+        )
+        return row, item
+
+    @staticmethod
+    def _processed_entry_html(
+        name: str, errors: int, warnings: int, status_badge: str, status_icon: str, rel_report: Path
+    ) -> tuple[str, str]:
+        """Build the repo-row and status-item HTML for a successfully processed entry."""
+        safe_name = _escape_html(name)
+        safe_rel = _escape_html(str(rel_report))
+        row = (
+            f"<tr>"
+            f"<td><strong>{safe_name}</strong></td>"
+            f"<td>{status_badge}</td>"
+            f"<td><a href='{safe_rel}' target='_blank'>&#128203; report</a></td>"
+            f"<td style='text-align:right;color:var(--clr-err);font-weight:600'>"
+            f"{errors if errors else '—'}</td>"
+            f"<td style='text-align:right;color:var(--clr-warn)'>"
+            f"{warnings if warnings else '—'}</td>"
+            f"<td><span class='badge badge-ok'>&#10003; processed</span></td>"
+            f"</tr>"
+        )
+        item = (
+            f'<div class="status-item">'
+            f'<span class="status-icon">{status_icon}</span>'
+            f'<span class="status-label">'
+            f'<a href="{safe_rel}" target="_blank">'
+            f"{safe_name}</a></span>"
+            f"{status_badge}"
+            f"</div>"
+        )
+        return row, item
+
+    @staticmethod
+    def _collect_top_counters(
+        entry: dict[str, Any],
+        rule_counter: Counter[str],
+        file_counter: Counter[str],
+    ) -> None:
+        """Accumulate per-violation rule and file counters from one processed entry."""
+        name = entry["name"]
+        for r in entry.get("results", []):
+            for v in r.violations:
+                rule_counter[r.instruction.description or r.instruction.path.stem] += 1
+                try:
+                    rel = str(v.file.relative_to(entry["path"]))
+                except ValueError:
+                    rel = str(v.file)
+                file_counter[f"{name}/{rel}"] += 1
+        for lr in entry.get("linter_results", []):
+            for v in lr.violations:
+                rule_counter[f"[{lr.linter}] {v.code}"] += 1
+                try:
+                    rel = str(v.file.relative_to(entry["path"]))
+                except ValueError:
+                    rel = str(v.file)
+                file_counter[f"{name}/{rel}"] += 1
+
+    @staticmethod
+    def _top_rules_rows(rule_counter: Counter[str]) -> str:
+        """Build HTML rows for the top-15 most violated rules."""
+        top = rule_counter.most_common(15)
+        if not top:
+            return "<tr><td colspan='3' style='color:var(--clr-muted)'>No violations</td></tr>"
+        max_count = top[0][1]
+        parts: list[str] = []
+        for rule_name, count in top:
+            bar_pct = int(count / max_count * 100)
+            parts.append(
+                f"<tr>"
+                f"<td style='font-size:.78rem;max-width:240px;overflow:hidden"
+                f";text-overflow:ellipsis;white-space:nowrap'"
+                f" title='{_escape_html(rule_name)}'>{_escape_html(rule_name[:50])}</td>"
+                f"<td style='text-align:right;font-weight:700;color:var(--clr-err)'>{count}</td>"
+                f"<td style='width:80px'><div class='bar-bg'><div class='bar-fill err'"
+                f" style='width:{bar_pct}%'></div></div></td>"
+                f"</tr>"
+            )
+        return "".join(parts)
+
+    @staticmethod
+    def _top_files_rows(file_counter: Counter[str]) -> str:
+        """Build HTML rows for the top-15 most affected files."""
+        top = file_counter.most_common(15)
+        if not top:
+            return "<tr><td colspan='3' style='color:var(--clr-muted)'>No violations</td></tr>"
+        max_count = top[0][1]
+        parts: list[str] = []
+        for file_name, count in top:
+            bar_pct = int(count / max_count * 100)
+            short = file_name.split("/")[-1]
+            parts.append(
+                f"<tr>"
+                f"<td style='font-size:.78rem' title='{_escape_html(file_name)}'>"
+                f"<span style='color:var(--clr-muted)'>"
+                f"{_escape_html('/'.join(file_name.split('/')[:2]))}/</span>"
+                f"{_escape_html(short)}</td>"
+                f"<td style='text-align:right;font-weight:700'>{count}</td>"
+                f"<td style='width:80px'><div class='bar-bg'><div class='bar-fill'"
+                f" style='width:{bar_pct}%'></div></div></td>"
+                f"</tr>"
+            )
+        return "".join(parts)
+
     def write(
         self,
         workspace: Path,
@@ -202,44 +328,20 @@ class SynthesisHtmlReporter:
         generated_at = datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M UTC")
 
         total_repos = len(repo_entries)
-        repos_pass = 0
-        repos_fail = 0
-        repos_skip = 0
-        total_errors = 0
-        total_warnings = 0
-
-        # Aggregate top-rules and top-files across all repos
+        repos_pass = repos_fail = repos_skip = 0
+        total_errors = total_warnings = 0
         rule_counter: Counter[str] = Counter()
         file_counter: Counter[str] = Counter()
-
         repo_rows_parts: list[str] = []
         status_items_parts: list[str] = []
 
         for entry in repo_entries:
             name = entry["name"]
-            skipped = entry.get("skipped", False)
-
-            if skipped:
+            if entry.get("skipped", False):
                 repos_skip += 1
-                reason = _escape_html(entry.get("reason", "unknown"))
-                repo_rows_parts.append(
-                    f"<tr>"
-                    f"<td><strong>{_escape_html(name)}</strong></td>"
-                    f"<td><span class='badge badge-skip'>SKIP</span></td>"
-                    f"<td><span style='color:var(--clr-muted);font-size:.8rem'>{reason}</span></td>"
-                    f"<td style='text-align:right'>—</td>"
-                    f"<td style='text-align:right'>—</td>"
-                    f"<td><span class='badge badge-skip'>skipped</span></td>"
-                    f"</tr>"
-                )
-                status_items_parts.append(
-                    f'<div class="status-item">'
-                    f'<span class="status-icon">&#9940;</span>'
-                    f'<span class="status-label"><strong>{_escape_html(name)}</strong>'
-                    f' <span style="color:var(--clr-muted);font-size:.8rem">({reason})</span></span>'
-                    f'<span class="badge badge-skip">skipped</span>'
-                    f"</div>"
-                )
+                row, item = self._skipped_entry_html(name, entry.get("reason", "unknown"))
+                repo_rows_parts.append(row)
+                status_items_parts.append(item)
                 continue
 
             errors = entry.get("errors", 0)
@@ -257,89 +359,15 @@ class SynthesisHtmlReporter:
                 status_badge = '<span class="badge badge-ok">PASS</span>'
                 status_icon = "&#128994;"
 
-            # Relative link from synthesis to per-repo report
             try:
                 rel_report = report_path.relative_to(output_path.parent)
             except ValueError:
                 rel_report = report_path
 
-            # Collect top rules / files
-            results = entry.get("results", [])
-            for r in results:
-                for v in r.violations:
-                    rule_counter[r.instruction.description or r.instruction.path.stem] += 1
-                    try:
-                        rel = str(v.file.relative_to(entry["path"]))
-                    except ValueError:
-                        rel = str(v.file)
-                    file_counter[f"{name}/{rel}"] += 1
-            linter_results = entry.get("linter_results", [])
-            for lr in linter_results:
-                for v in lr.violations:
-                    rule_counter[f"[{lr.linter}] {v.code}"] += 1
-                    try:
-                        rel = str(v.file.relative_to(entry["path"]))
-                    except ValueError:
-                        rel = str(v.file)
-                    file_counter[f"{name}/{rel}"] += 1
-
-            repo_rows_parts.append(
-                f"<tr>"
-                f"<td><strong>{_escape_html(name)}</strong></td>"
-                f"<td>{status_badge}</td>"
-                f"<td><a href='{_escape_html(str(rel_report))}' target='_blank'>&#128203; report</a></td>"
-                f"<td style='text-align:right;color:var(--clr-err);font-weight:600'>"
-                f"{errors if errors else '—'}</td>"
-                f"<td style='text-align:right;color:var(--clr-warn)'>"
-                f"{warnings if warnings else '—'}</td>"
-                f"<td><span class='badge badge-ok'>&#10003; processed</span></td>"
-                f"</tr>"
-            )
-            status_items_parts.append(
-                f'<div class="status-item">'
-                f'<span class="status-icon">{status_icon}</span>'
-                f'<span class="status-label">'
-                f'<a href="{_escape_html(str(rel_report))}" target="_blank">'
-                f"{_escape_html(name)}</a></span>"
-                f"{status_badge}"
-                f"</div>"
-            )
-
-        # Top violated rules (top 15)
-        top_rules = rule_counter.most_common(15)
-        max_rule_count = top_rules[0][1] if top_rules else 1
-        top_rules_rows_parts: list[str] = []
-        for rule_name, count in top_rules:
-            bar_pct = int(count / max_rule_count * 100)
-            top_rules_rows_parts.append(
-                f"<tr>"
-                f"<td style='font-size:.78rem;max-width:240px;overflow:hidden"
-                f";text-overflow:ellipsis;white-space:nowrap'"
-                f" title='{_escape_html(rule_name)}'>{_escape_html(rule_name[:50])}</td>"
-                f"<td style='text-align:right;font-weight:700;color:var(--clr-err)'>{count}</td>"
-                f"<td style='width:80px'><div class='bar-bg'><div class='bar-fill err'"
-                f" style='width:{bar_pct}%'></div></div></td>"
-                f"</tr>"
-            )
-
-        # Top affected files (top 15)
-        top_files = file_counter.most_common(15)
-        max_file_count = top_files[0][1] if top_files else 1
-        top_files_rows_parts: list[str] = []
-        for file_name, count in top_files:
-            bar_pct = int(count / max_file_count * 100)
-            short = file_name.split("/")[-1]
-            top_files_rows_parts.append(
-                f"<tr>"
-                f"<td style='font-size:.78rem' title='{_escape_html(file_name)}'>"
-                f"<span style='color:var(--clr-muted)'>"
-                f"{_escape_html('/'.join(file_name.split('/')[:2]))}/</span>"
-                f"{_escape_html(short)}</td>"
-                f"<td style='text-align:right;font-weight:700'>{count}</td>"
-                f"<td style='width:80px'><div class='bar-bg'><div class='bar-fill'"
-                f" style='width:{bar_pct}%'></div></div></td>"
-                f"</tr>"
-            )
+            self._collect_top_counters(entry, rule_counter, file_counter)
+            row, item = self._processed_entry_html(name, errors, warnings, status_badge, status_icon, rel_report)
+            repo_rows_parts.append(row)
+            status_items_parts.append(item)
 
         html = _SYNTHESIS_TEMPLATE.format(
             workspace=_escape_html(str(workspace)),
@@ -352,10 +380,8 @@ class SynthesisHtmlReporter:
             total_warnings=total_warnings,
             repo_rows="\n".join(repo_rows_parts),
             status_items="\n".join(status_items_parts),
-            top_rules_rows="".join(top_rules_rows_parts)
-            or "<tr><td colspan='3' style='color:var(--clr-muted)'>No violations</td></tr>",
-            top_files_rows="".join(top_files_rows_parts)
-            or "<tr><td colspan='3' style='color:var(--clr-muted)'>No violations</td></tr>",
+            top_rules_rows=self._top_rules_rows(rule_counter),
+            top_files_rows=self._top_files_rows(file_counter),
         )
 
         output_path.parent.mkdir(parents=True, exist_ok=True)

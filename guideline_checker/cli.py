@@ -318,6 +318,76 @@ def _get_diff_files(root: Path) -> list[Path] | None:
     return [root / line for line in result.stdout.splitlines() if line.strip()]
 
 
+def _resolve_diff_files(args: argparse.Namespace, root: Path) -> list[Path] | None:
+    """Resolve the list of diff files from ``--diff``; returns None to check all files."""
+    if not args.diff:
+        return None
+    diff_files = _get_diff_files(root)
+    if diff_files is None:
+        print("[guideline-checker] --diff: git not available or not a git repo — checking all files.", file=sys.stderr)
+        return None
+    if not diff_files:
+        print("[guideline-checker] --diff: no modified files found, nothing to check.")
+        return []
+    print(f"[guideline-checker] --diff: checking {len(diff_files)} modified file(s).")
+    return diff_files
+
+
+def _run_linters_for_check(args: argparse.Namespace, root: Path) -> list:  # type: ignore[type-arg]
+    """Run linters when ``--linters`` is passed; log each result."""
+    if args.linters is None:
+        return []
+    from guideline_checker.linters import run_linters
+
+    linter_names: list[str] | None = args.linters if args.linters else None
+    print(
+        "[guideline-checker] Running linters"
+        + (f": {', '.join(linter_names)}" if linter_names else " (auto-detect)")
+        + " ..."
+    )
+    linter_results = run_linters(root, linters=linter_names)
+    for lr in linter_results:
+        if not lr.available:
+            print(f"[guideline-checker] Linter '{lr.linter}' unavailable: {lr.error}", file=sys.stderr)
+        elif lr.error:
+            print(f"[guideline-checker] Linter '{lr.linter}' error: {lr.error}", file=sys.stderr)
+        else:
+            print(f"[guideline-checker] Linter '{lr.linter}': {len(lr.violations)} violation(s).")
+    return linter_results
+
+
+def _write_extra_reports(args: argparse.Namespace, results: list, root: Path) -> None:  # type: ignore[type-arg]
+    """Write JSON / SARIF / Markdown reports when the corresponding flags are set."""
+    if args.json:
+        from guideline_checker.reporters.json_reporter import JsonReporter
+
+        JsonReporter().write(results=results, output_path=args.json, root=root)
+        print(f"[guideline-checker] JSON report written to: {args.json}")
+
+    if args.sarif:
+        from guideline_checker.reporters.sarif import SarifReporter
+
+        SarifReporter().write(results=results, output_path=args.sarif, root=root)
+        print(f"[guideline-checker] SARIF report written to: {args.sarif}")
+
+    if args.markdown:
+        from guideline_checker.reporters.markdown import MarkdownReporter
+
+        MarkdownReporter().write(results=results, output_path=args.markdown, root=root)
+        print(f"[guideline-checker] Markdown report written to: {args.markdown}")
+
+
+def _exit_code_for_check(args: argparse.Namespace, error_count: int, warning_count: int) -> int:
+    """Return the process exit code based on ``--fail-on`` and the violation counts."""
+    if args.fail_on == "never":
+        return 0
+    if args.fail_on == "error" and error_count > 0:
+        return 1
+    if args.fail_on == "warning" and (error_count + warning_count) > 0:
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -359,19 +429,9 @@ def main(argv: list[str] | None = None) -> int:
             "and the guidelines/ YAML referential.",
         )
 
-    # --diff: restrict to git-modified files
-    diff_files: list[Path] | None = None
-    if args.diff:
-        diff_files = _get_diff_files(root)
-        if diff_files is None:
-            print(
-                "[guideline-checker] --diff: git not available or not a git repo — checking all files.", file=sys.stderr
-            )
-        elif not diff_files:
-            print("[guideline-checker] --diff: no modified files found, nothing to check.")
-            return 0
-        else:
-            print(f"[guideline-checker] --diff: checking {len(diff_files)} modified file(s).")
+    diff_files = _resolve_diff_files(args, root)
+    if diff_files is not None and len(diff_files) == 0:
+        return 0
 
     results = run_checks(
         root=root,
@@ -382,48 +442,14 @@ def main(argv: list[str] | None = None) -> int:
         max_file_size=args.max_file_size,
     )
 
-    # ── Optional linter integration ──────────────────────────────────────────
-    linter_results = []
-    if args.linters is not None:
-        from guideline_checker.linters import run_linters
-
-        linter_names: list[str] | None = args.linters if args.linters else None
-        print(
-            "[guideline-checker] Running linters"
-            + (f": {', '.join(linter_names)}" if linter_names else " (auto-detect)")
-            + " ..."
-        )
-        linter_results = run_linters(root, linters=linter_names)
-        for lr in linter_results:
-            if not lr.available:
-                print(f"[guideline-checker] Linter '{lr.linter}' unavailable: {lr.error}", file=sys.stderr)
-            elif lr.error:
-                print(f"[guideline-checker] Linter '{lr.linter}' error: {lr.error}", file=sys.stderr)
-            else:
-                print(f"[guideline-checker] Linter '{lr.linter}': {len(lr.violations)} violation(s).")
+    linter_results = _run_linters_for_check(args, root)
 
     reporter = HtmlReporter()
     report_path: Path = args.output
     reporter.write(results=results, output_path=report_path, root=root, linter_results=linter_results)
     print(f"[guideline-checker] Report written to: {report_path}")
 
-    if args.json:
-        from guideline_checker.reporters.json_reporter import JsonReporter
-
-        JsonReporter().write(results=results, output_path=args.json, root=root)
-        print(f"[guideline-checker] JSON report written to: {args.json}")
-
-    if args.sarif:
-        from guideline_checker.reporters.sarif import SarifReporter
-
-        SarifReporter().write(results=results, output_path=args.sarif, root=root)
-        print(f"[guideline-checker] SARIF report written to: {args.sarif}")
-
-    if args.markdown:
-        from guideline_checker.reporters.markdown import MarkdownReporter
-
-        MarkdownReporter().write(results=results, output_path=args.markdown, root=root)
-        print(f"[guideline-checker] Markdown report written to: {args.markdown}")
+    _write_extra_reports(args, results, root)
 
     violation_count = sum(len(r.violations) for r in results)
     error_count = sum(sum(1 for v in r.violations if v.severity == "error") for r in results)
@@ -434,13 +460,7 @@ def main(argv: list[str] | None = None) -> int:
         f" ({error_count} error(s), {warning_count} warning(s))."
     )
 
-    if args.fail_on == "never":
-        return 0
-    if args.fail_on == "error" and error_count > 0:
-        return 1
-    if args.fail_on == "warning" and (error_count + warning_count) > 0:
-        return 1
-    return 0
+    return _exit_code_for_check(args, error_count, warning_count)
 
 
 # ─── synthesize command ───────────────────────────────────────────────────────

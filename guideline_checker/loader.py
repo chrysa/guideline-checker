@@ -222,6 +222,20 @@ def _strip_markdown(text: str) -> str:
     return re.sub(r"\*{1,2}|_{1,2}|`", "", text).strip()
 
 
+def _rule_text_from_line(stripped: str) -> str | None:
+    """Extract a rule text from a single stripped markdown line, or return None."""
+    if stripped.startswith(("- ", "* ")):
+        return stripped[2:].strip()
+    if _NUMBERED_RE.match(stripped):
+        return _NUMBERED_RE.sub("", stripped).strip()
+    if stripped.startswith("|") and stripped.endswith("|"):
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        joined = " — ".join(c for c in cells if c and not _TABLE_SEP_RE.match(c))
+        if any(kw in joined.lower() for kw in _CONSTRAINT_KEYWORDS):
+            return joined
+    return None
+
+
 def _extract_rules(content: str) -> list[str]:
     """Extract rule statements from markdown content.
 
@@ -236,23 +250,12 @@ def _extract_rules(content: str) -> list[str]:
     seen: set[str] = set()
 
     for line in content.splitlines():
-        stripped = line.strip()
-        rule_text: str | None = None
-
-        if stripped.startswith(("- ", "* ")):
-            rule_text = stripped[2:].strip()
-        elif _NUMBERED_RE.match(stripped):
-            rule_text = _NUMBERED_RE.sub("", stripped).strip()
-        elif stripped.startswith("|") and stripped.endswith("|"):
-            cells = [c.strip() for c in stripped.strip("|").split("|")]
-            joined = " — ".join(c for c in cells if c and not _TABLE_SEP_RE.match(c))
-            if any(kw in joined.lower() for kw in _CONSTRAINT_KEYWORDS):
-                rule_text = joined
-
-        if rule_text:
-            clean = _strip_markdown(rule_text)
-            if len(clean) > 10 and clean not in seen:
-                seen.add(clean)
-                rules.append(clean)
+        rule_text = _rule_text_from_line(line.strip())
+        if not rule_text:
+            continue
+        clean = _strip_markdown(rule_text)
+        if len(clean) > 10 and clean not in seen:
+            seen.add(clean)
+            rules.append(clean)
 
     return rules

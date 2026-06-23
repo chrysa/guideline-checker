@@ -564,18 +564,14 @@ def _evaluate_rule(
     return violations
 
 
-def _declared_violations(
+def _per_line_violations(
     file_path: Path,
     lines: list[str],
     rule: str,
     detector: RuleDetector,
-    root: Path | None = None,
 ) -> list[Violation]:
-    """Run a rule's declarative detector. Severity is left as ``"warning"`` and
-    overridden by the rule's own severity in :func:`_check_file`."""
+    """Check per-line substring and regex patterns; return matching violations."""
     violations: list[Violation] = []
-
-    # Per-line patterns: substrings (forbid) and regexes (forbid_regex).
     regexes = tuple(_compile_regex(p) for p in detector.forbid_regex)
     for lineno, line in enumerate(lines, start=1):
         if DISABLE_COMMENT in line:
@@ -593,38 +589,23 @@ def _declared_violations(
                     severity="warning",
                 ),
             )
+    return violations
 
-    # Whole-file (structural / multiline) patterns.
-    if detector.file_regex:
-        content = "\n".join(lines)
-        for pattern in detector.file_regex:
-            for match in _compile_regex(pattern).finditer(content):
-                lineno = content.count("\n", 0, match.start()) + 1
-                line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
-                if DISABLE_COMMENT in line:
-                    continue
-                violations.append(
-                    Violation(
-                        file=file_path,
-                        line_number=lineno,
-                        line_content=line.strip()[:120],
-                        rule=rule,
-                        severity="warning",
-                    ),
-                )
 
-    # Precise AST checks. Python uses the stdlib ``ast`` engine, JS/TS the tree-sitter
-    # engine; each parses once and an unmatched suffix / syntax error yields nothing.
-    # Findings carry the AST snippet but keep the file's actual line.
-    if detector.ast_checks:
-        joined = "\n".join(lines)
-        if file_path.suffix == ".py":
-            ast_findings = run_ast_checks(detector.ast_checks, joined)
-        elif file_path.suffix in JS_SUFFIXES:
-            ast_findings = run_js_ast_checks(detector.ast_checks, joined, file_path.suffix)
-        else:
-            ast_findings = []
-        for lineno, snippet in ast_findings:
+def _file_regex_violations(
+    file_path: Path,
+    lines: list[str],
+    rule: str,
+    detector: RuleDetector,
+) -> list[Violation]:
+    """Check whole-file (structural / multiline) regex patterns; return matching violations."""
+    if not detector.file_regex:
+        return []
+    violations: list[Violation] = []
+    content = "\n".join(lines)
+    for pattern in detector.file_regex:
+        for match in _compile_regex(pattern).finditer(content):
+            lineno = content.count("\n", 0, match.start()) + 1
             line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
             if DISABLE_COMMENT in line:
                 continue
@@ -632,33 +613,92 @@ def _declared_violations(
                 Violation(
                     file=file_path,
                     line_number=lineno,
-                    line_content=(line.strip() or snippet)[:120],
+                    line_content=line.strip()[:120],
                     rule=rule,
                     severity="warning",
                 ),
             )
+    return violations
 
-    # Named content scanners (e.g. entropy-based secret detection). The repo-level
-    # ``.secrets-allowlist`` exempts whole paths from the scan and suppresses values.
-    if detector.scan_checks:
-        allow_paths, allow_values = _load_secrets_allowlist(root) if root is not None else ((), frozenset())
-        path_allowed = root is not None and bool(allow_paths) and _is_excluded(file_path, root, list(allow_paths))
-        if not path_allowed:
-            content = "\n".join(lines)
-            for lineno, snippet in run_scans(detector.scan_checks, content, allow_values):
-                line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
-                if DISABLE_COMMENT in line:
-                    continue
-                violations.append(
-                    Violation(
-                        file=file_path,
-                        line_number=lineno,
-                        line_content=(line.strip() or snippet)[:120],
-                        rule=rule,
-                        severity="warning",
-                    ),
-                )
 
+def _ast_violations(
+    file_path: Path,
+    lines: list[str],
+    rule: str,
+    detector: RuleDetector,
+) -> list[Violation]:
+    """Run AST checks (Python or JS/TS) and return matching violations."""
+    if not detector.ast_checks:
+        return []
+    violations: list[Violation] = []
+    joined = "\n".join(lines)
+    if file_path.suffix == ".py":
+        ast_findings = run_ast_checks(detector.ast_checks, joined)
+    elif file_path.suffix in JS_SUFFIXES:
+        ast_findings = run_js_ast_checks(detector.ast_checks, joined, file_path.suffix)
+    else:
+        ast_findings = []
+    for lineno, snippet in ast_findings:
+        line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
+        if DISABLE_COMMENT in line:
+            continue
+        violations.append(
+            Violation(
+                file=file_path,
+                line_number=lineno,
+                line_content=(line.strip() or snippet)[:120],
+                rule=rule,
+                severity="warning",
+            ),
+        )
+    return violations
+
+
+def _scan_violations(
+    file_path: Path,
+    lines: list[str],
+    rule: str,
+    detector: RuleDetector,
+    root: Path | None,
+) -> list[Violation]:
+    """Run named content scanners (e.g. entropy-based secret detection); return violations."""
+    if not detector.scan_checks:
+        return []
+    allow_paths, allow_values = _load_secrets_allowlist(root) if root is not None else ((), frozenset())
+    if root is not None and bool(allow_paths) and _is_excluded(file_path, root, list(allow_paths)):
+        return []
+    violations: list[Violation] = []
+    content = "\n".join(lines)
+    for lineno, snippet in run_scans(detector.scan_checks, content, allow_values):
+        line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
+        if DISABLE_COMMENT in line:
+            continue
+        violations.append(
+            Violation(
+                file=file_path,
+                line_number=lineno,
+                line_content=(line.strip() or snippet)[:120],
+                rule=rule,
+                severity="warning",
+            ),
+        )
+    return violations
+
+
+def _declared_violations(
+    file_path: Path,
+    lines: list[str],
+    rule: str,
+    detector: RuleDetector,
+    root: Path | None = None,
+) -> list[Violation]:
+    """Run a rule's declarative detector. Severity is left as ``"warning"`` and
+    overridden by the rule's own severity in :func:`_check_file`."""
+    violations: list[Violation] = []
+    violations.extend(_per_line_violations(file_path, lines, rule, detector))
+    violations.extend(_file_regex_violations(file_path, lines, rule, detector))
+    violations.extend(_ast_violations(file_path, lines, rule, detector))
+    violations.extend(_scan_violations(file_path, lines, rule, detector, root))
     return violations
 
 
@@ -753,6 +793,23 @@ def _check_presence_rules(file_path: Path, lines: list[str], file_content: str, 
     return violations
 
 
+def _function_length_violation(
+    file_path: Path,
+    func_name: str,
+    func_start: int,
+    length: int,
+    limit: int,
+) -> Violation:
+    """Build a Violation for a function that exceeds the line-count limit."""
+    return Violation(
+        file=file_path,
+        line_number=func_start,
+        line_content=f"Function '{func_name}' has {length} lines (limit: {limit})",
+        rule=f"max function length: {limit}",
+        severity="warning",
+    )
+
+
 def _check_function_lengths(file_path: Path, lines: list[str], limit: int) -> list[Violation]:
     """Flag Python functions that exceed a line-count limit."""
     violations: list[Violation] = []
@@ -761,36 +818,21 @@ def _check_function_lengths(file_path: Path, lines: list[str], limit: int) -> li
 
     for lineno, line in enumerate(lines, start=1):
         stripped = line.lstrip()
-        if re.match(r"(async\s+)?def\s+\w+", stripped):
-            if func_start is not None:
-                length = lineno - func_start
-                if length > limit:
-                    violations.append(
-                        Violation(
-                            file=file_path,
-                            line_number=func_start,
-                            line_content=f"Function '{func_name}' has {length} lines (limit: {limit})",
-                            rule=f"max function length: {limit}",
-                            severity="warning",
-                        )
-                    )
-            func_start = lineno
-            match = re.search(r"def\s+(\w+)", stripped)
-            func_name = match.group(1) if match else "<anonymous>"
+        if not re.match(r"(async\s+)?def\s+\w+", stripped):
+            continue
+        if func_start is not None:
+            length = lineno - func_start
+            if length > limit:
+                violations.append(_function_length_violation(file_path, func_name, func_start, length, limit))
+        func_start = lineno
+        m = re.search(r"def\s+(\w+)", stripped)
+        func_name = m.group(1) if m else "<anonymous>"
 
     # Check last function
     if func_start is not None:
         length = len(lines) - func_start + 1
         if length > limit:
-            violations.append(
-                Violation(
-                    file=file_path,
-                    line_number=func_start,
-                    line_content=f"Function '{func_name}' has {length} lines (limit: {limit})",
-                    rule=f"max function length: {limit}",
-                    severity="warning",
-                )
-            )
+            violations.append(_function_length_violation(file_path, func_name, func_start, length, limit))
 
     return violations
 

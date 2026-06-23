@@ -110,9 +110,25 @@ class HistoryEntry(BaseModel):
 # ── Store ──────────────────────────────────────────────────────────────────────
 
 
+def _safe_repo_path(store: Path, filename: str) -> Path:
+    """Resolve *filename* inside *store* and assert no traversal escapes the base.
+
+    Raises ``ValueError`` when the resolved path would land outside *store*.
+    This is a defence-in-depth measure: the primary guard is the Pydantic
+    ``_REPO_PATTERN`` field validator, but we add an explicit containment check
+    so Sonar's taint analysis (S2083) — which cannot reason about Pydantic
+    schemas — is satisfied at the call site.
+    """
+    base = store.resolve()
+    candidate = (store / filename).resolve()
+    if not candidate.is_relative_to(base):
+        raise ValueError(f"Path traversal detected for filename {filename!r}")
+    return candidate
+
+
 def _record_path(repo: str) -> Path:
     """Return the on-disk path for a repo's snapshot (repo is pre-validated)."""
-    return _store_dir() / f"{repo}.json"
+    return _safe_repo_path(_store_dir(), f"{repo}.json")
 
 
 def _save_record(record: RepoRecord) -> None:
@@ -146,7 +162,8 @@ def _all_records() -> list[RepoRecord]:
 
 def _history_path(repo: str) -> Path:
     """Return the append-only history log path for a repo (one JSON object per line)."""
-    return _store_dir() / "history" / f"{repo}.jsonl"
+    history_dir = _store_dir() / "history"
+    return _safe_repo_path(history_dir, f"{repo}.jsonl")
 
 
 def _append_history(entry: HistoryEntry, repo: str) -> None:
@@ -253,6 +270,8 @@ def repo_history(repo: str, limit: int = 0) -> JSONResponse:
 @central_app.get("/api/repos/{repo}", response_model=None, dependencies=[Depends(require_auth)])
 def get_repo(repo: str) -> JSONResponse:
     """Return the full stored snapshot for one repo (404 if unknown)."""
+    if not re.fullmatch(_REPO_PATTERN, repo):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown repo {repo!r}")
     record = _load_record(repo)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No report for repo {repo!r}")
