@@ -150,6 +150,34 @@ def test_history_rejects_unsafe_repo_name(client: TestClient) -> None:
     assert client.get("/api/repos/..%2Fevil/history").status_code == 404
 
 
+# ── S2083 path-traversal regression (pythonsecurity:S2083) ─────────────────────
+
+
+@pytest.mark.parametrize(
+    "traversal",
+    [
+        "../secret",
+        "../../etc/passwd",
+        "valid/../escape",
+        "a%2F..%2Fb",
+    ],
+)
+def test_get_repo_rejects_traversal_attempt(client: TestClient, traversal: str) -> None:
+    """get_repo must return 404 (not serve arbitrary FS paths) for traversal-like names."""
+    # URL-encoded slashes are decoded by the ASGI layer; the router hands the
+    # decoded string to the endpoint, which must reject it before building the path.
+    res = client.get(f"/api/repos/{traversal}")
+    assert res.status_code == 404
+
+
+def test_safe_repo_path_raises_on_traversal(tmp_path: Path) -> None:
+    """_safe_repo_path must raise ValueError when the candidate escapes the store dir."""
+    from guideline_checker.web.central import _safe_repo_path
+
+    with pytest.raises(ValueError, match="traversal"):
+        _safe_repo_path(tmp_path, "../outside.json")
+
+
 def test_history_capped_at_limit(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("guideline_checker.web.central._HISTORY_LIMIT", 3)
     for i in range(5):

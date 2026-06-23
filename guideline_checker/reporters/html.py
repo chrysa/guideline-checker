@@ -14,6 +14,10 @@ from guideline_checker.checker import RuleResult, Violation
 if TYPE_CHECKING:
     from guideline_checker.linters import LinterResult, LinterViolation
 
+# ─── Shared badge constants ───────────────────────────────────────────────────
+
+_BADGE_STATUS_OK = '<span class="badge badge-ok">PASS</span>'
+
 # ─── Templates ────────────────────────────────────────────────────────────────
 
 _HTML_TEMPLATE = """\
@@ -368,7 +372,7 @@ class HtmlReporter:
                 badge = '<span class="badge badge-warning">ERROR</span>'
                 body = f'<div class="linter-unavailable">&#9888; {_escape_html(lr.error)}</div>'
             elif total == 0:
-                badge = '<span class="badge badge-ok">PASS</span>'
+                badge = _BADGE_STATUS_OK
                 body = '<div class="linter-ok">&#10003; No violations found</div>'
             else:
                 if n_err:
@@ -439,6 +443,45 @@ class HtmlReporter:
 
     # ── Navigation ─────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _nav_item_cls_and_count(n_err: int, n_warn: int) -> tuple[str, str]:
+        """Return the CSS class and count HTML for a nav item based on violation counts."""
+        if n_err:
+            return "err", f'<span class="nav-count">{n_err} err</span>'
+        if n_warn:
+            return "warn", f'<span class="nav-count">{n_warn} warn</span>'
+        return "ok", '<span class="nav-count">✓</span>'
+
+    @staticmethod
+    def _nav_sub_items(violations: list[Violation], root: Path, idx: int) -> list[str]:
+        """Build the sub-item file list for a nav entry (max 8 files shown)."""
+        files_seen: dict[str, int] = {}
+        for v in violations:
+            try:
+                rel = str(v.file.relative_to(root))
+            except ValueError:
+                rel = str(v.file)
+            files_seen[rel] = files_seen.get(rel, 0) + 1
+
+        sub_items: list[str] = []
+        for i, (fpath, cnt) in enumerate(list(files_seen.items())[:8]):
+            fname = fpath.split("/")[-1]
+            file_id = f"file-{idx}-{i}"
+            sub_items.append(
+                f'<div class="nav-item" style="padding-left:1.75rem;font-size:.73rem" '
+                f"onclick=\"document.getElementById('{file_id}').scrollIntoView({{behavior:'smooth'}})\">"
+                f'<span class="nav-label" title="{_escape_html(fpath)}">&#128196; {_escape_html(fname)}</span>'
+                f'<span class="nav-count">{cnt}</span>'
+                f"</div>"
+            )
+        if len(files_seen) > 8:
+            sub_items.append(
+                f'<div class="nav-item" style="padding-left:1.75rem;font-size:.73rem;color:var(--clr-muted)">'
+                f'<span class="nav-label">…{len(files_seen) - 8} more files</span>'
+                f"</div>"
+            )
+        return sub_items
+
     def _render_nav_items(
         self,
         results: list[RuleResult],
@@ -451,17 +494,7 @@ class HtmlReporter:
             title = _short_title(r.instruction.description or r.instruction.path.stem)
             n_err = sum(1 for v in r.violations if v.severity == "error")
             n_warn = sum(1 for v in r.violations if v.severity == "warning")
-            n_viol = len(r.violations)
-
-            if n_err:
-                cls = "err"
-                count_html = f'<span class="nav-count">{n_err} err</span>'
-            elif n_warn:
-                cls = "warn"
-                count_html = f'<span class="nav-count">{n_warn} warn</span>'
-            else:
-                cls = "ok"
-                count_html = '<span class="nav-count">✓</span>'
+            cls, count_html = self._nav_item_cls_and_count(n_err, n_warn)
 
             items.append(
                 f'<div class="nav-item {cls}" data-target="{section_id}" '
@@ -471,33 +504,8 @@ class HtmlReporter:
                 f"</div>"
             )
 
-            # Sub-items: affected files (max 8 shown)
-            if n_viol > 0:
-                files_seen: dict[str, int] = {}
-                for v in r.violations:
-                    try:
-                        rel = str(v.file.relative_to(root))
-                    except ValueError:
-                        rel = str(v.file)
-                    files_seen[rel] = files_seen.get(rel, 0) + 1
-
-                sub_items: list[str] = []
-                for i, (fpath, cnt) in enumerate(list(files_seen.items())[:8]):
-                    fname = fpath.split("/")[-1]
-                    file_id = f"file-{idx}-{i}"
-                    sub_items.append(
-                        f'<div class="nav-item" style="padding-left:1.75rem;font-size:.73rem" '
-                        f"onclick=\"document.getElementById('{file_id}').scrollIntoView({{behavior:'smooth'}})\">"
-                        f'<span class="nav-label" title="{_escape_html(fpath)}">&#128196; {_escape_html(fname)}</span>'
-                        f'<span class="nav-count">{cnt}</span>'
-                        f"</div>"
-                    )
-                if len(files_seen) > 8:
-                    sub_items.append(
-                        f'<div class="nav-item" style="padding-left:1.75rem;font-size:.73rem;color:var(--clr-muted)">'
-                        f'<span class="nav-label">…{len(files_seen) - 8} more files</span>'
-                        f"</div>"
-                    )
+            if r.violations:
+                sub_items = self._nav_sub_items(r.violations, root, idx)
                 items.append(f'<div class="nav-sub">{"".join(sub_items)}</div>')
 
         # Add linter nav section if linters ran
@@ -531,7 +539,7 @@ class HtmlReporter:
             elif n_warn:
                 status = '<span class="badge badge-warning">WARN</span>'
             else:
-                status = '<span class="badge badge-ok">PASS</span>'
+                status = _BADGE_STATUS_OK
 
             err_cell = f'<span style="color:var(--clr-err);font-weight:600">{n_err}</span>' if n_err else "0"
             warn_cell = f'<span style="color:var(--clr-warn);font-weight:600">{n_warn}</span>' if n_warn else "0"
@@ -564,7 +572,7 @@ class HtmlReporter:
         elif n_warn:
             badge = f'<span class="badge badge-warning">{n_warn} warning(s)</span>'
         else:
-            badge = '<span class="badge badge-ok">PASS</span>'
+            badge = _BADGE_STATUS_OK
 
         source_badge = (
             f'<span class="badge badge-neutral" style="font-size:.68rem">'
