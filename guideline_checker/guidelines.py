@@ -188,6 +188,67 @@ def _discover_target_field(path: Path, data: dict[str, object]) -> str | None:
     return fields[0] if fields else None
 
 
+def _parse_dimension_file_header(path: Path, data: dict[str, object]) -> tuple[str, str]:
+    """Extract (file_target, apply_to_glob) from the top-level mapping, raising on errors."""
+    target_field = _discover_target_field(path, data)
+    if target_field is None:
+        file_target = _WILDCARD_TARGET
+    else:
+        file_target = data.get(target_field, _WILDCARD_TARGET)
+        if not isinstance(file_target, str):
+            raise GuidelineError(f"{path}: '{target_field}' must be a string.")
+
+    apply_to_glob = data.get(_APPLY_TO_GLOB_FIELD, _ALL_FILES_GLOB)
+    if not isinstance(apply_to_glob, str) or not apply_to_glob.strip():
+        raise GuidelineError(f"{path}: '{_APPLY_TO_GLOB_FIELD}' must be a non-empty string.")
+
+    return str(file_target), str(apply_to_glob)
+
+
+def _collect_raw_rules(
+    path: Path,
+    raw_rules: list[object],
+    target_field: str | None,
+    categories: set[str],
+) -> tuple[dict[str, _RawRule], list[str]]:
+    """Pass 1 — parse every raw rule entry; reject intra-file duplicate ids."""
+    raw_by_id: dict[str, _RawRule] = {}
+    order: list[str] = []
+    for raw in raw_rules:
+        rr = _parse_raw_rule(path, raw, target_field, categories)
+        if rr.id in raw_by_id:
+            raise GuidelineError(
+                f"{path}: duplicate rule id {rr.id!r} within the file — "
+                f"each rule id must be unique inside a single referential file.",
+            )
+        raw_by_id[rr.id] = rr
+        order.append(rr.id)
+    return raw_by_id, order
+
+
+def _emit_resolved_rules(
+    path: Path,
+    order: list[str],
+    raw_by_id: dict[str, _RawRule],
+    categories: set[str],
+    file_target: str,
+    seen_ids: set[str],
+) -> list[GuidelineRule]:
+    """Pass 2 — resolve inheritance and emit non-abstract, non-duplicate rules."""
+    resolved: dict[str, GuidelineRule] = {}
+    rules: list[GuidelineRule] = []
+    for rid in order:
+        rule = _resolve_rule(rid, raw_by_id, resolved, categories, file_target, ())
+        if raw_by_id[rid].abstract:
+            continue
+        if rid in seen_ids:
+            logger.warning("guidelines: duplicate rule id %r in %s — keeping first, skipping this one", rid, path)
+            continue
+        seen_ids.add(rid)
+        rules.append(rule)
+    return rules
+
+
 def _parse_dimension_file(
     path: Path,
     dimension: str,
@@ -204,49 +265,55 @@ def _parse_dimension_file(
         raise GuidelineError(f"{path}: expected a mapping at the top level.")
 
     target_field = _discover_target_field(path, data)
-    if target_field is None:
-        file_target = _WILDCARD_TARGET
-    else:
-        file_target = data.get(target_field, _WILDCARD_TARGET)
-        if not isinstance(file_target, str):
-            raise GuidelineError(f"{path}: '{target_field}' must be a string.")
-
-    apply_to_glob = data.get(_APPLY_TO_GLOB_FIELD, _ALL_FILES_GLOB)
-    if not isinstance(apply_to_glob, str) or not apply_to_glob.strip():
-        raise GuidelineError(f"{path}: '{_APPLY_TO_GLOB_FIELD}' must be a non-empty string.")
+    file_target, apply_to_glob = _parse_dimension_file_header(path, data)
 
     raw_rules = data.get("rules", [])
     if not isinstance(raw_rules, list):
         raise GuidelineError(f"{path}: 'rules' must be a list.")
 
-    # Pass 1 — parse every rule; ``extends`` is resolved against this same-file index.
-    raw_by_id: dict[str, _RawRule] = {}
-    order: list[str] = []
-    for raw in raw_rules:
-        rr = _parse_raw_rule(path, raw, target_field, categories)
-        # Intra-file duplicate: an authoring bug with no override intent — hard fail.
-        if rr.id in raw_by_id:
-            raise GuidelineError(
-                f"{path}: duplicate rule id {rr.id!r} within the file — "
-                f"each rule id must be unique inside a single referential file.",
-            )
-        raw_by_id[rr.id] = rr
-        order.append(rr.id)
-
-    # Pass 2 — resolve inheritance (memoised), then emit non-abstract rules.
-    resolved: dict[str, GuidelineRule] = {}
-    rules: list[GuidelineRule] = []
-    for rid in order:
-        rule = _resolve_rule(rid, raw_by_id, resolved, categories, file_target, ())
-        if raw_by_id[rid].abstract:
-            continue
-        # Cross-file duplicate: intentional transverse override (_common.yml wins) — keep first, log.
-        if rid in seen_ids:
-            logger.warning("guidelines: duplicate rule id %r in %s — keeping first, skipping this one", rid, path)
-            continue
-        seen_ids.add(rid)
-        rules.append(rule)
+    raw_by_id, order = _collect_raw_rules(path, raw_rules, target_field, categories)
+    rules = _emit_resolved_rules(path, order, raw_by_id, categories, file_target, seen_ids)
     return _DimensionFile(path=path, dimension=dimension, apply_to_glob=apply_to_glob, rules=rules)
+
+
+def _validate_raw_rule_id(path: Path, raw: dict[str, object]) -> str:
+    """Extract and validate the rule 'id' field; raise on missing or non-string."""
+    rule_id = raw.get("id")
+    if not isinstance(rule_id, str) or not rule_id.strip():
+        raise GuidelineError(f"{path}: rule is missing a non-empty string 'id'.")
+    return rule_id
+
+
+def _validate_raw_rule_category(path: Path, rule_id: str, raw: dict[str, object], categories: set[str]) -> str | None:
+    """Validate and return the optional 'category' field against known categories."""
+    category = _optional_str(path, rule_id, "category", raw)
+    if category is not None and category not in categories:
+        raise GuidelineError(
+            f"{path}: rule {rule_id!r} uses unknown category {category!r} "
+            f"(known categories: {sorted(categories)}) — add it to {_CATEGORIES_FILE} or fix the typo.",
+        )
+    return category
+
+
+def _validate_raw_rule_severity(path: Path, rule_id: str, raw: dict[str, object]) -> str | None:
+    """Validate and return the optional 'severity' field against allowed values."""
+    severity = _optional_str(path, rule_id, "severity", raw)
+    if severity is not None and severity not in _VALID_SEVERITIES:
+        raise GuidelineError(
+            f"{path}: rule {rule_id!r} has invalid severity {severity!r} "
+            f"(expected one of {sorted(_VALID_SEVERITIES)}).",
+        )
+    return severity
+
+
+def _extract_raw_rule_target(path: Path, rule_id: str, raw: dict[str, object], target_field: str | None) -> str | None:
+    """Extract the per-rule target override when the file declares a target field."""
+    if target_field is None or target_field not in raw:
+        return None
+    candidate = raw[target_field]
+    if not isinstance(candidate, str):
+        raise GuidelineError(f"{path}: rule {rule_id!r} '{target_field}' must be a string.")
+    return candidate
 
 
 def _parse_raw_rule(
@@ -260,36 +327,17 @@ def _parse_raw_rule(
     """
     if not isinstance(raw, dict):
         raise GuidelineError(f"{path}: each rule must be a mapping, got {type(raw).__name__}.")
-    rule_id = raw.get("id")
-    if not isinstance(rule_id, str) or not rule_id.strip():
-        raise GuidelineError(f"{path}: rule is missing a non-empty string 'id'.")
+    rule_id = _validate_raw_rule_id(path, raw)
     extends = raw.get(_EXTENDS_FIELD)
     if extends is not None and (not isinstance(extends, str) or not extends.strip()):
         raise GuidelineError(f"{path}: rule {rule_id!r} '{_EXTENDS_FIELD}' must be a non-empty string.")
     abstract = raw.get(_ABSTRACT_FIELD, False)
     if not isinstance(abstract, bool):
         raise GuidelineError(f"{path}: rule {rule_id!r} '{_ABSTRACT_FIELD}' must be a boolean.")
-    category = _optional_str(path, rule_id, "category", raw)
-    if category is not None and category not in categories:
-        raise GuidelineError(
-            f"{path}: rule {rule_id!r} uses unknown category {category!r} "
-            f"(known categories: {sorted(categories)}) — add it to {_CATEGORIES_FILE} or fix the typo.",
-        )
-    severity = _optional_str(path, rule_id, "severity", raw)
-    if severity is not None and severity not in _VALID_SEVERITIES:
-        raise GuidelineError(
-            f"{path}: rule {rule_id!r} has invalid severity {severity!r} "
-            f"(expected one of {sorted(_VALID_SEVERITIES)}).",
-        )
+    category = _validate_raw_rule_category(path, rule_id, raw, categories)
+    severity = _validate_raw_rule_severity(path, rule_id, raw)
     rule_text = _optional_str(path, rule_id, "rule", raw)
-    # A rule may carry a target only when the file declares a target field.
-    target: str | None = None
-    if target_field is not None and target_field in raw:
-        candidate = raw[target_field]
-        if not isinstance(candidate, str):
-            raise GuidelineError(f"{path}: rule {rule_id!r} '{target_field}' must be a string.")
-        target = candidate
-
+    target = _extract_raw_rule_target(path, rule_id, raw, target_field)
     return _RawRule(
         id=rule_id,
         path=path,
@@ -314,6 +362,61 @@ def _optional_str(path: Path, rule_id: str, key: str, raw: dict[str, object]) ->
     return value
 
 
+def _resolve_base(
+    rr: _RawRule,
+    rule_id: str,
+    raw_by_id: dict[str, _RawRule],
+    resolved: dict[str, GuidelineRule],
+    categories: set[str],
+    file_target: str,
+    stack: tuple[str, ...],
+) -> GuidelineRule | None:
+    """Recursively resolve the base rule pointed to by ``extends``, or return None."""
+    if rr.extends is None:
+        return None
+    if rr.extends not in raw_by_id:
+        raise GuidelineError(
+            f"{rr.path}: rule {rule_id!r} extends unknown base {rr.extends!r} — "
+            f"the base must be a rule id declared in the same file.",
+        )
+    return _resolve_rule(rr.extends, raw_by_id, resolved, categories, file_target, (*stack, rule_id))
+
+
+def _merge_rr_with_base(
+    rr: _RawRule,
+    rule_id: str,
+    base: GuidelineRule | None,
+    file_target: str,
+) -> GuidelineRule:
+    """Merge a raw rule with its resolved base into a :class:`GuidelineRule`.
+
+    Validates that required fields (category, severity, rule text) are present
+    after inheritance.
+    """
+    category = rr.category or (base.category if base else None)
+    severity = rr.severity or (base.severity if base else None)
+    rule_text = rr.rule or (base.rule if base else None)
+    rationale = rr.rationale or (base.rationale if base else "")
+    target = rr.target or (base.target if base else None) or file_target
+    detect = _merge_detectors(base.detect if base else None, rr.detect)
+
+    if category is None:
+        raise GuidelineError(f"{rr.path}: rule {rule_id!r} is missing a 'category' (none declared or inherited).")
+    if severity is None:
+        raise GuidelineError(f"{rr.path}: rule {rule_id!r} is missing a 'severity' (none declared or inherited).")
+    if not rule_text:
+        raise GuidelineError(f"{rr.path}: rule {rule_id!r} is missing a 'rule' (none declared or inherited).")
+    return GuidelineRule(
+        id=rule_id,
+        target=target,
+        category=category,
+        severity=severity,
+        rule=rule_text,
+        rationale=rationale,
+        detect=detect,
+    )
+
+
 def _resolve_rule(
     rule_id: str,
     raw_by_id: dict[str, _RawRule],
@@ -333,37 +436,8 @@ def _resolve_rule(
     if rule_id in stack:
         chain = " -> ".join((*stack, rule_id))
         raise GuidelineError(f"{rr.path}: 'extends' cycle detected: {chain}.")
-    base: GuidelineRule | None = None
-    if rr.extends is not None:
-        if rr.extends not in raw_by_id:
-            raise GuidelineError(
-                f"{rr.path}: rule {rule_id!r} extends unknown base {rr.extends!r} — "
-                f"the base must be a rule id declared in the same file.",
-            )
-        base = _resolve_rule(rr.extends, raw_by_id, resolved, categories, file_target, (*stack, rule_id))
-    category = rr.category or (base.category if base else None)
-    severity = rr.severity or (base.severity if base else None)
-    rule_text = rr.rule or (base.rule if base else None)
-    rationale = rr.rationale or (base.rationale if base else "")
-    target = rr.target or (base.target if base else None) or file_target
-    detect = _merge_detectors(base.detect if base else None, rr.detect)
-
-    if category is None:
-        raise GuidelineError(f"{rr.path}: rule {rule_id!r} is missing a 'category' (none declared or inherited).")
-    if severity is None:
-        raise GuidelineError(f"{rr.path}: rule {rule_id!r} is missing a 'severity' (none declared or inherited).")
-    if not rule_text:
-        raise GuidelineError(f"{rr.path}: rule {rule_id!r} is missing a 'rule' (none declared or inherited).")
-
-    rule = GuidelineRule(
-        id=rule_id,
-        target=target,
-        category=category,
-        severity=severity,
-        rule=rule_text,
-        rationale=rationale,
-        detect=detect,
-    )
+    base = _resolve_base(rr, rule_id, raw_by_id, resolved, categories, file_target, stack)
+    rule = _merge_rr_with_base(rr, rule_id, base, file_target)
     resolved[rule_id] = rule
     return rule
 
