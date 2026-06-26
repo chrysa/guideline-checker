@@ -7,4 +7,4 @@ on:
 
 jobs:
     call:
-        uses: chrysa/github-actions/.github/workflows/enforce-feature-branch.yml@v1.2.0
+        uses: chrysa/github-actions/.github/workflows/enforce-feature-branch.yml@v1.2.1
