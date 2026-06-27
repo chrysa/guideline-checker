@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from guideline_checker.checker import run_checks
+from guideline_checker.gh_client import GhClient
 from guideline_checker.reporters.html import HtmlReporter
 
 
@@ -184,6 +185,31 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help=("Shared instructions directory to use for all repos (overrides per-repo .github/instructions/)."),
+    )
+    syn_cmd.add_argument(
+        "--source",
+        choices=["local", "origin"],
+        default="local",
+        help="Audit local working trees (default) or origin/<default-branch> via the gh API.",
+    )
+    syn_cmd.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help="Path to repos.yml. Required when --source origin.",
+    )
+    syn_cmd.add_argument(
+        "--shared-standards",
+        type=Path,
+        default=None,
+        dest="shared_standards",
+        help="Path to a shared-standards checkout (canonical STANDARDS + LICENSE template); required for origin.",
+    )
+    syn_cmd.add_argument(
+        "--category",
+        choices=["all", "distribution"],
+        default="all",
+        help="Restrict origin audit to a check category (default: all = distribution).",
     )
 
     # ── web subcommand ───────────────────────────────────────────────────────
@@ -470,6 +496,9 @@ def _cmd_synthesize(args: argparse.Namespace) -> int:
     """Run checks on each repo in a workspace and produce a synthesis report."""
     from guideline_checker.reporters.synthesis_html import SynthesisHtmlReporter
 
+    if getattr(args, "source", "local") == "origin":
+        return _cmd_synthesize_origin(args)
+
     workspace: Path = args.workspace.resolve()
     if not workspace.is_dir():
         print(f"[guideline-checker] Workspace not found: {workspace}", file=sys.stderr)
@@ -553,6 +582,47 @@ def _cmd_synthesize(args: argparse.Namespace) -> int:
         output_path=output,
     )
     print(f"[guideline-checker] Synthesis report written to: {output}")
+    return 0
+
+
+def _cmd_synthesize_origin(args: argparse.Namespace) -> int:
+    """Audit origin/<default> for every dev repo in the manifest; write a synthesis report."""
+    from guideline_checker.distribution import load_expectations
+    from guideline_checker.manifest import load_manifest
+    from guideline_checker.origin_audit import run_origin_audit
+    from guideline_checker.reporters.synthesis_html import SynthesisHtmlReporter
+
+    if args.manifest is None or args.shared_standards is None:
+        print("[guideline-checker] --source origin requires --manifest and --shared-standards", file=sys.stderr)
+        return 2
+    client = GhClient()
+    if not client.available():
+        print("[guideline-checker] gh CLI not found — required for --source origin", file=sys.stderr)
+        return 2
+
+    targets = load_manifest(args.manifest)
+    expected = load_expectations(args.shared_standards)
+    print(f"[guideline-checker] Auditing {len(targets)} dev repo(s) on origin ...")
+    audited = run_origin_audit(targets, expected, client)
+
+    workspace: Path = args.workspace.resolve()
+    output: Path = args.output or workspace / "guideline-synthesis.html"
+    repo_entries = [
+        {
+            "name": r.name,
+            "path": workspace / r.name,
+            "skipped": False,
+            "results": r.results,
+            "linter_results": [],
+            "report_path": None,
+            "errors": r.errors,
+            "warnings": r.warnings,
+        }
+        for r in audited
+    ]
+    SynthesisHtmlReporter().write(workspace=workspace, repo_entries=repo_entries, output_path=output)
+    total_errors = sum(r.errors for r in audited)
+    print(f"[guideline-checker] Origin synthesis written to: {output} (errors={total_errors})")
     return 0
 
 

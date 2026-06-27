@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Callable
 
 # Raw-content Accept header → the contents API returns file bytes (not base64 JSON).
 _RAW_ACCEPT = "Accept: application/vnd.github.raw"
@@ -33,7 +32,8 @@ def _real_runner(args: Sequence[str]) -> GhResult:
     if gh is None:
         return GhResult(ok=False, stdout="", stderr="gh not found", code=127)
     try:
-        proc = subprocess.run(  # noqa: S603 — fixed binary, list args, no shell
+        # Safe subprocess: fixed binary resolved via shutil.which, list args, no shell.
+        proc = subprocess.run(
             [gh, *args],
             capture_output=True,
             text=True,
