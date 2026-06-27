@@ -231,3 +231,53 @@ approaches the cap — tracked as the reconciliation follow-up when the two bran
 does not generalise to future content scanners (license headers, TODO budgets, banned APIs);
 (b) a `forbid_regex` for secrets — no entropy reasoning, so it re-introduces the placeholder
 false positives; (c) keeping `_credential_checks` — misses real secrets and is un-allowlistable.
+
+---
+
+## D-0009 — Origin-side fleet distribution audit (Scanner seam + `--fix`)
+
+**Date**: 2026-06-27
+**Status**: accepted
+
+`guideline-checker synthesize` enumerated **local** workspace subdirectories, inheriting
+the fleet's stale-clone trap: a repo can look non-compliant locally while `origin/<default>`
+is fine (and vice-versa). Nothing verified that each repo actually *carries* the managed
+standards artifacts on its default branch.
+
+Introduced an **origin-side distribution audit**:
+
+- **`GhClient`** (`gh_client.py`) — the single seam over the `gh` CLI; tests inject a fake
+  runner, production shells out (no token ever read in code, `gh` owns auth, no `shell=True`).
+- **`Scanner` protocol** (`scanner_source.py`) — `LocalScanner` (filesystem, unchanged
+  behaviour) and `OriginScanner` (reads `origin/<default>` via `GhClient`, immune to the
+  stale-clone trap by construction).
+- **`distribution.py`** — four file presence/equality checks (`standards-file`,
+  `claude-import`, `precommit-pin`, `license-present`) emitted as standard `Violation`s, so
+  **every existing reporter and the web dashboard render them unchanged**. Expected values
+  are derived from a `shared-standards` checkout (DRY with `distribute-standards`).
+- **`manifest.py`** — loads `repos.yml` (`status: dev` only). Per-repo applicability is a new
+  optional `distribution:` opt-out block (`license/standards/precommit: false`); the legacy
+  `public`/`runtime` fields are **not** overloaded (different semantics). Applicability is
+  data, not heuristics — a misclassified repo is a one-line, reviewable manifest fix.
+- **Tri-state → violation model**: OK = no violation; DRIFT = a `Violation`; NA = applicability
+  skip (never a false drift); ERROR = a distinct `origin-fetch-failed` `Violation` so a
+  transient API/auth failure is never silently read as "compliant".
+- **CLI**: `synthesize --source {local,origin}` (default `local`, unchanged) `--manifest`
+  `--shared-standards` `--category`.
+
+**`--fix` (opt-in remediation)** opens **one PR per repo** and **never merges**; `--dry-run`
+previews. Idempotent: an existing fix branch/PR short-circuits. Only `license-present` and
+`standards-file` are auto-fixable (safe whole-file writes); `precommit-pin` and
+`claude-import` are **report-only** because they require content-aware edits (append/inject)
+with no safe full-file template — left for a human.
+
+*Spec deviations (deliberate)*: (a) the per-line rule engine is **not** rewired to read
+origin — the `Scanner` seam is introduced and consumed by the distribution category only;
+full per-line-over-origin is future work. (b) applicability uses a new `distribution:` block
+rather than overloading `public`/`runtime`. (c) only two of four checks are auto-fixable, as
+above.
+
+*Rejected alternatives*: (a) pull model (server clones/scans every repo) — couples to every
+repo's creds/build env, and still reads a working tree; (b) auto-merge — merging stays a
+separate, deliberate human action; (c) a bespoke report format — reusing `Violation` gives
+every reporter + the dashboard for free.

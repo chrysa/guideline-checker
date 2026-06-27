@@ -208,16 +208,26 @@ class SynthesisHtmlReporter:
 
     @staticmethod
     def _processed_entry_html(
-        name: str, errors: int, warnings: int, status_badge: str, status_icon: str, rel_report: Path
+        name: str, errors: int, warnings: int, status_badge: str, status_icon: str, rel_report: Path | None
     ) -> tuple[str, str]:
-        """Build the repo-row and status-item HTML for a successfully processed entry."""
+        """Build the repo-row and status-item HTML for a successfully processed entry.
+
+        ``rel_report`` is ``None`` for origin-side entries, which have no per-repo HTML
+        report to link to — the repo name renders as plain text instead of a link.
+        """
         safe_name = _escape_html(name)
-        safe_rel = _escape_html(str(rel_report))
+        if rel_report is None:
+            report_cell = "&#8212;"
+            name_label = f"<strong>{safe_name}</strong>"
+        else:
+            safe_rel = _escape_html(str(rel_report))
+            report_cell = f"<a href='{safe_rel}' target='_blank'>&#128203; report</a>"
+            name_label = f'<a href="{safe_rel}" target="_blank">{safe_name}</a>'
         row = (
             f"<tr>"
             f"<td><strong>{safe_name}</strong></td>"
             f"<td>{status_badge}</td>"
-            f"<td><a href='{safe_rel}' target='_blank'>&#128203; report</a></td>"
+            f"<td>{report_cell}</td>"
             f"<td style='text-align:right;color:var(--clr-err);font-weight:600'>"
             f"{errors if errors else '—'}</td>"
             f"<td style='text-align:right;color:var(--clr-warn)'>"
@@ -228,9 +238,7 @@ class SynthesisHtmlReporter:
         item = (
             f'<div class="status-item">'
             f'<span class="status-icon">{status_icon}</span>'
-            f'<span class="status-label">'
-            f'<a href="{safe_rel}" target="_blank">'
-            f"{safe_name}</a></span>"
+            f'<span class="status-label">{name_label}</span>'
             f"{status_badge}"
             f"</div>"
         )
@@ -348,7 +356,7 @@ class SynthesisHtmlReporter:
             warnings = entry.get("warnings", 0)
             total_errors += errors
             total_warnings += warnings
-            report_path: Path = entry.get("report_path", entry["path"] / "guideline-report.html")
+            report_path: Path | None = entry.get("report_path", entry["path"] / "guideline-report.html")
 
             if errors:
                 repos_fail += 1
@@ -359,10 +367,14 @@ class SynthesisHtmlReporter:
                 status_badge = '<span class="badge badge-ok">PASS</span>'
                 status_icon = "&#128994;"
 
-            try:
-                rel_report = report_path.relative_to(output_path.parent)
-            except ValueError:
-                rel_report = report_path
+            rel_report: Path | None
+            if report_path is None:
+                rel_report = None  # origin mode: no per-repo HTML report to link to
+            else:
+                try:
+                    rel_report = report_path.relative_to(output_path.parent)
+                except ValueError:
+                    rel_report = report_path
 
             self._collect_top_counters(entry, rule_counter, file_counter)
             row, item = self._processed_entry_html(name, errors, warnings, status_badge, status_icon, rel_report)
