@@ -98,6 +98,54 @@ guideline-checker synthesize --workspace /path/to/workspace
 
 Writes a per-repo `guideline-report.html` plus a combined `guideline-synthesis.html`.
 
+### Fleet distribution audit (origin-side)
+
+By default `synthesize` scans **local** working trees, which lag `origin`. To audit what each
+repo actually carries on its **default branch** — immune to the stale-clone trap — point it at
+`origin` via a `repos.yml` manifest and a `shared-standards` checkout:
+
+```bash
+guideline-checker synthesize \
+  --source origin \
+  --manifest ../shared-standards/repos.yml \
+  --shared-standards ../shared-standards \
+  --workspace . \
+  --category distribution \
+  --output fleet-distribution.html
+# add --fix [--dry-run] to open one remediation PR per drifting repo (never merges)
+```
+
+It reads `origin/<default>` for every `status: dev` repo via the `gh` API (so `gh` must be
+authenticated) and checks four managed artifacts, reported as normal violations in the same
+HTML/JSON/Markdown/SARIF reporters and the web dashboard:
+
+| check id          | drifts when …                                                          | auto-fixable |
+|-------------------|------------------------------------------------------------------------|--------------|
+| `standards-file`  | `.chrysa/STANDARDS.md` differs from the canonical `STANDARDS.chrysa.md` | yes          |
+| `claude-import`   | `CLAUDE.md` is missing the `@.chrysa/STANDARDS.md` import               | report-only  |
+| `precommit-pin`   | `.pre-commit-config.yaml` is missing the `chrysa/pre-commit-tools` pin  | report-only  |
+| `license-present` | `LICENSE` is absent                                                     | yes          |
+
+A repo whose `origin` cannot be reached (auth/API failure) yields an `origin-fetch-failed`
+error finding rather than being silently read as compliant.
+
+`--fix` opens **one PR per drifting repo and never merges** (use `--dry-run` to preview). Only
+`standards-file` and `license-present` are auto-fixed (safe whole-file writes); `claude-import`
+and `precommit-pin` are report-only because they need content-aware edits.
+
+#### `repos.yml` manifest
+
+Origin mode iterates the fleet manifest (`status: dev` repos only). Per-repo applicability is
+declared in an optional `distribution:` opt-out block — absent keys default to applicable:
+
+```yaml
+repos:
+  - name: my-resume
+    status: dev
+    distribution:
+      license: false      # personal-content repo — no blanket MIT LICENSE expected
+```
+
 ### Pre-commit hook
 
 ```yaml

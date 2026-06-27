@@ -55,9 +55,10 @@ def test_apply_fix_dry_run_returns_marker_without_calls() -> None:
 def test_apply_fix_no_fixable_returns_none() -> None:
     from guideline_checker.gh_client import GhClient
 
-    out = apply_fix(
-        "chrysa", "alpha", _full_result(["precommit-pin"]), _EXP, GhClient(runner=lambda a: None), dry_run=False
-    )
+    def runner(args):  # type: ignore[no-untyped-def]
+        raise AssertionError("a non-fixable result must not call gh")
+
+    out = apply_fix("chrysa", "alpha", _full_result(["precommit-pin"]), _EXP, GhClient(runner=runner), dry_run=False)
     assert out is None
 
 
