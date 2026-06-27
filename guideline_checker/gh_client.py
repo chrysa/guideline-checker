@@ -6,6 +6,7 @@ production uses the real ``gh`` subprocess. No token is ever read in code — ``
 
 from __future__ import annotations
 
+import base64
 import shutil
 import subprocess
 from collections.abc import Callable, Sequence
@@ -26,7 +27,7 @@ class GhResult:
 GhRunner = Callable[[Sequence[str]], GhResult]
 
 
-def _real_runner(args: Sequence[str]) -> GhResult:
+def _real_runner(args: Sequence[str]) -> GhResult:  # pragma: no cover - real subprocess I/O boundary
     """Run ``gh <args>`` with a hard timeout; never raises on non-zero exit."""
     gh = shutil.which("gh")
     if gh is None:
@@ -62,3 +63,83 @@ class GhClient:
 
     def repo_exists(self, owner: str, repo: str) -> bool:
         return self._run(["api", f"repos/{owner}/{repo}", "--jq", ".name"]).ok
+
+    def branch_sha(self, owner: str, repo: str, branch: str) -> str | None:
+        r = self._run(["api", f"repos/{owner}/{repo}/git/ref/heads/{branch}", "--jq", ".object.sha"])
+        return r.stdout.strip() if r.ok and r.stdout.strip() else None
+
+    def create_branch(self, owner: str, repo: str, new_branch: str, from_sha: str) -> bool:
+        return self._run(
+            [
+                "api",
+                "--method",
+                "POST",
+                f"repos/{owner}/{repo}/git/refs",
+                "-f",
+                f"ref=refs/heads/{new_branch}",
+                "-f",
+                f"sha={from_sha}",
+            ]
+        ).ok
+
+    def put_file(self, owner: str, repo: str, path: str, content: str, message: str, branch: str) -> bool:
+        encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        args = [
+            "api",
+            "--method",
+            "PUT",
+            f"repos/{owner}/{repo}/contents/{path}",
+            "-f",
+            f"message={message}",
+            "-f",
+            f"content={encoded}",
+            "-f",
+            f"branch={branch}",
+        ]
+        existing_sha = self._content_sha(owner, repo, path, branch)
+        if existing_sha is not None:
+            args += ["-f", f"sha={existing_sha}"]
+        return self._run(args).ok
+
+    def _content_sha(self, owner: str, repo: str, path: str, ref: str) -> str | None:
+        r = self._run(["api", f"repos/{owner}/{repo}/contents/{path}?ref={ref}", "--jq", ".sha"])
+        return r.stdout.strip() if r.ok and r.stdout.strip() else None
+
+    def open_pr(self, owner: str, repo: str, head: str, base: str, title: str, body: str) -> str | None:
+        r = self._run(
+            [
+                "pr",
+                "create",
+                "--repo",
+                f"{owner}/{repo}",
+                "--head",
+                head,
+                "--base",
+                base,
+                "--title",
+                title,
+                "--body",
+                body,
+            ]
+        )
+        return r.stdout.strip() if r.ok else None
+
+    def find_pr(self, owner: str, repo: str, head: str) -> str | None:
+        r = self._run(
+            [
+                "pr",
+                "list",
+                "--repo",
+                f"{owner}/{repo}",
+                "--head",
+                head,
+                "--state",
+                "open",
+                "--json",
+                "url",
+                "--jq",
+                ".[0].url",
+            ]
+        )
+        url = r.stdout.strip()
+        return url if (r.ok and url) else None

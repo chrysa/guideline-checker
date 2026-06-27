@@ -211,6 +211,19 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="Restrict origin audit to a check category (default: all = distribution).",
     )
+    syn_cmd.add_argument(
+        "--fix",
+        action="store_true",
+        default=False,
+        help="Open one PR per repo to remediate fixable distribution drift (origin source only). Never merges.",
+    )
+    syn_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        dest="dry_run",
+        help="With --fix: print the PRs that would be opened without creating them.",
+    )
 
     # ── web subcommand ───────────────────────────────────────────────────────
     web_cmd = sub.add_parser(
@@ -604,6 +617,18 @@ def _cmd_synthesize_origin(args: argparse.Namespace) -> int:
     expected = load_expectations(args.shared_standards)
     print(f"[guideline-checker] Auditing {len(targets)} dev repo(s) on origin ...")
     audited = run_origin_audit(targets, expected, client)
+
+    if getattr(args, "fix", False):
+        from guideline_checker.fixers import apply_fix
+
+        for r in audited:
+            if r.fetch_failed:
+                continue
+            url = apply_fix("chrysa", r.name, r.results[0], expected, client, args.dry_run)
+            if url == "DRY-RUN":
+                print(f"[guideline-checker]   {r.name}: would open a distribution-fix PR")
+            elif url:
+                print(f"[guideline-checker]   {r.name}: PR {url}")
 
     workspace: Path = args.workspace.resolve()
     output: Path = args.output or workspace / "guideline-synthesis.html"
