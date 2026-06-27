@@ -31,3 +31,15 @@ class TestGhClientDefaultBranch:
         args = "api repos/chrysa/foo --jq .default_branch"
         client = GhClient(runner=_runner({args: GhResult(True, "develop\n", "", 0)}))
         assert client.default_branch("chrysa", "foo") == "develop"
+
+
+class TestGhClientRepoExists:
+    def test_true_when_repo_resolves(self) -> None:
+        args = "api repos/chrysa/foo --jq .name"
+        client = GhClient(runner=_runner({args: GhResult(True, "foo\n", "", 0)}))
+        assert client.repo_exists("chrysa", "foo") is True
+
+    def test_false_on_error(self) -> None:
+        args = "api repos/chrysa/foo --jq .name"
+        client = GhClient(runner=_runner({args: GhResult(False, "", "404", 1)}))
+        assert client.repo_exists("chrysa", "foo") is False

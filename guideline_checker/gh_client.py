@@ -59,3 +59,6 @@ class GhClient:
     def default_branch(self, owner: str, repo: str) -> str:
         result = self._run(["api", f"repos/{owner}/{repo}", "--jq", ".default_branch"])
         return result.stdout.strip() if result.ok else "main"
+
+    def repo_exists(self, owner: str, repo: str) -> bool:
+        return self._run(["api", f"repos/{owner}/{repo}", "--jq", ".name"]).ok
