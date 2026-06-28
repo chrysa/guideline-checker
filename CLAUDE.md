@@ -114,8 +114,8 @@ All checks must go through `make` targets. Never invoke `ruff`/`pytest`/`mypy` d
 # 1. Install
 make install-dev
 
-# 2. Full quality check (lint + format + type-check)
-make lint && make format-check && make type-check
+# 2. Full quality check (lint + format + typecheck)
+make lint && make format-check && make typecheck
 
 # 3. Run tests
 make test                  # all tests
