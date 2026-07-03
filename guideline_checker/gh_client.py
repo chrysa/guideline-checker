@@ -49,9 +49,12 @@ def _real_runner(args: Sequence[str]) -> GhResult:  # pragma: no cover - real su
 class GhClient:
     def __init__(self, runner: GhRunner | None = None) -> None:
         self._run: GhRunner = runner or _real_runner
+        # An injected runner is the test seam: honour it in ``available()`` too, so
+        # mocked origin flows don't depend on a real ``gh`` binary on the host.
+        self._injected = runner is not None
 
     def available(self) -> bool:
-        return shutil.which("gh") is not None
+        return self._injected or shutil.which("gh") is not None
 
     def read_file(self, owner: str, repo: str, path: str, ref: str) -> str | None:
         result = self._run(["api", "-H", _RAW_ACCEPT, f"repos/{owner}/{repo}/contents/{path}?ref={ref}"])
