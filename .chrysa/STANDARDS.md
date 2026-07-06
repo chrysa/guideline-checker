@@ -44,43 +44,12 @@ local `CLAUDE.md`; this file is the shared baseline imported by it.
 - **One PR per issue**, scoped tight. Every PR references an issue (`Closes/Fixes/Refs #N`).
   Exception: label `hotfix`. The `enforce-issue-link` workflow is a blocking status check.
 - **Dark mode** mandatory from V1. **Accessibility** WCAG 2.1 AA.
-- **Notion logging**: every advancement and modification (progress, decisions, state
-  changes) is logged in Notion — the single source of truth. Run `@notion-sync` after any
-  state change; in case of conflict between local docs and Notion, Notion wins.
-- **No hardcoded constants** in code — neither backend (Python) nor frontend (TS).
-  All constants and config values (thresholds, business rules, labels, URLs, magic
-  numbers) live in **external YAML files** and are loaded at runtime. Code reads them
-  through a typed loader (Pydantic Settings backend · generated typed module frontend),
-  never as inline literals. Only language-level enums (e.g. `status.HTTP_*`) are exempt.
-- **Semantic URLs & code** — URLs are resource-oriented and human-readable: lowercase,
-  hyphenated, plural-noun collections, no verbs or actions in the path (`GET /invoices/42`,
-  never `/getInvoice?id=42`); REST shapes follow the `api-design` skill. Code is
-  self-describing: intention-revealing names over comments, semantic HTML elements
-  (`<nav>`, `<button>`, `<main>`, `<header>`…) never a `<div>` wired as a control, and
-  ARIA used only to fill gaps native semantics cannot express.
 
 ## Quality gates
 
 - Test coverage **>= 85%** by default. A repo may override upward, never below 80%.
 - Lint warnings: **0**. Mypy clean. SonarCloud rating **A**, 0 security hotspot.
 - Max function lines 50 · max file lines 500 · cyclomatic complexity heuristic <= 10.
-
-## Makefile targets
-
-- **Referential**: `Forge-Stack-Workshop/base-makefile` (`Makefile.basic`, `Makefile.python`,
-  `Makefile.with-sub-folder`) is the single source of truth for target names and behaviour.
-- **Canonical naming** — follow base-makefile verbatim, one word where it is one word:
-  `typecheck` (**never** `type-check`), `test-cov`, `format-check`, `quality-gate-verify`,
-  `docker-test`, `ci`. Renaming or aliasing a canonical target is forbidden.
-- **Mandatory socle** — every application repo MUST expose, with these exact names and intent:
-  `help install install-dev lint format format-check typecheck test test-cov pre-commit clean
-  ci quality-gate-baseline quality-gate-verify`. Non-applicative repos (pure infra/Helm/Terraform,
-  config-only, docs) are exempt from the language-specific targets (`typecheck`, `test-cov`) but
-  still expose `help lint pre-commit clean`.
-- **Docs must match** — every `make <target>` cited in `CLAUDE.md` or `README.md` MUST exist in
-  the Makefile (no `make type-check` when the target is `typecheck`).
-- **Recipe style** — prefix every recipe line with `@`; add `## Description` after each target so
-  it appears in `make help`.
 
 ## Shared skills (load on demand from shared-standards/.claude/skills/)
 
