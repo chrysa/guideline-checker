@@ -50,22 +50,10 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 20
         steps:
-            - uses: actions/checkout@v7.0.0
+            - uses: actions/checkout@v6.0.3
 
             - name: Run tests via Docker
               run: make docker-test
-
-            # Coverage is generated inside the test job; the sonar job runs on a
-            # separate runner, so the report must travel as an artifact. The name
-            # MUST be test-results-<python-version> — that is exactly what
-            # sonar-scan-python downloads into reports/.
-            - name: Upload coverage report
-              if: always()
-              uses: actions/upload-artifact@v7
-              with:
-                  name: test-results-3.14
-                  path: coverage.xml
-                  if-no-files-found: warn
 
     sonar:
         name: SonarCloud
@@ -77,11 +65,11 @@ jobs:
             contents: read
             pull-requests: read
         steps:
-            - uses: actions/checkout@v7.0.0
+            - uses: actions/checkout@v6.0.3
               with:
                   fetch-depth: 0
 
-            - uses: chrysa/github-actions/sonar-scan-python@v1.2.3
+            - uses: chrysa/github-actions/sonar-scan-python@v1.1.3
               with:
                   python-version: "3.14"
                   sonar-token: ${{ secrets.SONAR_TOKEN }}
@@ -91,6 +79,4 @@ jobs:
                   project-name: guideline-checker
                   sources: guideline_checker
                   tests: tests
-                  # Downloaded from the test-results-3.14 artifact into reports/
-                  # by the action; matches sonar-scan-python's default path.
-                  coverage-report: reports/coverage.xml
+                  coverage-report: coverage.xml
