@@ -310,3 +310,71 @@ class TestSynthesizeOrigin:
             )
         assert code == 0
         assert "would open a distribution-fix PR" in capsys.readouterr().out
+
+
+class TestBaselineCli:
+    """End-to-end coverage of --write-baseline / --baseline (L2.2)."""
+
+    def test_write_baseline_creates_file_and_exits_zero(self, tmp_path: Path) -> None:
+        root = _make_project(tmp_path, violation=True)
+        baseline = tmp_path / "baseline.json"
+        code = main(
+            [
+                "check",
+                "--root",
+                str(root),
+                "--output",
+                str(tmp_path / "r.html"),
+                "--write-baseline",
+                str(baseline),
+            ]
+        )
+        assert code == 0
+        assert baseline.exists()
+        import json
+
+        payload = json.loads(baseline.read_text(encoding="utf-8"))
+        assert payload["fingerprints"]  # non-empty snapshot
+
+    def test_baseline_suppresses_known_violations(self, tmp_path: Path) -> None:
+        root = _make_project(tmp_path, violation=True)
+        baseline = tmp_path / "baseline.json"
+        main(["check", "--root", str(root), "--output", str(tmp_path / "r.html"), "--write-baseline", str(baseline)])
+
+        # Every existing violation is baselined -> the gate passes even with --fail-on warning.
+        code = main(
+            [
+                "check",
+                "--root",
+                str(root),
+                "--output",
+                str(tmp_path / "r2.html"),
+                "--baseline",
+                str(baseline),
+                "--fail-on",
+                "warning",
+            ]
+        )
+        assert code == 0
+
+    def test_baseline_fails_on_new_violation(self, tmp_path: Path) -> None:
+        root = _make_project(tmp_path, violation=True)
+        baseline = tmp_path / "baseline.json"
+        main(["check", "--root", str(root), "--output", str(tmp_path / "r.html"), "--write-baseline", str(baseline)])
+
+        # Introduce a brand-new violation not present when the baseline was written.
+        (root / "src" / "other.py").write_text('print("new")\n', encoding="utf-8")
+        code = main(
+            [
+                "check",
+                "--root",
+                str(root),
+                "--output",
+                str(tmp_path / "r2.html"),
+                "--baseline",
+                str(baseline),
+                "--fail-on",
+                "warning",
+            ]
+        )
+        assert code == 1
