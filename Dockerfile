@@ -1,8 +1,13 @@
 # ── Stage 1: deps — install production dependencies ───────────────────────────
 FROM python:3.14-slim AS deps
 
+# The build context excludes .git, so setuptools-scm cannot read the tag. The
+# release/deploy passes the GitVersion tag as --build-arg VERSION=<tag> to stamp
+# the real version; a plain build falls back to a deterministic dev version.
+ARG VERSION=0.0.0+unknown
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION}
 
 WORKDIR /app
 
