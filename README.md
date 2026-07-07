@@ -23,6 +23,7 @@ Teams and solo developers who maintain AI-agent instruction files (`.github/inst
 - **Baseline adoption** — `--write-baseline` / `--baseline` fail only on *new* violations, so you can turn the gate on for a legacy repo without fixing its whole backlog first.
 - **Autofix** — `guideline-checker fix` (or `check --fix`) rewrites the working tree for rules that declare a mechanical `fix:`; `--dry-run` previews the diff.
 - **Committed config** — pin `fail_on`, `exclude`, `max_file_size`, `linters`, and `baseline` in a `[tool.guideline-checker]` table so every run agrees; CLI flags still override per-invocation.
+- **Rule packs & inheritance** — organise rules into reusable packs; `extends:` inherits a base from any file and `include:` activates a pack's rules where you want them.
 - **Multi-repo `synthesize`** — one rolled-up HTML report across every repo in a workspace.
 - **Optional external linters** — fold `ruff`, `mypy`, or `eslint` results into the same report via `--linters`.
 - **Four report formats** — HTML (color-coded, grouped by rule source), JSON (CI artifact), Markdown (PR comments), SARIF 2.1.0 (GitHub Code Scanning).
@@ -351,6 +352,39 @@ All keys are optional but a `detect:` block must declare at least one pattern (o
 | `sync-fastapi-route` | a route decorator (`@app.get` / `@router.post` …) applied to a non-`async def` handler |
 | `mutable-default-arg` | a function parameter whose default is a shared mutable (`[]`, `{}`, `set()`, `list()`, `dict()`) |
 
+#### Inheritance and rule packs (`extends:` / `include:`)
+
+A rule can inherit from another with `extends: <base-id>` — scalar fields fall through from the base, `detect:` patterns are unioned, and the child overrides what it declares. Bases may live in **any** file, so shared bases are reusable across the referential ([ADR D-0008](DECISIONS.md)):
+
+```yaml
+# guidelines/packs/security-strict.yml — a library, not auto-loaded
+language_target: "*"
+rules:
+  - id: base-weak-hash
+    abstract: true            # a template: available to extend, never emitted itself
+    category: security
+    severity: warning
+    rule: "Use a strong hash (SHA-256+), never a broken algorithm"
+    detect: { forbid: ["hashlib.md5(", "hashlib.sha1("] }
+  - id: pack-no-pickle-loads
+    category: security
+    severity: error
+    rule: "Never unpickle untrusted data with pickle.loads"
+    detect: { forbid: ["pickle.loads("] }
+```
+
+```yaml
+# guidelines/languages/python.yml
+include:
+  - packs/security-strict.yml   # activate the pack's concrete rules here
+rules:
+  - id: py-no-weak-hash
+    extends: base-weak-hash      # inherit the base cross-file, tighten severity
+    severity: error
+```
+
+Files under `guidelines/packs/` are **not** auto-loaded — a pack's abstract bases are always available to `extends:`, but its concrete rules become active only in a file that `include:`s it. `include:` paths are relative to `guidelines/`. A cross-file `extends:` cycle is a hard error.
+
 ### Shipped rule catalog
 
 Every rule below carries a working `detect:` block (AST, scanner, or `forbid`/regex) — none are dead prose. Author your own by dropping a file in `guidelines/<dimension>/`.
@@ -370,6 +404,8 @@ Every rule below carries a working `detect:` block (AST, scanner, or `forbid`/re
 | python | `py-no-os-system` | error | `os.system(` |
 | python | `py-safe-yaml` | warning | unsafe `yaml.load(` |
 | python | `py-no-debugger` | warning | `breakpoint(` / `pdb.set_trace(` |
+| python | `py-no-weak-hash` | error | `hashlib.md5(` / `sha1(` (extends the security pack) |
+| pack | `pack-no-pickle-loads` | error | `pickle.loads(` (via `include: packs/security-strict.yml`) |
 | typescript | `ts-strict-types` | error | the `any` type |
 | typescript | `ts-no-suppressions` | warning | `@ts-ignore` / `@ts-nocheck` |
 | typescript | `ts-no-non-null-assertion` | warning | postfix `x!` |

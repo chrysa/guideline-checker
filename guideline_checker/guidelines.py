@@ -76,6 +76,11 @@ _DETECT_SCAN_KEY = "scan"
 _FIX_FIELD = "fix"
 _FIX_OPS = frozenset({"remove_line", "replace", "regex_replace"})
 
+# Cross-file inheritance + rule packs (D-0008). Files under guidelines/packs/ are
+# parsed (so their bases are extends-available) but emitted only where included.
+_INCLUDE_FIELD = "include"
+_PACKS_DIR = "packs"
+
 
 class GuidelineError(ValueError):
     """Raised when the YAML referential is structurally invalid."""
@@ -106,6 +111,19 @@ class _DimensionFile:
 
 
 @dataclass
+class _ParsedFile:
+    """One referential file after pass 1 — raw rules only, before global resolution (D-0008)."""
+
+    path: Path
+    dimension: str
+    file_target: str
+    apply_to_glob: str
+    order: list[str]
+    raw_by_id: dict[str, _RawRule]
+    includes: list[Path]  # absolute pack paths this file pulls in
+
+
+@dataclass
 class _RawRule:
     """A rule before ``extends:`` resolution; inheritable fields may be ``None``."""
 
@@ -120,6 +138,9 @@ class _RawRule:
     rationale: str
     detect: RuleDetector | None
     fix: RuleFix | None
+    # The declaring file's target — anchors the target fallback when a rule in
+    # another file inherits this one via cross-file extends (D-0008).
+    file_target: str = _WILDCARD_TARGET
 
 
 def load_yaml_guidelines(root: Path) -> list[InstructionFile]:
@@ -127,16 +148,17 @@ def load_yaml_guidelines(root: Path) -> list[InstructionFile]:
 
     Behaviour (per the chrysa referential spec):
 
-    1. Scan every sub-directory of ``guidelines/`` for ``*.yml`` files.
+    1. Scan every sub-directory of ``guidelines/`` for ``*.yml`` files
+       (``packs/`` is skipped by the auto-scan — pack files load only via ``include:``).
     2. Read each file's own ``*_target`` field, overridable per rule;
        ``"*"`` / ``_common.yml`` provide transverse rules.
-    3. Validate every ``category`` against ``guidelines/categories.yml`` and resolve
-       same-file ``extends:`` inheritance (``abstract: true`` bases are not emitted).
+    3. Parse every file into one global id→rule registry, then resolve ``extends:``
+       against it, so a base may live in another file or an included pack (D-0008);
+       ``abstract: true`` bases are not emitted.
     4. De-duplicate ``id``: a duplicate **within one file** is an authoring bug
        and raises; a duplicate **across files** is an intentional transverse
        override (``_common.yml`` parsed first wins) — first kept, collision logged.
-    5. Map the effective target to an ``apply_to`` glob (the file's
-       ``apply_to_glob``, or ``**/*`` for the wildcard target) and emit one
+    5. Map the effective target to an ``apply_to`` glob and emit one
        ``InstructionFile`` per ``(file, target)`` group.
     """
     guidelines_dir = root / "guidelines"
@@ -144,17 +166,43 @@ def load_yaml_guidelines(root: Path) -> list[InstructionFile]:
         return []
 
     categories = _load_categories(guidelines_dir)
+    # Parse every referential file (dimensions + packs) into one registry. Files are
+    # sorted so "_common.yml" (transverse) parses first and wins id ties.
+    parsed_by_path: dict[Path, _ParsedFile] = {}
+    for dim_dir in sorted(p for p in guidelines_dir.iterdir() if p.is_dir()):
+        for yml_path in sorted(dim_dir.glob("*.yml")):
+            parsed_by_path[yml_path] = _parse_file(yml_path, dim_dir.name, guidelines_dir, categories)
 
+    global_raw: dict[str, _RawRule] = {}
+    for parsed in parsed_by_path.values():
+        for rid in parsed.order:
+            global_raw.setdefault(rid, parsed.raw_by_id[rid])
+
+    emit_paths = _emit_order(parsed_by_path)
     seen_ids: set[str] = set()
-    # Files are sorted so "_common.yml" (transverse) is parsed first and wins id ties;
-    # the comprehension preserves that left-to-right order while seen_ids accumulates.
-    parsed = [
-        _parse_dimension_file(yml_path, dim_dir.name, categories, seen_ids)
-        for dim_dir in sorted(p for p in guidelines_dir.iterdir() if p.is_dir())
-        for yml_path in sorted(dim_dir.glob("*.yml"))
-    ]
+    instruction_files: list[InstructionFile] = []
+    for path in emit_paths:
+        parsed = parsed_by_path[path]
+        rules = _emit_resolved_rules(path, parsed.order, global_raw, categories, seen_ids)
+        df = _DimensionFile(path=path, dimension=parsed.dimension, apply_to_glob=parsed.apply_to_glob, rules=rules)
+        instruction_files.extend(_to_instruction_files(df))
+    return instruction_files
 
-    return [instr for df in parsed for instr in _to_instruction_files(df)]
+
+def _emit_order(parsed_by_path: dict[Path, _ParsedFile]) -> list[Path]:
+    """Emit every auto-scanned dimension file, plus each pack pulled in via ``include:``."""
+    emit: list[Path] = []
+    included: list[Path] = []
+    for path, parsed in parsed_by_path.items():
+        if parsed.dimension == _PACKS_DIR:
+            continue  # packs emit only when included
+        emit.append(path)
+        for inc in parsed.includes:
+            if inc not in parsed_by_path:
+                raise GuidelineError(f"{path}: include target {inc} was not found under guidelines/.")
+            if inc not in included and inc not in emit:
+                included.append(inc)
+    return emit + included
 
 
 def _load_categories(guidelines_dir: Path) -> set[str]:
@@ -216,12 +264,13 @@ def _collect_raw_rules(
     raw_rules: list[object],
     target_field: str | None,
     categories: set[str],
+    file_target: str,
 ) -> tuple[dict[str, _RawRule], list[str]]:
     """Pass 1 — parse every raw rule entry; reject intra-file duplicate ids."""
     raw_by_id: dict[str, _RawRule] = {}
     order: list[str] = []
     for raw in raw_rules:
-        rr = _parse_raw_rule(path, raw, target_field, categories)
+        rr = _parse_raw_rule(path, raw, target_field, categories, file_target)
         if rr.id in raw_by_id:
             raise GuidelineError(
                 f"{path}: duplicate rule id {rr.id!r} within the file — "
@@ -237,14 +286,13 @@ def _emit_resolved_rules(
     order: list[str],
     raw_by_id: dict[str, _RawRule],
     categories: set[str],
-    file_target: str,
     seen_ids: set[str],
 ) -> list[GuidelineRule]:
-    """Pass 2 — resolve inheritance and emit non-abstract, non-duplicate rules."""
+    """Pass 2 — resolve inheritance (against the global registry) and emit rules."""
     resolved: dict[str, GuidelineRule] = {}
     rules: list[GuidelineRule] = []
     for rid in order:
-        rule = _resolve_rule(rid, raw_by_id, resolved, categories, file_target, ())
+        rule = _resolve_rule(rid, raw_by_id, resolved, categories, ())
         if raw_by_id[rid].abstract:
             continue
         if rid in seen_ids:
@@ -255,16 +303,16 @@ def _emit_resolved_rules(
     return rules
 
 
-def _parse_dimension_file(
+def _parse_file(
     path: Path,
     dimension: str,
+    guidelines_dir: Path,
     categories: set[str],
-    seen_ids: set[str],
-) -> _DimensionFile:
-    """Parse one dimension file, resolving same-file ``extends:`` and de-duplicating ids.
+) -> _ParsedFile:
+    """Pass 1 — parse one referential file's header, ``include:`` list, and raw rules.
 
-    Two passes (parse all rules, then resolve) so a child may extend a base declared later;
-    ``abstract`` rules are templates and are not emitted.
+    Resolution is deferred to :func:`_emit_resolved_rules` against the global registry,
+    so a child may extend a base declared in another file or an included pack (D-0008).
     """
     data = _safe_load(path)
     if not isinstance(data, dict):
@@ -277,9 +325,33 @@ def _parse_dimension_file(
     if not isinstance(raw_rules, list):
         raise GuidelineError(f"{path}: 'rules' must be a list.")
 
-    raw_by_id, order = _collect_raw_rules(path, raw_rules, target_field, categories)
-    rules = _emit_resolved_rules(path, order, raw_by_id, categories, file_target, seen_ids)
-    return _DimensionFile(path=path, dimension=dimension, apply_to_glob=apply_to_glob, rules=rules)
+    raw_by_id, order = _collect_raw_rules(path, raw_rules, target_field, categories, file_target)
+    includes = _parse_includes(path, data, guidelines_dir)
+    return _ParsedFile(
+        path=path,
+        dimension=dimension,
+        file_target=file_target,
+        apply_to_glob=apply_to_glob,
+        order=order,
+        raw_by_id=raw_by_id,
+        includes=includes,
+    )
+
+
+def _parse_includes(path: Path, data: dict[str, object], guidelines_dir: Path) -> list[Path]:
+    """Parse the top-level ``include:`` list into absolute pack paths under ``guidelines/``."""
+    raw = data.get(_INCLUDE_FIELD)
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or not all(isinstance(item, str) and item for item in raw):
+        raise GuidelineError(f"{path}: '{_INCLUDE_FIELD}' must be a list of non-empty path strings.")
+    includes: list[Path] = []
+    for entry in raw:
+        target = guidelines_dir / entry  # unresolved, to match the auto-scan's path keys
+        if guidelines_dir.resolve() not in target.resolve().parents:
+            raise GuidelineError(f"{path}: include {entry!r} must resolve to a path under guidelines/.")
+        includes.append(target)
+    return includes
 
 
 def _validate_raw_rule_id(path: Path, raw: dict[str, object]) -> str:
@@ -327,6 +399,7 @@ def _parse_raw_rule(
     raw: object,
     target_field: str | None,
     categories: set[str],
+    file_target: str = _WILDCARD_TARGET,
 ) -> _RawRule:
     """Parse a raw rule into a :class:`_RawRule`; required-field presence is enforced
     later in :func:`_resolve_rule`, once any ``extends`` base has been merged in.
@@ -356,6 +429,7 @@ def _parse_raw_rule(
         rationale=str(raw.get("rationale", "")).strip(),
         detect=_build_detector(path, raw),
         fix=_build_fix(path, rule_id, raw),
+        file_target=file_target,
     )
 
 
@@ -375,7 +449,6 @@ def _resolve_base(
     raw_by_id: dict[str, _RawRule],
     resolved: dict[str, GuidelineRule],
     categories: set[str],
-    file_target: str,
     stack: tuple[str, ...],
 ) -> GuidelineRule | None:
     """Recursively resolve the base rule pointed to by ``extends``, or return None."""
@@ -384,16 +457,15 @@ def _resolve_base(
     if rr.extends not in raw_by_id:
         raise GuidelineError(
             f"{rr.path}: rule {rule_id!r} extends unknown base {rr.extends!r} — "
-            f"the base must be a rule id declared in the same file.",
+            f"declare the base in this file or an included pack (D-0008).",
         )
-    return _resolve_rule(rr.extends, raw_by_id, resolved, categories, file_target, (*stack, rule_id))
+    return _resolve_rule(rr.extends, raw_by_id, resolved, categories, (*stack, rule_id))
 
 
 def _merge_rr_with_base(
     rr: _RawRule,
     rule_id: str,
     base: GuidelineRule | None,
-    file_target: str,
 ) -> GuidelineRule:
     """Merge a raw rule with its resolved base into a :class:`GuidelineRule`.
 
@@ -404,7 +476,7 @@ def _merge_rr_with_base(
     severity = rr.severity or (base.severity if base else None)
     rule_text = rr.rule or (base.rule if base else None)
     rationale = rr.rationale or (base.rationale if base else "")
-    target = rr.target or (base.target if base else None) or file_target
+    target = rr.target or (base.target if base else None) or rr.file_target
     detect = _merge_detectors(base.detect if base else None, rr.detect)
     fix = rr.fix or (base.fix if base else None)
 
@@ -431,13 +503,13 @@ def _resolve_rule(
     raw_by_id: dict[str, _RawRule],
     resolved: dict[str, GuidelineRule],
     categories: set[str],
-    file_target: str,
     stack: tuple[str, ...],
 ) -> GuidelineRule:
     """Resolve a rule's ``extends`` chain into a merged :class:`GuidelineRule`.
 
-    Scalar fields take the child's value when present, else the base's; ``detect``
-    patterns are unioned. Cycles and unknown bases are hard failures.
+    ``raw_by_id`` is the global registry, so a base may live in another file or an
+    included pack. Scalar fields take the child's value when present, else the base's;
+    ``detect`` patterns are unioned. Cross-file cycles and unknown bases are hard failures.
     """
     if rule_id in resolved:
         return resolved[rule_id]
@@ -445,8 +517,8 @@ def _resolve_rule(
     if rule_id in stack:
         chain = " -> ".join((*stack, rule_id))
         raise GuidelineError(f"{rr.path}: 'extends' cycle detected: {chain}.")
-    base = _resolve_base(rr, rule_id, raw_by_id, resolved, categories, file_target, stack)
-    rule = _merge_rr_with_base(rr, rule_id, base, file_target)
+    base = _resolve_base(rr, rule_id, raw_by_id, resolved, categories, stack)
+    rule = _merge_rr_with_base(rr, rule_id, base)
     resolved[rule_id] = rule
     return rule
 
