@@ -21,6 +21,7 @@ Teams and solo developers who maintain AI-agent instruction files (`.github/inst
 - **Inline suppression** — add a `guideline: disable` comment on any line to skip it.
 - **`--diff` mode** — check only files changed in the git working tree for fast incremental pre-commit runs.
 - **Baseline adoption** — `--write-baseline` / `--baseline` fail only on *new* violations, so you can turn the gate on for a legacy repo without fixing its whole backlog first.
+- **Committed config** — pin `fail_on`, `exclude`, `max_file_size`, `linters`, and `baseline` in a `[tool.guideline-checker]` table so every run agrees; CLI flags still override per-invocation.
 - **Multi-repo `synthesize`** — one rolled-up HTML report across every repo in a workspace.
 - **Optional external linters** — fold `ruff`, `mypy`, or `eslint` results into the same report via `--linters`.
 - **Four report formats** — HTML (color-coded, grouped by rule source), JSON (CI artifact), Markdown (PR comments), SARIF 2.1.0 (GitHub Code Scanning).
@@ -103,6 +104,21 @@ guideline-checker check --baseline .guideline-baseline.json --fail-on error
 ```
 
 Fingerprints are content-based (`rule id` + repo-relative path + the matched line text), not line-number based, so an edit that shifts a baselined violation up or down the file does not resurface it. Introduce a genuinely new violation and the gate fails as usual. Regenerate the baseline (step 1) after you fix a batch, to ratchet the accepted set down over time.
+
+### Project configuration (`[tool.guideline-checker]`)
+
+Pin the check behaviour in version control so every run — local, pre-commit, CI — agrees. Add a `[tool.guideline-checker]` table to `pyproject.toml` (or a `.guideline-checker.toml` at the project root):
+
+```toml
+[tool.guideline-checker]
+fail_on = "warning"                      # error (default) | warning | never
+exclude = ["tests", "scripts/**"]        # same globs as --exclude
+max_file_size = 300000                   # bytes; larger files are skipped
+linters = ["ruff", "mypy"]               # external linters to fold into the report
+baseline = ".guideline-baseline.json"    # path (relative to the project root)
+```
+
+Precedence is **CLI flag > environment variable > config file > built-in default**, so a committed config sets the team baseline while any single run can still override it. Unknown keys and values of the wrong type are ignored with a warning — they never crash the run. `pyproject.toml` takes precedence over `.guideline-checker.toml` when both declare the table.
 
 ### Multi-repo synthesis
 
