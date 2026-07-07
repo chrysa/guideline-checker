@@ -1,0 +1,19 @@
+language_target: '*'
+rules:
+- abstract: true
+  category: security
+  detect:
+    forbid:
+    - hashlib.md5(
+    - hashlib.sha1(
+  id: base-weak-hash
+  rule: Use a strong hash (SHA-256 or better), never a broken algorithm
+  severity: warning
+- category: security
+  detect:
+    forbid:
+    - pickle.loads(
+  id: pack-no-pickle-loads
+  rationale: pickle.loads executes arbitrary code embedded in the payload
+  rule: Never unpickle untrusted data with pickle.loads
+  severity: error

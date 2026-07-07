@@ -332,3 +332,53 @@ whole-line ops — brittle against re-detection and offers no safety gain for th
 fixes shipped; (c) an autofix registry in code (like the AST checks) — the fixes are pure
 data (a literal/regex + a target), so keeping them in the YAML preserves the rules-as-data
 contract, the same reasoning as D-0004.
+
+---
+
+## D-0008 — Cross-file rule inheritance and distributable rule packs
+
+**Date**: 2026-07-07
+**Status**: accepted
+
+D-0004/L1.4 gave rules a same-file `extends:` — a child could only inherit from a base
+declared in the *same* referential file, because resolution ran per file against that
+file's local `raw_by_id`. That blocks organising rules into shared, reusable libraries: a
+security base and its strict variant had to live in one file.
+
+L2.4 lifts inheritance to a **global registry** and adds **rule packs**:
+
+- **Cross-file `extends:`** — every `*.yml` under `guidelines/` is parsed into one global
+  id→rule registry before any resolution. A rule may now `extends:` a base declared in any
+  file. Resolution shares one cache and one recursion stack, so a cross-file `extends:`
+  cycle (`A`→`B`→`A` across files) is detected and raised exactly like the same-file case.
+  Each raw rule carries the `file_target` of the file that declared it, so a base's target
+  fallback stays anchored to its own file, not the consuming one.
+
+- **Rule packs (`include:`)** — a dimension file may declare a top-level
+  `include: [packs/<name>.yml]` (paths relative to `guidelines/`). Files under
+  `guidelines/packs/` are **excluded from the folder auto-scan**: a pack is a *library*,
+  parsed into the global registry (so its bases are available to `extends:` everywhere) but
+  **emitted as active rules only where it is `include:`d**. This gives a clear model —
+  dimension dirs auto-load; `packs/` is opt-in. A pack of abstract bases is never emitted
+  (abstract rules are templates) yet is always available to inherit from.
+
+- **Duplicate ids** keep D-0004's contract: a duplicate id *within one file* is an authoring
+  error and raises; a duplicate id *across files/includes* is an intentional transverse
+  override — first parsed wins (`_common.yml` first), the later one is logged and skipped.
+
+**Contract / limits**:
+
+- A base referenced by `extends:` must exist in some loaded file or pack; an unknown base
+  still raises. Bases should declare their own `category`/`severity` (or be inheritable
+  templates) — a child supplies what the base omits.
+- `include:` accepts only paths **inside** `guidelines/` (rooted there). Remote or
+  pip-installed rule packs (a shared `chrysa` pack distributed as a package) are a deliberate
+  future step, not built here — the local-pack primitive is the foundation they would reuse.
+- Packs live only in `guidelines/packs/`; other dimension dirs continue to auto-load.
+
+*Rejected alternatives*: (a) keep resolution per file and duplicate bases — the exact
+copy-paste D-0004 set out to remove, now across files; (b) auto-load `packs/` like any
+dimension — then `include:` is redundant and a pack's rules always fire, defeating the
+"library you opt into" model; (c) a global mutable rule-registry object threaded through the
+checker — the loader already returns fully-resolved `InstructionFile`s, so resolution stays a
+load-time concern and the checker is unchanged.
