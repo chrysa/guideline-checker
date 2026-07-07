@@ -1,105 +1,107 @@
 apply_to_glob: '**/*.py'
+include:
+- packs/security-strict.yml
 language_target: python
 rules:
+- extends: base-weak-hash
+  id: py-no-weak-hash
+  severity: error
 - category: stack
+  detect:
+    ast:
+    - pydantic-v1
   id: py-pydantic-v2
   rationale: chrysa stack convention
   rule: Use Pydantic v2 models exclusively; v1 syntax is forbidden
   severity: error
-  detect:
-    # AST: real v1 imports / @validator decorators only — no false positives on
-    # the same text inside a string literal or comment.
-    ast:
-    - pydantic-v1
 - category: stack
+  detect:
+    ast:
+    - sync-fastapi-route
   id: py-async-fastapi
   rationale: Consistent non-blocking I/O
   rule: Define FastAPI route handlers as async def
   severity: warning
-  detect:
-    # AST: a route decorator on a plain (non-async) handler, robust to spacing
-    # and multiline decorator arguments.
-    ast:
-    - sync-fastapi-route
 - category: stack
+  detect:
+    forbid:
+    - print(
+    - pprint(
   id: py-structured-logging
   rationale: Structured logging beats ad-hoc stdout writes in production
   rule: Emit operational output through the logging module
   severity: warning
-  detect:
-    forbid:
-    - 'print('
-    - 'pprint('
 - category: correctness
-  id: py-no-mutable-default
-  rationale: A shared mutable default is reused across calls — a classic aliasing bug
-  rule: Do not use mutable default arguments; default to None and build inside the body
-  severity: warning
   detect:
-    # AST: a [] / {} / set()/list()/dict() default — precise, unlike a '=[]' substring.
     ast:
     - mutable-default-arg
+  id: py-no-mutable-default
+  rationale: "A shared mutable default is reused across calls \u2014 a classic aliasing\
+    \ bug"
+  rule: Do not use mutable default arguments; default to None and build inside the
+    body
+  severity: warning
 - category: correctness
+  detect:
+    forbid_regex:
+    - '^\s*except\s*:'
   id: py-no-bare-except
   rationale: A bare except swallows KeyboardInterrupt/SystemExit and hides real failures
   rule: Catch specific exceptions, never a bare except
   severity: warning
+- category: correctness
   detect:
     forbid_regex:
-    - '^\s*except\s*:'
-- category: correctness
+    - ^\s*from\s+[\w.]+\s+import\s+\*
   id: py-no-wildcard-import
   rationale: Wildcard imports pollute the namespace and hide a symbol's origin
   rule: Import names explicitly, never with a wildcard star import
   severity: warning
-  detect:
-    forbid_regex:
-    - '^\s*from\s+[\w.]+\s+import\s+\*'
 - category: security
+  detect:
+    forbid:
+    - eval(
+    - exec(
   id: py-no-eval-exec
   rationale: eval/exec on runtime data is a direct code-execution vector
   rule: Never use eval() or exec() on runtime data
   severity: error
-  detect:
-    forbid:
-    - 'eval('
-    - 'exec('
 - category: security
+  detect:
+    forbid_regex:
+    - shell\s*=\s*True
   id: py-no-shell-true
   rationale: shell=True turns unsanitised input into a shell-injection vector
   rule: Never spawn a subprocess with shell=True
   severity: error
-  detect:
-    forbid_regex:
-    - 'shell\s*=\s*True'
 - category: security
+  detect:
+    forbid:
+    - os.system(
   id: py-no-os-system
   rationale: os.system runs a shell string; subprocess with a list avoids injection
   rule: Use the subprocess module instead of os.system()
   severity: error
+- category: security
   detect:
     forbid:
-    - 'os.system('
-- category: security
+    - yaml.load(
+  fix:
+    from: yaml.load(
+    op: replace
+    to: yaml.safe_load(
   id: py-safe-yaml
   rationale: yaml.load without SafeLoader can instantiate arbitrary Python objects
   rule: Parse YAML with safe_load, never the unsafe yaml.load
   severity: warning
+- category: correctness
   detect:
     forbid:
-    - 'yaml.load('
+    - breakpoint(
+    - pdb.set_trace(
   fix:
-    op: replace
-    from: 'yaml.load('
-    to: 'yaml.safe_load('
-- category: correctness
+    op: remove_line
   id: py-no-debugger
   rationale: A committed breakpoint halts execution in production
   rule: Remove debugger entry points before committing
   severity: warning
-  detect:
-    forbid:
-    - 'breakpoint('
-    - 'pdb.set_trace('
-  fix:
-    op: remove_line
