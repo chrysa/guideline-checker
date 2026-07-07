@@ -45,6 +45,10 @@ rules:
   detect:
     forbid_regex:
     - '(^|[^.\w])var\s+[A-Za-z_$]'
+  fix:
+    op: regex_replace
+    pattern: '\bvar\b'
+    replacement: 'const'
 - category: correctness
   id: ts-no-debugger
   rationale: A committed debugger statement halts execution in the browser

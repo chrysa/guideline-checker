@@ -37,7 +37,7 @@ import yaml
 
 from guideline_checker.ast_javascript import VALID_JS_AST_CHECKS, unknown_js_checks
 from guideline_checker.ast_python import VALID_AST_CHECKS, unknown_checks
-from guideline_checker.loader import InstructionFile, RuleDetector, SourceType
+from guideline_checker.loader import InstructionFile, RuleDetector, RuleFix, SourceType
 from guideline_checker.scanners import VALID_SCANS, unknown_scans
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,9 @@ _DETECT_AST_KEY = "ast"
 # Named content scanners (validated against scanners.VALID_SCANS).
 _DETECT_SCAN_KEY = "scan"
 
+_FIX_FIELD = "fix"
+_FIX_OPS = frozenset({"remove_line", "replace", "regex_replace"})
+
 
 class GuidelineError(ValueError):
     """Raised when the YAML referential is structurally invalid."""
@@ -89,6 +92,7 @@ class GuidelineRule:
     rule: str
     rationale: str = ""
     detect: RuleDetector | None = None
+    fix: RuleFix | None = None
 
 
 @dataclass
@@ -115,6 +119,7 @@ class _RawRule:
     rule: str | None
     rationale: str
     detect: RuleDetector | None
+    fix: RuleFix | None
 
 
 def load_yaml_guidelines(root: Path) -> list[InstructionFile]:
@@ -350,6 +355,7 @@ def _parse_raw_rule(
         rule=rule_text.strip() if rule_text is not None else None,
         rationale=str(raw.get("rationale", "")).strip(),
         detect=_build_detector(path, raw),
+        fix=_build_fix(path, rule_id, raw),
     )
 
 
@@ -400,6 +406,7 @@ def _merge_rr_with_base(
     rationale = rr.rationale or (base.rationale if base else "")
     target = rr.target or (base.target if base else None) or file_target
     detect = _merge_detectors(base.detect if base else None, rr.detect)
+    fix = rr.fix or (base.fix if base else None)
 
     if category is None:
         raise GuidelineError(f"{rr.path}: rule {rule_id!r} is missing a 'category' (none declared or inherited).")
@@ -415,6 +422,7 @@ def _merge_rr_with_base(
         rule=rule_text,
         rationale=rationale,
         detect=detect,
+        fix=fix,
     )
 
 
@@ -461,6 +469,28 @@ def _merge_detectors(base: RuleDetector | None, child: RuleDetector | None) -> R
 def _union(base: tuple[str, ...], extra: tuple[str, ...]) -> tuple[str, ...]:
     """Concatenate two tuples, dropping duplicates while preserving first-seen order."""
     return tuple(dict.fromkeys((*base, *extra)))
+
+
+def _build_fix(path: Path, rule_id: str, raw: dict[str, object]) -> RuleFix | None:
+    """Validate a rule's optional ``fix:`` block into a :class:`RuleFix` (ADR D-0007)."""
+    if _FIX_FIELD not in raw:
+        return None
+    block = raw[_FIX_FIELD]
+    if not isinstance(block, dict):
+        raise GuidelineError(f"{path}: rule {rule_id!r} 'fix' must be a mapping.")
+    op = block.get("op")
+    if op not in _FIX_OPS:
+        raise GuidelineError(f"{path}: rule {rule_id!r} 'fix.op' must be one of {sorted(_FIX_OPS)}.")
+    if op == "remove_line":
+        return RuleFix(op=op)
+    search_key, repl_key = ("from", "to") if op == "replace" else ("pattern", "replacement")
+    search = block.get(search_key)
+    replacement = block.get(repl_key)
+    if not isinstance(search, str) or not search:
+        raise GuidelineError(f"{path}: rule {rule_id!r} 'fix.{search_key}' must be a non-empty string.")
+    if not isinstance(replacement, str):
+        raise GuidelineError(f"{path}: rule {rule_id!r} 'fix.{repl_key}' must be a string.")
+    return RuleFix(op=op, search=search, replacement=replacement)
 
 
 def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
@@ -559,6 +589,7 @@ def _to_instruction_files(df: _DimensionFile) -> list[InstructionFile]:
                 rules=[r.rule for r in rules],
                 rule_severity={r.rule: r.severity for r in rules},
                 rule_detectors={r.rule: r.detect for r in rules if r.detect is not None},
+                rule_fixes={r.rule: r.fix for r in rules if r.fix is not None},
             ),
         )
     return instruction_files
