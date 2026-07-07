@@ -323,6 +323,39 @@ All keys are optional but a `detect:` block must declare at least one pattern (o
 | `sync-fastapi-route` | a route decorator (`@app.get` / `@router.post` …) applied to a non-`async def` handler |
 | `mutable-default-arg` | a function parameter whose default is a shared mutable (`[]`, `{}`, `set()`, `list()`, `dict()`) |
 
+### Shipped rule catalog
+
+Every rule below carries a working `detect:` block (AST, scanner, or `forbid`/regex) — none are dead prose. Author your own by dropping a file in `guidelines/<dimension>/`.
+
+| dimension | rule id | severity | detects |
+|-----------|---------|----------|---------|
+| transverse | `secrets-via-env` | error | hardcoded high-entropy secret assignment |
+| transverse | `no-fixme-markers` | info | `FIXME` markers (comments included) |
+| python | `py-pydantic-v2` | error | Pydantic v1 imports / `@validator` |
+| python | `py-async-fastapi` | warning | non-`async` FastAPI route handler |
+| python | `py-structured-logging` | warning | `print(` / `pprint(` |
+| python | `py-no-mutable-default` | warning | mutable default argument |
+| python | `py-no-bare-except` | warning | bare `except:` |
+| python | `py-no-wildcard-import` | warning | `from x import *` |
+| python | `py-no-eval-exec` | error | `eval(` / `exec(` |
+| python | `py-no-shell-true` | error | `subprocess(..., shell=True)` |
+| python | `py-no-os-system` | error | `os.system(` |
+| python | `py-safe-yaml` | warning | unsafe `yaml.load(` |
+| python | `py-no-debugger` | warning | `breakpoint(` / `pdb.set_trace(` |
+| typescript | `ts-strict-types` | error | the `any` type |
+| typescript | `ts-no-suppressions` | warning | `@ts-ignore` / `@ts-nocheck` |
+| typescript | `ts-no-non-null-assertion` | warning | postfix `x!` |
+| typescript | `ts-no-console-log` | warning | `console.log` / `console.debug` |
+| typescript | `ts-no-var` | warning | `var` declarations |
+| typescript | `ts-no-debugger` | warning | `debugger;` |
+| typescript | `ts-no-eval` | error | `eval(` |
+| react | `react-hooks-top-level` | error | conditional/looped hook call |
+| react | `react-stable-keys` | warning | array-index JSX `key` |
+| react | `react-no-inline-component-defs` | warning | component defined inside another |
+| react | `react-effect-deps` | warning | hook missing a dependency array |
+| react | `react-no-dangerous-html` | error | `dangerouslySetInnerHTML` |
+| react | `react-no-finddomnode` | warning | deprecated `findDOMNode` |
+
 ## Development
 
 ```bash

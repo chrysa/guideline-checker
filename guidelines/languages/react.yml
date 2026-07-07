@@ -38,3 +38,19 @@ rules:
     # AST: a deps-taking hook call with no second (dependency-array) argument.
     ast:
     - react-missing-effect-deps
+- category: security
+  id: react-no-dangerous-html
+  rationale: dangerouslySetInnerHTML injects raw HTML — a direct XSS vector
+  rule: Avoid dangerouslySetInnerHTML; sanitise and render content safely
+  severity: error
+  detect:
+    forbid:
+    - 'dangerouslySetInnerHTML'
+- category: architecture
+  id: react-no-finddomnode
+  rationale: findDOMNode is deprecated and breaks in StrictMode and concurrent rendering
+  rule: Use a ref instead of the deprecated findDOMNode
+  severity: warning
+  detect:
+    forbid:
+    - 'findDOMNode'

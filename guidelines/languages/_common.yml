@@ -8,3 +8,12 @@ rules:
     rationale: "Secrets committed to source leak through git history"
     detect:
       scan: [secret-assignment]
+  - id: no-fixme-markers
+    category: correctness
+    severity: info
+    rule: "Resolve FIXME markers before merging"
+    rationale: "A FIXME marks known-broken code that should not ship"
+    detect:
+      # FIXME lives in comments — scan them too, unlike the code-pattern rules.
+      match_in_comments: true
+      forbid_regex: ['\bFIXME\b']

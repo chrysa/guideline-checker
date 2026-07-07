@@ -29,3 +29,35 @@ rules:
     # AST: a postfix `x!` non_null_expression — distinct from `!x` and `!=`/`!==`.
     ast:
     - ts-non-null-assertion
+- category: correctness
+  id: ts-no-console-log
+  rationale: console.log/debug is unstructured and leaks into production bundles
+  rule: Use a logger instead of console.log or console.debug
+  severity: warning
+  detect:
+    forbid_regex:
+    - 'console\.(log|debug)\s*\('
+- category: stack
+  id: ts-no-var
+  rationale: var is function-scoped and hoisted; const/let are block-scoped and safer
+  rule: Declare bindings with const or let, never var
+  severity: warning
+  detect:
+    forbid_regex:
+    - '(^|[^.\w])var\s+[A-Za-z_$]'
+- category: correctness
+  id: ts-no-debugger
+  rationale: A committed debugger statement halts execution in the browser
+  rule: Remove debugger statements before committing
+  severity: warning
+  detect:
+    forbid_regex:
+    - '\bdebugger\b'
+- category: security
+  id: ts-no-eval
+  rationale: eval on runtime data is a direct code-execution vector
+  rule: Never use eval() on runtime data in TypeScript
+  severity: error
+  detect:
+    forbid:
+    - 'eval('
