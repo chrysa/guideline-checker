@@ -43,6 +43,21 @@ class RuleDetector:
     match_in_comments: bool = False  # applies to forbid / forbid_regex
 
 
+@dataclass(frozen=True)
+class RuleFix:
+    """A declarative, mechanical autofix a rule carries inline (the ``fix:`` block).
+
+    Anchored to a violation's line: ``remove_line`` drops the whole line, while
+    ``replace`` / ``regex_replace`` rewrite it. Deterministic and idempotent — no
+    semantic or LLM rewriting. See ADR D-0007.
+    """
+
+    op: str  # "remove_line" | "replace" | "regex_replace"
+    # replace: literal from -> to. regex_replace: pattern -> replacement. remove_line: unused.
+    search: str = ""
+    replacement: str = ""
+
+
 @dataclass
 class InstructionFile:
     path: Path
@@ -59,6 +74,9 @@ class InstructionFile:
     # rules that carry a ``detect:`` block; empty otherwise, so phrase-derived
     # detection stays the sole path for markdown sources.
     rule_detectors: dict[str, RuleDetector] = field(default_factory=dict)
+    # Maps a rule statement to its declarative autofix. Populated only by YAML rules
+    # that carry a ``fix:`` block; a rule with no entry here is detect-only (ADR D-0007).
+    rule_fixes: dict[str, RuleFix] = field(default_factory=dict)
 
 
 def load_instructions(instructions_dir: Path) -> list[InstructionFile]:

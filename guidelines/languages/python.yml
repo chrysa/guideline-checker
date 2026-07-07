@@ -88,6 +88,10 @@ rules:
   detect:
     forbid:
     - 'yaml.load('
+  fix:
+    op: replace
+    from: 'yaml.load('
+    to: 'yaml.safe_load('
 - category: correctness
   id: py-no-debugger
   rationale: A committed breakpoint halts execution in production
@@ -97,3 +101,5 @@ rules:
     forbid:
     - 'breakpoint('
     - 'pdb.set_trace('
+  fix:
+    op: remove_line
