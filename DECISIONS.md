@@ -382,3 +382,41 @@ dimension — then `include:` is redundant and a pack's rules always fire, defea
 "library you opt into" model; (c) a global mutable rule-registry object threaded through the
 checker — the loader already returns fully-resolved `InstructionFile`s, so resolution stays a
 load-time concern and the checker is unchanged.
+
+---
+
+## D-0009 — Version derived from git tags (setuptools-scm), never hardcoded
+
+**Date**: 2026-07-07
+**Status**: accepted
+
+The package version was hardcoded in **two** places — `pyproject.toml` (`version = "1.0.0"`)
+and `guideline_checker/__init__.py` (`__version__ = "1.0.0"`) — and never updated, while
+GitVersion tagged releases up to `v1.4.x`. The SARIF reporter (the only consumer, via
+`__version__`) therefore advertised the tool as `1.0.0` in GitHub Code Scanning regardless
+of the real release. Bumping the two literals by hand also contradicts the chrysa standard
+"Versioning: GitVersion — never bump manually".
+
+The version is now **single-sourced from git tags via `setuptools-scm`**:
+
+- `pyproject` declares `dynamic = ["version"]`; `__init__.__version__` reads the installed
+  distribution metadata (`importlib.metadata.version`), so there is one source, not two.
+- The Docker build context **excludes `.git`** (`.dockerignore`), so setuptools-scm cannot
+  read the tag there. Two escape hatches keep builds deterministic and non-breaking:
+  a `fallback_version = "0.0.0+unknown"` in `[tool.setuptools_scm]`, and a Dockerfile
+  `ARG VERSION` wired to `SETUPTOOLS_SCM_PRETEND_VERSION` so a build may stamp the real tag
+  with `--build-arg VERSION=<tag>`. A plain Docker build reports an honest `0.0.0+unknown`
+  instead of a false `1.0.0`; a dev/CI checkout with `.git` gets the real version for free.
+
+**Open follow-up (shared infra)**: the published image is built by the
+`chrysa/github-actions` deploy reusable, which does not yet forward a `build-args` input, so
+the released image still reports the fallback until the reusable passes
+`VERSION=<tag>`. This is the same Socle-reusable surface as the github-actions self-tag
+defect and is tracked there, not in this repo.
+
+*Rejected alternatives*: (a) keep the hardcoded literals and bump them by hand — violates
+"never bump manually" and is exactly the drift that produced the `1.0.0` lie; (b) plain
+setuptools-scm with no fallback — breaks every Docker build (no `.git` in context);
+(c) publish to PyPI to make the wheel version authoritative — there is no PyPI publish
+(distribution is the ghcr Docker image + the pre-commit hook by git ref), so this would add
+a release surface without addressing the drift.
