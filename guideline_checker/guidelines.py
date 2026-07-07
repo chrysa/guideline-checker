@@ -194,9 +194,10 @@ def _parse_dimension_file_header(path: Path, data: dict[str, object]) -> tuple[s
     if target_field is None:
         file_target = _WILDCARD_TARGET
     else:
-        file_target = data.get(target_field, _WILDCARD_TARGET)
-        if not isinstance(file_target, str):
+        raw_target = data.get(target_field, _WILDCARD_TARGET)
+        if not isinstance(raw_target, str):
             raise GuidelineError(f"{path}: '{target_field}' must be a string.")
+        file_target = raw_target
 
     apply_to_glob = data.get(_APPLY_TO_GLOB_FIELD, _ALL_FILES_GLOB)
     if not isinstance(apply_to_glob, str) or not apply_to_glob.strip():
