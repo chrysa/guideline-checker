@@ -39,3 +39,61 @@ rules:
     # AST: a [] / {} / set()/list()/dict() default — precise, unlike a '=[]' substring.
     ast:
     - mutable-default-arg
+- category: correctness
+  id: py-no-bare-except
+  rationale: A bare except swallows KeyboardInterrupt/SystemExit and hides real failures
+  rule: Catch specific exceptions, never a bare except
+  severity: warning
+  detect:
+    forbid_regex:
+    - '^\s*except\s*:'
+- category: correctness
+  id: py-no-wildcard-import
+  rationale: Wildcard imports pollute the namespace and hide a symbol's origin
+  rule: Import names explicitly, never with a wildcard star import
+  severity: warning
+  detect:
+    forbid_regex:
+    - '^\s*from\s+[\w.]+\s+import\s+\*'
+- category: security
+  id: py-no-eval-exec
+  rationale: eval/exec on runtime data is a direct code-execution vector
+  rule: Never use eval() or exec() on runtime data
+  severity: error
+  detect:
+    forbid:
+    - 'eval('
+    - 'exec('
+- category: security
+  id: py-no-shell-true
+  rationale: shell=True turns unsanitised input into a shell-injection vector
+  rule: Never spawn a subprocess with shell=True
+  severity: error
+  detect:
+    forbid_regex:
+    - 'shell\s*=\s*True'
+- category: security
+  id: py-no-os-system
+  rationale: os.system runs a shell string; subprocess with a list avoids injection
+  rule: Use the subprocess module instead of os.system()
+  severity: error
+  detect:
+    forbid:
+    - 'os.system('
+- category: security
+  id: py-safe-yaml
+  rationale: yaml.load without SafeLoader can instantiate arbitrary Python objects
+  rule: Parse YAML with safe_load, never the unsafe yaml.load
+  severity: warning
+  detect:
+    forbid:
+    - 'yaml.load('
+- category: correctness
+  id: py-no-debugger
+  rationale: A committed breakpoint halts execution in production
+  rule: Remove debugger entry points before committing
+  severity: warning
+  detect:
+    forbid:
+    - 'breakpoint('
+    - 'pdb.set_trace('
