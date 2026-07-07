@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from guideline_checker.checker import run_checks
+from guideline_checker.checker import RuleResult, run_checks
 from guideline_checker.gh_client import GhClient
 from guideline_checker.reporters.html import HtmlReporter
 
@@ -137,6 +137,27 @@ def build_parser() -> argparse.ArgumentParser:
             "Maximum size in bytes for a file to be scanned (default: 204800 = 200 KiB). "
             "Larger files are skipped as generated/compiled artefacts. "
             "Also settable via the GUIDELINE_MAX_FILE_SIZE env var."
+        ),
+    )
+    check_cmd.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Suppress violations recorded in this baseline file; --fail-on applies only to "
+            "new violations. Adopt the checker on a legacy repo without failing on its backlog."
+        ),
+    )
+    check_cmd.add_argument(
+        "--write-baseline",
+        type=Path,
+        default=None,
+        dest="write_baseline",
+        metavar="PATH",
+        help=(
+            "Snapshot the current violations to this baseline file and exit 0 (no gate). "
+            "Commit the file, then run with --baseline to fail only on new violations."
         ),
     )
 
@@ -454,9 +475,13 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 0
 
-    root = args.root.resolve()
+    return _cmd_check(args)
+
+
+def _cmd_check(args: argparse.Namespace) -> int:
+    root: Path = args.root.resolve()
     use_all_sources = not args.no_multi_source
-    instructions_dir = args.instructions or root / ".github" / "instructions"
+    instructions_dir: Path = args.instructions or root / ".github" / "instructions"
 
     if args.no_multi_source and not instructions_dir.exists():
         print(f"[guideline-checker] Instructions directory not found: {instructions_dir}", file=sys.stderr)
@@ -481,6 +506,25 @@ def main(argv: list[str] | None = None) -> int:
         max_file_size=args.max_file_size,
     )
 
+    if args.write_baseline is not None:
+        return _write_baseline_and_exit(args, results, root)
+    if args.baseline is not None:
+        results = _apply_baseline(args, results, root)
+
+    return _report_and_gate(args, results, root)
+
+
+def _apply_baseline(args: argparse.Namespace, results: list[RuleResult], root: Path) -> list[RuleResult]:
+    """Drop baselined violations; report how many were suppressed vs newly introduced."""
+    from guideline_checker.baseline import apply_baseline, load_baseline
+
+    outcome = apply_baseline(results, load_baseline(args.baseline), root)
+    print(f"[guideline-checker] Baseline: {outcome.baselined_count} violation(s) suppressed, {outcome.new_count} new.")
+    return outcome.results
+
+
+def _report_and_gate(args: argparse.Namespace, results: list[RuleResult], root: Path) -> int:
+    """Write reports for ``results`` and return the exit code per ``--fail-on``."""
     linter_results = _run_linters_for_check(args, root)
 
     reporter = HtmlReporter()
@@ -500,6 +544,15 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     return _exit_code_for_check(args, error_count, warning_count)
+
+
+def _write_baseline_and_exit(args: argparse.Namespace, results: list[RuleResult], root: Path) -> int:
+    """Snapshot current violations to the baseline file and exit without gating."""
+    from guideline_checker.baseline import write_baseline
+
+    count = write_baseline(results, root, args.write_baseline)
+    print(f"[guideline-checker] Baseline written to {args.write_baseline} ({count} fingerprint(s)).")
+    return 0
 
 
 # ─── synthesize command ───────────────────────────────────────────────────────

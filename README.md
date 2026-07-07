@@ -20,6 +20,7 @@ Teams and solo developers who maintain AI-agent instruction files (`.github/inst
 - **`applyTo` scoping** — rules apply only to the files their glob targets; generic rules are auto-narrowed by filename (a `python.instructions.md` rule won't fire on JSON files).
 - **Inline suppression** — add a `guideline: disable` comment on any line to skip it.
 - **`--diff` mode** — check only files changed in the git working tree for fast incremental pre-commit runs.
+- **Baseline adoption** — `--write-baseline` / `--baseline` fail only on *new* violations, so you can turn the gate on for a legacy repo without fixing its whole backlog first.
 - **Multi-repo `synthesize`** — one rolled-up HTML report across every repo in a workspace.
 - **Optional external linters** — fold `ruff`, `mypy`, or `eslint` results into the same report via `--linters`.
 - **Four report formats** — HTML (color-coded, grouped by rule source), JSON (CI artifact), Markdown (PR comments), SARIF 2.1.0 (GitHub Code Scanning).
@@ -88,6 +89,20 @@ scripts/**
 ```
 
 `--fail-on` accepts `error` (default), `warning`, or `never`.
+
+### Baseline (adopt on a legacy repo)
+
+Turning the gate on for an existing codebase surfaces its whole backlog at once. A **baseline** records the violations you currently accept so the gate fails only on *new* ones — adopt the checker from day one without a mass cleanup first.
+
+```bash
+# 1. Snapshot the current violations (exits 0, writes no gate)
+guideline-checker check --write-baseline .guideline-baseline.json
+
+# 2. Commit the baseline, then run against it — only NEW violations fail
+guideline-checker check --baseline .guideline-baseline.json --fail-on error
+```
+
+Fingerprints are content-based (`rule id` + repo-relative path + the matched line text), not line-number based, so an edit that shifts a baselined violation up or down the file does not resurface it. Introduce a genuinely new violation and the gate fails as usual. Regenerate the baseline (step 1) after you fix a batch, to ratchet the accepted set down over time.
 
 ### Multi-repo synthesis
 
