@@ -163,6 +163,21 @@ def build_parser() -> argparse.ArgumentParser:
             "Commit the file, then run with --baseline to fail only on new violations."
         ),
     )
+    check_cmd.add_argument(
+        "--fix",
+        action="store_true",
+        default=False,
+        help="Apply autofixes to the working tree for violations on rules that declare a fix.",
+    )
+    check_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        dest="fix_dry_run",
+        help="With --fix, print a unified diff of the changes and write nothing.",
+    )
+
+    _add_fix_subcommand(sub)
 
     # ── synthesize subcommand ────────────────────────────────────────────────
     syn_cmd = sub.add_parser(
@@ -460,6 +475,43 @@ def _exit_code_for_check(args: argparse.Namespace, error_count: int, warning_cou
     return 0
 
 
+def _add_fix_subcommand(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    """Register the ``fix`` subcommand — check + autofix, minus the reporting surface."""
+    fix_cmd = sub.add_parser(
+        "fix",
+        help="Apply autofixes to the working tree for violations on rules that declare a fix.",
+    )
+    fix_cmd.add_argument("--root", type=Path, default=Path("."), help="Project root (default: current directory).")
+    fix_cmd.add_argument("--instructions", type=Path, default=None, help="Instructions directory override.")
+    fix_cmd.add_argument(
+        "--no-multi-source",
+        action="store_true",
+        default=False,
+        dest="no_multi_source",
+        help="Only load *.instructions.md from --instructions.",
+    )
+    fix_cmd.add_argument(
+        "--exclude", action="append", default=None, metavar="GLOB", help="Skip files matching this glob."
+    )
+    fix_cmd.add_argument(
+        "--max-file-size",
+        type=int,
+        default=None,
+        dest="max_file_size",
+        metavar="BYTES",
+        help="Max scannable file size.",
+    )
+    fix_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        dest="fix_dry_run",
+        help="Print a unified diff of the changes and write nothing.",
+    )
+    # Reporting/gating knobs the check flow reads but the fix path does not surface.
+    fix_cmd.set_defaults(fix=True, fail_on=None, diff=False, baseline=None, write_baseline=None, linters=None)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -483,7 +535,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "push":
         return _cmd_push(args)
 
-    if args.command != "check":
+    if args.command not in ("check", "fix"):
         parser.print_help()
         return 0
 
@@ -522,12 +574,56 @@ def _cmd_check(args: argparse.Namespace) -> int:
         max_file_size=args.max_file_size,
     )
 
+    if getattr(args, "fix", False):
+        return _run_autofix(args, results, root)
     if args.write_baseline is not None:
         return _write_baseline_and_exit(args, results, root)
     if args.baseline is not None:
         results = _apply_baseline(args, results, root)
 
     return _report_and_gate(args, results, root)
+
+
+def _scan(args: argparse.Namespace, root: Path) -> list[RuleResult]:
+    """Run a full (non-diff) scan with the current args — used to re-check after autofix."""
+    return run_checks(
+        root=root,
+        instructions_dir=args.instructions or root / ".github" / "instructions",
+        all_sources=not args.no_multi_source,
+        exclude=args.exclude,
+        max_file_size=args.max_file_size,
+    )
+
+
+def _severity_counts(results: list[RuleResult]) -> tuple[int, int]:
+    errors = sum(sum(v.severity == "error" for v in r.violations) for r in results)
+    warnings = sum(sum(v.severity == "warning" for v in r.violations) for r in results)
+    return errors, warnings
+
+
+def _run_autofix(args: argparse.Namespace, results: list[RuleResult], root: Path) -> int:
+    """Apply (or preview) local autofixes, then gate on the post-fix state (ADR D-0007)."""
+    from guideline_checker.autofix import apply_local_fixes
+    from guideline_checker.guidelines import load_yaml_guidelines
+
+    rule_fixes = {rule: fix for instr in load_yaml_guidelines(root) for rule, fix in instr.rule_fixes.items()}
+    report = apply_local_fixes(results, root, rule_fixes, dry_run=args.fix_dry_run)
+
+    if args.fix_dry_run:
+        if report.diff:
+            print(report.diff, end="")
+        else:
+            print("[guideline-checker] No autofixable violations to preview.")
+        return _exit_code_for_check(args, *_severity_counts(results))
+
+    print(
+        f"[guideline-checker] Autofix: fixed {report.fixed_count} violation(s) "
+        f"across {len(report.changed_files)} file(s)."
+    )
+    remaining = _scan(args, root)
+    errors, warnings = _severity_counts(remaining)
+    print(f"[guideline-checker] {errors + warnings} violation(s) remain after autofix.")
+    return _exit_code_for_check(args, errors, warnings)
 
 
 def _apply_config(args: argparse.Namespace) -> None:

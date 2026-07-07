@@ -21,6 +21,7 @@ Teams and solo developers who maintain AI-agent instruction files (`.github/inst
 - **Inline suppression** — add a `guideline: disable` comment on any line to skip it.
 - **`--diff` mode** — check only files changed in the git working tree for fast incremental pre-commit runs.
 - **Baseline adoption** — `--write-baseline` / `--baseline` fail only on *new* violations, so you can turn the gate on for a legacy repo without fixing its whole backlog first.
+- **Autofix** — `guideline-checker fix` (or `check --fix`) rewrites the working tree for rules that declare a mechanical `fix:`; `--dry-run` previews the diff.
 - **Committed config** — pin `fail_on`, `exclude`, `max_file_size`, `linters`, and `baseline` in a `[tool.guideline-checker]` table so every run agrees; CLI flags still override per-invocation.
 - **Multi-repo `synthesize`** — one rolled-up HTML report across every repo in a workspace.
 - **Optional external linters** — fold `ruff`, `mypy`, or `eslint` results into the same report via `--linters`.
@@ -90,6 +91,33 @@ scripts/**
 ```
 
 `--fail-on` accepts `error` (default), `warning`, or `never`.
+
+### Autofix (`fix` / `check --fix`)
+
+Rules that declare a mechanical `fix:` block can be applied to the working tree — the checker rewrites only the lines that actually fired.
+
+```bash
+guideline-checker fix                      # apply every rule's fix in place
+guideline-checker fix --dry-run            # preview a unified diff, write nothing
+guideline-checker check --fix              # same, from the check subcommand
+```
+
+A `fix:` supports three deterministic, idempotent operations (see [ADR D-0007](DECISIONS.md)):
+
+```yaml
+fix:
+  op: remove_line                          # delete the whole flagged line
+# or
+  op: replace
+  from: "yaml.load("
+  to: "yaml.safe_load("
+# or
+  op: regex_replace
+  pattern: "\\bvar\\b"
+  replacement: "const"
+```
+
+Fixes are mechanical only — no semantic or LLM rewriting. Structural (AST-detected) rules ship no `fix:` and stay flag-only. After a real apply the checker re-scans and the exit code reflects what remains. Shipped fixes today: `py-safe-yaml` (→ `safe_load`), `py-no-debugger` (drop the line), `ts-no-var` (→ `const`).
 
 ### Baseline (adopt on a legacy repo)
 

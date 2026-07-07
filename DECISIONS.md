@@ -281,3 +281,54 @@ above.
 repo's creds/build env, and still reads a working tree; (b) auto-merge — merging stays a
 separate, deliberate human action; (c) a bespoke report format — reusing `Violation` gives
 every reporter + the dashboard for free.
+
+---
+
+## D-0007 — Local autofix via a declarative `fix:` block
+
+**Date**: 2026-07-07
+**Status**: accepted
+
+The checker could only *flag* violations. `fixers.py` exists but is a fleet-level
+distribution-drift remediator — it opens one GitHub PR per repo through a `GhClient`
+(rules keyed by name, e.g. `license-present`), and never touches a local working tree.
+There was no way to mechanically fix a violation in place, so every finding on a
+mechanical rule was hand-work, capping adoption.
+
+L2.1 adds a **local, deterministic autofix** kept entirely separate from the remote
+`apply_fix` path. A rule opts in with a sibling `fix:` block (alongside `detect:`); the
+checker rewrites the working tree for the lines that fired. Detection stays the source of
+truth — a fix only runs where a violation actually fired.
+
+`fix:` supports three mechanical operations, each anchored to the violation's line:
+
+- `op: remove_line` — delete the whole violating line (e.g. a `breakpoint()`).
+- `op: replace` with `from` / `to` — literal substring replace on the line
+  (e.g. `yaml.load(` → `yaml.safe_load(`).
+- `op: regex_replace` with `pattern` / `replacement` — regex sub on the line
+  (e.g. `\bvar\b` → `const`).
+
+**Contract**:
+
+- A `fix:` is only valid on a rule whose detection is line-anchored (all current
+  `forbid` / `forbid_regex` / `scan` / `ast` detectors carry a line number). A rule with
+  no `fix:` block is detect-only and is never rewritten.
+- Fixes must be **idempotent**: applying twice yields no further change. The shipped fixes
+  satisfy this by construction (a removed line is gone; `yaml.safe_load(` no longer matches
+  `yaml.load(`; `const` no longer matches `\bvar\b`).
+- No LLM, no semantic rewrite — mechanical only. Structural rules (AST-detected React/TS
+  shape rules) declare no `fix:`; they stay flag-only by design.
+- `--dry-run` prints a unified diff and writes nothing (byte-for-byte unchanged on disk).
+  After a real apply the checker re-scans and gates on the post-fix state, so the exit code
+  reflects the violations that remain.
+
+Implementation lives in a new `guideline_checker/autofix.py` (`apply_local_fixes`), invoked
+by a `fix` subcommand and a `check --fix` flag. The remote `fixers.apply_fix` path is
+untouched — the two remediation surfaces are independent.
+
+*Rejected alternatives*: (a) reuse `fixers.py` — it is PR/GhClient-coupled and keyed by
+fleet-artifact rule names, a different problem; (b) column/offset-based edits instead of
+whole-line ops — brittle against re-detection and offers no safety gain for the mechanical
+fixes shipped; (c) an autofix registry in code (like the AST checks) — the fixes are pure
+data (a literal/regex + a target), so keeping them in the YAML preserves the rules-as-data
+contract, the same reasoning as D-0004.
