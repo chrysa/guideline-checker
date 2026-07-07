@@ -40,7 +40,8 @@ def test_build_parser_default_values() -> None:
     assert args.root == Path(".")
     assert args.instructions is None
     assert args.output == Path("guideline-report.html")
-    assert args.fail_on == "error"
+    # Default is None at parse time; resolved to "error" (or config) in _apply_config.
+    assert args.fail_on is None
     assert args.json is None
 
 
@@ -114,7 +115,17 @@ def test_main_check_sarif_report_created(tmp_path: Path) -> None:
 
     root = _make_project(tmp_path, violation=True)
     sarif_report = tmp_path / "report.sarif"
-    main(["check", "--root", str(root), "--sarif", str(sarif_report), "--fail-on", "never"])
+    main(
+        [
+            "check",
+            "--root",
+            str(root),
+            "--sarif",
+            str(sarif_report),
+            "--fail-on",
+            "never",
+        ]
+    )
     assert sarif_report.exists()
     data = json.loads(sarif_report.read_text(encoding="utf-8"))
     assert data["version"] == "2.1.0"
@@ -123,7 +134,17 @@ def test_main_check_sarif_report_created(tmp_path: Path) -> None:
 def test_main_check_markdown_report_created(tmp_path: Path) -> None:
     root = _make_project(tmp_path, violation=True)
     md_report = tmp_path / "report.md"
-    main(["check", "--root", str(root), "--markdown", str(md_report), "--fail-on", "never"])
+    main(
+        [
+            "check",
+            "--root",
+            str(root),
+            "--markdown",
+            str(md_report),
+            "--fail-on",
+            "never",
+        ]
+    )
     assert md_report.exists()
     content = md_report.read_text(encoding="utf-8")
     assert "# Guideline Compliance Report" in content
@@ -339,7 +360,17 @@ class TestBaselineCli:
     def test_baseline_suppresses_known_violations(self, tmp_path: Path) -> None:
         root = _make_project(tmp_path, violation=True)
         baseline = tmp_path / "baseline.json"
-        main(["check", "--root", str(root), "--output", str(tmp_path / "r.html"), "--write-baseline", str(baseline)])
+        main(
+            [
+                "check",
+                "--root",
+                str(root),
+                "--output",
+                str(tmp_path / "r.html"),
+                "--write-baseline",
+                str(baseline),
+            ]
+        )
 
         # Every existing violation is baselined -> the gate passes even with --fail-on warning.
         code = main(
@@ -360,7 +391,17 @@ class TestBaselineCli:
     def test_baseline_fails_on_new_violation(self, tmp_path: Path) -> None:
         root = _make_project(tmp_path, violation=True)
         baseline = tmp_path / "baseline.json"
-        main(["check", "--root", str(root), "--output", str(tmp_path / "r.html"), "--write-baseline", str(baseline)])
+        main(
+            [
+                "check",
+                "--root",
+                str(root),
+                "--output",
+                str(tmp_path / "r.html"),
+                "--write-baseline",
+                str(baseline),
+            ]
+        )
 
         # Introduce a brand-new violation not present when the baseline was written.
         (root / "src" / "other.py").write_text('print("new")\n', encoding="utf-8")
@@ -378,3 +419,66 @@ class TestBaselineCli:
             ]
         )
         assert code == 1
+
+
+class TestConfigCli:
+    """End-to-end coverage of [tool.guideline-checker] resolution (L2.3)."""
+
+    def _set_config(self, root: Path, body: str) -> None:
+        (root / "pyproject.toml").write_text(f"[tool.guideline-checker]\n{body}", encoding="utf-8")
+
+    def test_config_fail_on_used_without_flag(self, tmp_path: Path) -> None:
+        root = _make_project(tmp_path, violation=True)  # a warning-level violation
+        self._set_config(root, 'fail_on = "warning"\n')
+        # No --fail-on on the CLI -> config's "warning" applies -> the warning fails the gate.
+        code = main(["check", "--root", str(root), "--output", str(tmp_path / "r.html")])
+        assert code == 1
+
+    def test_cli_flag_overrides_config(self, tmp_path: Path) -> None:
+        root = _make_project(tmp_path, violation=True)
+        self._set_config(root, 'fail_on = "warning"\n')
+        # Explicit --fail-on never beats the config's warning.
+        code = main(
+            [
+                "check",
+                "--root",
+                str(root),
+                "--output",
+                str(tmp_path / "r.html"),
+                "--fail-on",
+                "never",
+            ]
+        )
+        assert code == 0
+
+    def test_unknown_key_warns_but_runs(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        root = _make_project(tmp_path, violation=False)
+        self._set_config(root, "bogus = 1\n")
+        code = main(["check", "--root", str(root), "--output", str(tmp_path / "r.html")])
+        assert code == 0
+        assert "bogus" in capsys.readouterr().err
+
+    def test_no_config_is_backward_compatible(self, tmp_path: Path) -> None:
+        root = _make_project(tmp_path, violation=True)  # warning-level only
+        # No config, no --fail-on -> default "error" -> a warning does not fail.
+        code = main(["check", "--root", str(root), "--output", str(tmp_path / "r.html")])
+        assert code == 0
+
+    def test_config_baseline_path_is_honoured(self, tmp_path: Path) -> None:
+        root = _make_project(tmp_path, violation=True)
+        baseline = root / ".guideline-baseline.json"
+        main(
+            [
+                "check",
+                "--root",
+                str(root),
+                "--output",
+                str(tmp_path / "r.html"),
+                "--write-baseline",
+                str(baseline),
+            ]
+        )
+        self._set_config(root, f'baseline = "{baseline.name}"\nfail_on = "warning"\n')
+        # Backlog is baselined via the config-provided path -> gate passes despite fail_on=warning.
+        code = main(["check", "--root", str(root), "--output", str(tmp_path / "r2.html")])
+        assert code == 0

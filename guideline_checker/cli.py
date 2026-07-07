@@ -67,9 +67,12 @@ def build_parser() -> argparse.ArgumentParser:
     check_cmd.add_argument(
         "--fail-on",
         choices=["error", "warning", "never"],
-        default="error",
+        default=None,
         dest="fail_on",
-        help="Exit with code 1 if violations at this level or above are found.",
+        help=(
+            "Exit with code 1 if violations at this level or above are found "
+            "(default: error, or the [tool.guideline-checker] config value)."
+        ),
     )
     check_cmd.add_argument(
         "--json",
@@ -384,7 +387,10 @@ def _resolve_diff_files(args: argparse.Namespace, root: Path) -> list[Path] | No
         return None
     diff_files = _get_diff_files(root)
     if diff_files is None:
-        print("[guideline-checker] --diff: git not available or not a git repo — checking all files.", file=sys.stderr)
+        print(
+            "[guideline-checker] --diff: git not available or not a git repo — checking all files.",
+            file=sys.stderr,
+        )
         return None
     if not diff_files:
         print("[guideline-checker] --diff: no modified files found, nothing to check.")
@@ -408,9 +414,15 @@ def _run_linters_for_check(args: argparse.Namespace, root: Path) -> list:  # typ
     linter_results = run_linters(root, linters=linter_names)
     for lr in linter_results:
         if not lr.available:
-            print(f"[guideline-checker] Linter '{lr.linter}' unavailable: {lr.error}", file=sys.stderr)
+            print(
+                f"[guideline-checker] Linter '{lr.linter}' unavailable: {lr.error}",
+                file=sys.stderr,
+            )
         elif lr.error:
-            print(f"[guideline-checker] Linter '{lr.linter}' error: {lr.error}", file=sys.stderr)
+            print(
+                f"[guideline-checker] Linter '{lr.linter}' error: {lr.error}",
+                file=sys.stderr,
+            )
         else:
             print(f"[guideline-checker] Linter '{lr.linter}': {len(lr.violations)} violation(s).")
     return linter_results
@@ -479,12 +491,16 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
+    _apply_config(args)
     root: Path = args.root.resolve()
     use_all_sources = not args.no_multi_source
     instructions_dir: Path = args.instructions or root / ".github" / "instructions"
 
     if args.no_multi_source and not instructions_dir.exists():
-        print(f"[guideline-checker] Instructions directory not found: {instructions_dir}", file=sys.stderr)
+        print(
+            f"[guideline-checker] Instructions directory not found: {instructions_dir}",
+            file=sys.stderr,
+        )
         return 1
 
     if use_all_sources:
@@ -514,6 +530,38 @@ def _cmd_check(args: argparse.Namespace) -> int:
     return _report_and_gate(args, results, root)
 
 
+def _apply_config(args: argparse.Namespace) -> None:
+    """Fill unset check args from [tool.guideline-checker]; CLI > env > config > default."""
+    from guideline_checker.config import load_config
+
+    root = args.root.resolve()
+    config = load_config(root)
+    for warning in config.warnings:
+        print(f"[guideline-checker] config: {warning} ignored.", file=sys.stderr)
+
+    values = config.values
+    if args.fail_on is None:
+        args.fail_on = values.get("fail_on", "error")
+    if args.exclude is None and "exclude" in values:
+        args.exclude = values["exclude"]
+    if args.linters is None and "linters" in values:
+        args.linters = values["linters"]
+    if args.baseline is None and "baseline" in values:
+        base = Path(str(values["baseline"]))
+        args.baseline = base if base.is_absolute() else root / base
+    if args.max_file_size is None:
+        args.max_file_size = _env_or_config_max_size(values)
+
+
+def _env_or_config_max_size(values: dict[str, object]) -> int | None:
+    """Resolve max file size from the env var (wins) then the config value."""
+    env = os.environ.get("GUIDELINE_MAX_FILE_SIZE")
+    if env is not None and env.isdigit():
+        return int(env)
+    raw = values.get("max_file_size")
+    return raw if isinstance(raw, int) else None
+
+
 def _apply_baseline(args: argparse.Namespace, results: list[RuleResult], root: Path) -> list[RuleResult]:
     """Drop baselined violations; report how many were suppressed vs newly introduced."""
     from guideline_checker.baseline import apply_baseline, load_baseline
@@ -529,7 +577,12 @@ def _report_and_gate(args: argparse.Namespace, results: list[RuleResult], root: 
 
     reporter = HtmlReporter()
     report_path: Path = args.output
-    reporter.write(results=results, output_path=report_path, root=root, linter_results=linter_results)
+    reporter.write(
+        results=results,
+        output_path=report_path,
+        root=root,
+        linter_results=linter_results,
+    )
     print(f"[guideline-checker] Report written to: {report_path}")
 
     _write_extra_reports(args, results, root)
@@ -592,7 +645,14 @@ def _cmd_synthesize(args: argparse.Namespace) -> int:
         repo_path = workspace / name
         if not repo_path.is_dir():
             print(f"[guideline-checker]   SKIP {name} (not a directory)")
-            repo_entries.append({"name": name, "path": repo_path, "skipped": True, "reason": "not a directory"})
+            repo_entries.append(
+                {
+                    "name": name,
+                    "path": repo_path,
+                    "skipped": True,
+                    "reason": "not a directory",
+                }
+            )
             continue
 
         instructions_dir = shared_instructions or (repo_path / ".github" / "instructions")
@@ -659,11 +719,17 @@ def _cmd_synthesize_origin(args: argparse.Namespace) -> int:
     from guideline_checker.reporters.synthesis_html import SynthesisHtmlReporter
 
     if args.manifest is None or args.shared_standards is None:
-        print("[guideline-checker] --source origin requires --manifest and --shared-standards", file=sys.stderr)
+        print(
+            "[guideline-checker] --source origin requires --manifest and --shared-standards",
+            file=sys.stderr,
+        )
         return 2
     client = GhClient()
     if not client.available():
-        print("[guideline-checker] gh CLI not found — required for --source origin", file=sys.stderr)
+        print(
+            "[guideline-checker] gh CLI not found — required for --source origin",
+            file=sys.stderr,
+        )
         return 2
 
     targets = load_manifest(args.manifest)
@@ -782,7 +848,12 @@ def _cmd_central(args: argparse.Namespace) -> int:
 
     print(f"[guideline-checker] Serving central server (store: {store}) at http://{args.host}:{args.port} ...")
     if args.reload:
-        uvicorn.run("guideline_checker.web.central:central_app", host=args.host, port=args.port, reload=True)
+        uvicorn.run(
+            "guideline_checker.web.central:central_app",
+            host=args.host,
+            port=args.port,
+            reload=True,
+        )
     else:
         central_app = importlib.import_module("guideline_checker.web.central").central_app
         uvicorn.run(central_app, host=args.host, port=args.port)
@@ -857,7 +928,10 @@ def _cmd_push(args: argparse.Namespace) -> int:
 
     repo = _slug_repo(args.repo or _default_repo_name())
     if not repo:
-        print("[guideline-checker] Could not determine a valid repo name; pass --repo.", file=sys.stderr)
+        print(
+            "[guideline-checker] Could not determine a valid repo name; pass --repo.",
+            file=sys.stderr,
+        )
         return 1
 
     url = args.server.rstrip("/") + "/api/ingest"
@@ -889,7 +963,10 @@ def _cmd_push(args: argparse.Namespace) -> int:
             status_code = resp.status
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")[:200]
-        print(f"[guideline-checker] Push rejected (HTTP {exc.code}): {detail}", file=sys.stderr)
+        print(
+            f"[guideline-checker] Push rejected (HTTP {exc.code}): {detail}",
+            file=sys.stderr,
+        )
         return 1
     except urllib.error.URLError as exc:
         print(f"[guideline-checker] Push failed: {exc.reason}", file=sys.stderr)
