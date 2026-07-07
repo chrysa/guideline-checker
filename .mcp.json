@@ -1,5 +1,13 @@
 {
   "mcpServers": {
+    "graphify": {
+      "command": "python3",
+      "args": [
+        "-m",
+        "graphify.serve",
+        "/home/anthony/Documents/perso/projects/chrysa/guideline-checker/graphify-out/graph.json"
+      ]
+    },
     "github": {
       "args": [
         "-y",
