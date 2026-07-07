@@ -1,10 +1,13 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68", "setuptools-scm>=8", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "guideline-checker"
-version = "1.0.0"
+# Version is derived from git tags by setuptools-scm (never bumped manually — D-0009).
+# Builds without a .git (e.g. the Docker image) use fallback_version, or the
+# SETUPTOOLS_SCM_PRETEND_VERSION env var when the release/deploy stamps the tag.
+dynamic = ["version"]
 description = "Check project compliance against GitHub Copilot instruction rules and generate HTML reports"
 readme = "README.md"
 license = { text = "MIT" }
@@ -70,6 +73,11 @@ Changelog = "https://github.com/chrysa/guideline-checker/blob/main/CHANGELOG.md"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["guideline_checker*"]
+
+[tool.setuptools_scm]
+# No .git (Docker build context excludes it) and no SETUPTOOLS_SCM_PRETEND_VERSION
+# → fall back to this instead of failing the build.
+fallback_version = "0.0.0+unknown"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
