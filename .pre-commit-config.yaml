@@ -65,7 +65,7 @@ repos:
   - id: fastapi-missing-links
     exclude: ^tests/
   repo: https://github.com/chrysa/pre-commit-tools
-  rev: v0.1.1-95
+  rev: v0.1.1-97
 - hooks:
   - id: gitleaks
   repo: https://github.com/gitleaks/gitleaks
