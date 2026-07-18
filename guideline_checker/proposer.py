@@ -12,7 +12,9 @@ tried before any model is called.
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -107,20 +109,7 @@ class OllamaProposer:
             reply = generate(_LLM_PROMPT.format(rule=rule))
         except (OSError, urllib.error.URLError):
             return None
-
-        data = _extract_json(reply)
-        if data is None:
-            return None
-        detector = RuleDetector(
-            forbid=tuple(_str_list(data.get("forbid"))),
-            forbid_regex=tuple(_str_list(data.get("forbid_regex"))),
-            file_regex=tuple(_str_list(data.get("file_regex"))),
-            match_in_comments=bool(data.get("match_in_comments", False)),
-        )
-        if not (detector.forbid or detector.forbid_regex or detector.file_regex):
-            return None
-        rationale = str(data.get("rationale") or "LLM-proposed detector")
-        return Proposal(rule=rule, detector=detector, rationale=rationale, source=self.source)
+        return _proposal_from_reply(rule, reply, self.source)
 
     def _call_ollama(self, prompt: str) -> str:
         payload = json.dumps(
@@ -134,6 +123,60 @@ class OllamaProposer:
         with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310
             body = json.loads(response.read().decode("utf-8"))
         return str(body.get("response", ""))
+
+
+@dataclass
+class ClaudeProposer:
+    """Propose a detector via the ``claude`` CLI — the portable LLM backend.
+
+    Shells out to ``claude -p`` on the user's subscription (no API key, no local
+    model, no RAM). Like every proposer it only proposes: the sandbox proves the
+    detector before any write (ADR D-0012). ``ANTHROPIC_API_KEY`` / ``ANTHROPIC_KEY``
+    are stripped from the child env so ``claude -p`` uses the subscription session
+    instead of exiting on a stray key. ``generate`` is injectable for offline tests.
+    """
+
+    binary: str = "claude"
+    timeout: float = 120.0
+    generate: Callable[[str], str] | None = field(default=None, repr=False)
+    source: str = field(default="claude", init=False)
+
+    def propose(self, rule: str, apply_to: str = "**/*") -> Proposal | None:
+        generate = self.generate or self._call_claude
+        try:
+            reply = generate(_LLM_PROMPT.format(rule=rule))
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return _proposal_from_reply(rule, reply, self.source)
+
+    def _call_claude(self, prompt: str) -> str:
+        env = {k: v for k, v in os.environ.items() if k not in {"ANTHROPIC_API_KEY", "ANTHROPIC_KEY"}}
+        result = subprocess.run(
+            [self.binary, "-p", prompt],
+            capture_output=True,
+            text=True,
+            timeout=self.timeout,
+            env=env,
+            check=True,
+        )
+        return result.stdout
+
+
+def _proposal_from_reply(rule: str, reply: str, source: str) -> Proposal | None:
+    """Build a Proposal from a model reply, or None if it carries no usable pattern."""
+    data = _extract_json(reply)
+    if data is None:
+        return None
+    detector = RuleDetector(
+        forbid=tuple(_str_list(data.get("forbid"))),
+        forbid_regex=tuple(_str_list(data.get("forbid_regex"))),
+        file_regex=tuple(_str_list(data.get("file_regex"))),
+        match_in_comments=bool(data.get("match_in_comments", False)),
+    )
+    if not (detector.forbid or detector.forbid_regex or detector.file_regex):
+        return None
+    rationale = str(data.get("rationale") or "LLM-proposed detector")
+    return Proposal(rule=rule, detector=detector, rationale=rationale, source=source)
 
 
 def _extract_json(reply: str) -> dict[str, Any] | None:

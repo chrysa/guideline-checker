@@ -20,7 +20,13 @@ from pydantic import BaseModel, Field
 from guideline_checker.checker import RuleResult, run_checks
 from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources
 from guideline_checker.persist import apply_detector
-from guideline_checker.proposer import HeuristicProposer, OllamaProposer, Proposal
+from guideline_checker.proposer import (
+    ClaudeProposer,
+    HeuristicProposer,
+    OllamaProposer,
+    Proposal,
+    Proposer,
+)
 from guideline_checker.rule_health import RuleHealth, compute_rule_health, summarize
 from guideline_checker.sandbox import replay
 from guideline_checker.web.auth import require_auth
@@ -239,19 +245,34 @@ class _ArmRequest(BaseModel):
     dry_run: bool = True
 
 
-def _ollama_enabled() -> bool:
-    """The LLM proposer is opt-in — off unless GC_OLLAMA is truthy."""
-    return os.environ.get("GC_OLLAMA", "").lower() in {"1", "true", "yes"}
+def _truthy(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"1", "true", "yes"}
+
+
+def _llm_enabled() -> bool:
+    """The LLM escalation is opt-in — off unless a backend flag is set."""
+    return _truthy("GC_CLAUDE") or _truthy("GC_OLLAMA")
+
+
+def _llm_proposer() -> Proposer | None:
+    """Pick the enabled LLM backend: Claude (portable) preferred, else Ollama (local)."""
+    if _truthy("GC_CLAUDE"):
+        return ClaudeProposer(binary=os.environ.get("GC_CLAUDE_BIN", "claude"))
+    if _truthy("GC_OLLAMA"):
+        return OllamaProposer(
+            model=os.environ.get("GC_OLLAMA_MODEL", "qwen2.5:7b"),
+            host=os.environ.get("GC_OLLAMA_HOST", "http://localhost:11434"),
+        )
+    return None
 
 
 def _propose(rule: str, apply_to: str) -> Proposal | None:
-    """Try the free heuristic first; escalate to Ollama only when enabled."""
+    """Try the free heuristic first; escalate to the enabled LLM backend if any."""
     proposal = HeuristicProposer().propose(rule, apply_to)
-    if proposal is None and _ollama_enabled():
-        proposal = OllamaProposer(
-            model=os.environ.get("GC_OLLAMA_MODEL", "qwen2.5:7b"),
-            host=os.environ.get("GC_OLLAMA_HOST", "http://localhost:11434"),
-        ).propose(rule, apply_to)
+    if proposal is None:
+        backend = _llm_proposer()
+        if backend is not None:
+            proposal = backend.propose(rule, apply_to)
     return proposal
 
 
@@ -267,8 +288,8 @@ def propose_detector(req: _ProposeRequest) -> JSONResponse:
     if proposal is None:
         note = (
             "No proposal: the LLM backend could not map this rule mechanically."
-            if _ollama_enabled()
-            else "No deterministic proposal; enable the Ollama backend (GC_OLLAMA=1) to try an LLM."
+            if _llm_enabled()
+            else "No deterministic proposal; enable an LLM backend (GC_CLAUDE=1 or GC_OLLAMA=1)."
         )
         return JSONResponse({"rule": req.rule, "proposal": None, "proof": None, "note": note})
     proof = replay(req.rule, proposal.detector, _SCAN_ROOT, req.apply_to)
