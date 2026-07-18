@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from guideline_checker.checker import RuleResult, run_checks
 from guideline_checker.loader import InstructionFile, load_all_sources
+from guideline_checker.rule_health import RuleHealth, compute_rule_health, summarize
 from guideline_checker.web.auth import require_auth
 
 # ── Configuration ──────────────────────────────────────────────────────────────
@@ -36,6 +37,8 @@ _SCAN_ROOT: Path = Path(os.environ.get("SCAN_ROOT", "."))
 class _ScanState:
     results: list[dict[str, Any]] = field(default_factory=list)
     constraints: list[dict[str, Any]] = field(default_factory=list)
+    health: list[dict[str, Any]] = field(default_factory=list)
+    health_summary: dict[str, int] = field(default_factory=dict)
     timestamp: str | None = None
     running: bool = False
     error: str | None = None
@@ -69,6 +72,24 @@ def _serialize_results(results: list[RuleResult]) -> list[dict[str, Any]]:
     ]
 
 
+def _serialize_health(health: list[RuleHealth]) -> list[dict[str, Any]]:
+    """Convert RuleHealth list to JSON-serialisable dicts, worst state first."""
+    order = {"dead": 0, "suspect": 1, "armed": 2, "proven": 3}
+    ranked = sorted(health, key=lambda h: (order[h.state.value], h.instruction, h.rule))
+    return [
+        {
+            "rule": h.rule,
+            "instruction": h.instruction,
+            "state": h.state.value,
+            "has_declarative_detector": h.has_declarative_detector,
+            "has_phrase_detection": h.has_phrase_detection,
+            "fire_count": h.fire_count,
+            "reason": h.reason,
+        }
+        for h in ranked
+    ]
+
+
 def _serialize_constraints(sources: list[InstructionFile]) -> list[dict[str, Any]]:
     """Convert InstructionFile list to JSON-serialisable constraint dicts."""
     return [
@@ -94,6 +115,9 @@ def _do_scan() -> None:
         _state.results = _serialize_results(results)
         all_srcs = load_all_sources(_SCAN_ROOT)
         _state.constraints = _serialize_constraints(all_srcs)
+        health = compute_rule_health([r.instruction for r in results], results)
+        _state.health = _serialize_health(health)
+        _state.health_summary = summarize(health)
         _state.timestamp = datetime.now(UTC).isoformat()
     except Exception as exc:  # pragma: no cover
         _state.error = str(exc)
@@ -575,6 +599,23 @@ def get_results() -> JSONResponse:
             "running": _state.running,
             "error": _state.error,
             "results": _state.results,
+        }
+    )
+
+
+@app.get("/api/rules-health", response_model=None, dependencies=[Depends(require_auth)])
+def get_rules_health() -> JSONResponse:
+    """Return per-rule detection health — the truth a green scan hides.
+
+    A ``dead`` rule carries no detector and no recognised phrase, so it can never
+    flag a violation however clean the report looks.
+    """
+    return JSONResponse(
+        {
+            "timestamp": _state.timestamp,
+            "summary": _state.health_summary,
+            "rules": _state.health,
+            "total_rules": len(_state.health),
         }
     )
 
