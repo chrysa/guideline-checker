@@ -1,7 +1,7 @@
 # guideline-checker
 
 [![CI](https://github.com/chrysa/guideline-checker/actions/workflows/ci.yml/badge.svg)](https://github.com/chrysa/guideline-checker/actions/workflows/ci.yml)
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/guideline-checker)](https://pypi.org/project/guideline-checker/)
+[![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](https://github.com/chrysa/guideline-checker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![SonarCloud](https://sonarcloud.io/api/project_badges/measure?project=chrysa_guideline-checker&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=chrysa_guideline-checker)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
@@ -31,8 +31,16 @@ Teams and solo developers who maintain AI-agent instruction files (`.github/inst
 
 ## Installation
 
+Not published on PyPI — distribution is the pre-commit hook (by git ref), the ghcr Docker image, and installing from source. Pick the channel that fits:
+
 ```bash
-pip install guideline-checker
+# From the git repo (pipx keeps it isolated)
+pipx install 'git+https://github.com/chrysa/guideline-checker.git'
+
+# Or as a pre-commit hook — see "As a pre-commit hook" below
+
+# Or the container image
+docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/chrysa/guideline-checker check
 ```
 
 From source (with dev tooling):
@@ -41,7 +49,7 @@ From source (with dev tooling):
 pip install -e '.[dev]'
 ```
 
-Requires Python ≥ 3.14. The core CLI has a single runtime dependency (`PyYAML`, for the YAML rule referential); the optional web dashboard needs the `web` extra (see below).
+Requires Python ≥ 3.14. The core CLI has two runtime dependencies (`PyYAML` for the YAML rule referential, `tree-sitter` for JS/TS AST detection); the optional web dashboard needs the `web` extra (see below).
 
 ## Usage
 
@@ -387,7 +395,7 @@ Files under `guidelines/packs/` are **not** auto-loaded — a pack's abstract ba
 
 ### Shipped rule catalog
 
-Every rule below carries a working `detect:` block (AST, scanner, or `forbid`/regex) — none are dead prose. Author your own by dropping a file in `guidelines/<dimension>/`.
+Every `languages/` rule below carries a working `detect:` block (AST, scanner, or `forbid`/regex) and is enforced. The `ai-models/` rules are **advisory**: they express provider conventions the checker surfaces but cannot yet detect mechanically — `guideline-checker web` reports them as `advisory` (not `dead`), and wiring detectors onto them is tracked work, not a shipped guarantee. Author your own by dropping a file in `guidelines/<dimension>/`.
 
 | dimension | rule id | severity | detects |
 |-----------|---------|----------|---------|

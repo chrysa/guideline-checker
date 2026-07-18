@@ -1,0 +1,120 @@
+"""Persist a validated detector onto a YAML rule — the workshop's write step.
+
+Once a proposal is proven in the sandbox and the user validates it, the detector
+is written onto its rule in ``guidelines/<dim>/*.yml``. ``dry_run`` returns the
+unified diff and writes nothing; applying it re-parses through the real loader on
+the next scan, so a rule armed here is enforced for real. Leading ``#`` comments
+on the target file are preserved across the YAML round-trip.
+"""
+
+from __future__ import annotations
+
+import difflib
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from guideline_checker.loader import RuleDetector
+
+_PATTERN_FIELDS = (
+    ("forbid", "forbid"),
+    ("forbid_regex", "forbid_regex"),
+    ("file_regex", "file_regex"),
+    ("ast_checks", "ast"),
+    ("scan_checks", "scan"),
+)
+
+
+@dataclass(frozen=True)
+class ApplyResult:
+    """Outcome of arming a rule: which file, the diff, and whether it was written."""
+
+    rule_id: str
+    file: Path
+    diff: str
+    written: bool
+
+
+def apply_detector(
+    root: Path,
+    rule_id: str,
+    detector: RuleDetector,
+    *,
+    dry_run: bool = True,
+) -> ApplyResult:
+    """Write ``detector`` onto rule ``rule_id`` in its referential file.
+
+    Raises ``KeyError`` if no referential rule carries ``rule_id``. With
+    ``dry_run`` the file is untouched and only the diff is returned.
+    """
+    target = _find_rule_file(root, rule_id)
+    if target is None:
+        raise KeyError(f"No referential rule with id {rule_id!r} under {root / 'guidelines'}")
+
+    before = target.read_text(encoding="utf-8")
+    header = _leading_comments(before)
+    data = yaml.safe_load(before)
+    for rule in data.get("rules", []):
+        if isinstance(rule, dict) and rule.get("id") == rule_id:
+            rule["detect"] = detector_to_detect(detector)
+            break
+
+    after = header + yaml.safe_dump(data, sort_keys=True, allow_unicode=True)
+    diff = "".join(
+        difflib.unified_diff(
+            before.splitlines(keepends=True),
+            after.splitlines(keepends=True),
+            fromfile=str(target),
+            tofile=str(target),
+        )
+    )
+
+    if not dry_run:
+        target.write_text(after, encoding="utf-8")
+
+    return ApplyResult(rule_id=rule_id, file=target, diff=diff, written=not dry_run)
+
+
+def detector_to_detect(detector: RuleDetector) -> dict[str, Any]:
+    """Map a ``RuleDetector`` to a ``detect:`` block with only its non-empty fields."""
+    detect: dict[str, Any] = {}
+    for attr, key in _PATTERN_FIELDS:
+        values = getattr(detector, attr)
+        if values:
+            detect[key] = list(values)
+    if detector.match_in_comments:
+        detect["match_in_comments"] = True
+    return detect
+
+
+def _find_rule_file(root: Path, rule_id: str) -> Path | None:
+    """Return the referential file that declares ``rule_id``, or ``None``."""
+    guidelines = root / "guidelines"
+    if not guidelines.is_dir():
+        return None
+    for path in sorted(guidelines.rglob("*.yml")):
+        if path.name == "categories.yml":
+            continue
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        for rule in data.get("rules", []):
+            if isinstance(rule, dict) and rule.get("id") == rule_id:
+                return path
+    return None
+
+
+def _leading_comments(text: str) -> str:
+    """Capture the file's leading comment/blank lines so a dump can re-prepend them."""
+    kept: list[str] = []
+    for line in text.splitlines(keepends=True):
+        if line.lstrip().startswith("#") or not line.strip():
+            kept.append(line)
+        else:
+            break
+    return "".join(kept)

@@ -420,3 +420,89 @@ setuptools-scm with no fallback — breaks every Docker build (no `.git` in cont
 (c) publish to PyPI to make the wheel version authoritative — there is no PyPI publish
 (distribution is the ghcr Docker image + the pre-commit hook by git ref), so this would add
 a release surface without addressing the drift.
+
+---
+
+## D-0010 — Rule health: judge the YAML referential, treat markdown bullets as advisory
+
+**Date**: 2026-07-18
+**Status**: accepted
+
+The deterministic health engine (`rule_health.py`, GET `/api/rules-health`) initially
+classed every extracted rule as `proven` / `armed` / `dead` uniformly. On a self-scan that
+labelled **478 of 506 rules dead** — but 469 of those are prose bullets the loader lifts
+from `CLAUDE.md`, `AGENTS.md` and the agent files (any `must/never/always` line), which the
+tool never promised to enforce. Calling them "dead" conflates *guidance we surface* with
+*rules we claim to check*, and drowns the real defect: the handful of **YAML** rules that
+ship with no detector.
+
+**Decision.** Health is judged by source kind:
+
+- A rule from the **YAML referential** (`SourceType.GUIDELINES_YAML`) with no detector and
+  no phrase match is `dead` — a genuine defect (it is advertised as an enforceable rule but
+  enforces nothing; fix it or delete it).
+- A rule from a **markdown** source (`CLAUDE`/`AGENTS`/copilot) that is undetectable is
+  `advisory` — surfaced as agent guidance, never counted as a failure or an enforced rule.
+- Detectable rules stay `proven` (fires) / `armed` (valid detector, no match), regardless
+  of source. `suspect` (fires only on suppressed lines) is unchanged.
+
+This makes the README's "no dead prose" claim *true of the referential it describes* (the
+YAML packs) and turns the 469 markdown bullets from a false alarm into an honest
+"advisory / undetectable" bucket.
+
+*Rejected*: (a) keep all 506 as rules and headline the 478 — technically loud but
+misleading, since markdown bullets were never enforcement promises; (b) stop extracting
+markdown bullets entirely — loses the advisory surface that tells you *which* guidance the
+checker cannot yet enforce, which is exactly the signal the workshop needs.
+
+---
+
+## D-0011 — Web surface becomes a real frontend; retire the embedded HTML string
+
+**Date**: 2026-07-18
+**Status**: accepted
+
+The dashboard shipped as `_DASHBOARD_HTML`, a 412-line Python string literal inside
+`web/app.py` — no templating, no asset pipeline, unstyleable, and the largest single reason
+the web module reads as throwaway. The rethink turns the read-only dashboard into a
+**local workshop** (health + propose→sandbox→validate), which needs a real, componentised
+UI in the project's own design language (Exaggerated Minimalism · slate/green · mono).
+
+**Decision.** Replace the embedded string with a real frontend served from static assets
+bundled into the wheel (`importlib.resources`), so `guideline-checker web` works from any
+installed location. The FastAPI app keeps its JSON API (`/api/scan`, `/api/results`,
+`/api/constraints`, `/api/rules-health`) as the contract; the frontend consumes it. The
+CLI/pre-commit/CI verdict paths are untouched — this is a surface change only.
+
+*Rejected*: (a) keep patching the string — every health/workshop view compounds the
+unmaintainable literal; (b) minimal health tab inside the existing string, defer the real
+front — postpones the same debt while the workshop grows on top of it.
+
+---
+
+## D-0012 — Proposer seam: LLM proposes, never judges; Ollama qwen2.5:7b default
+
+**Date**: 2026-07-18
+**Status**: accepted
+
+The workshop proposes fixes to dead/undetectable rules and to violating code. Those
+proposals may come from an LLM, but detection must stay deterministic and offline (CI must
+remain falsifiable). The Notion card had this pending as "Router: Ollama ↔ Claude, mode IA
+indécis".
+
+**Decision.** A `Proposer` seam (mirroring D-0009's `Scanner` seam) with
+`propose(rule, context) -> Proposal`. Implementations: `HeuristicProposer` (the existing 43
+`_build_checks` phrases, recycled — free, instant, tried first), `OllamaProposer`
+(qwen2.5:7b, the default LLM backend), `ClaudeProposer` (heavy tasks). The router escalates
+to an LLM only when the heuristic comes up dry.
+
+**Trust boundary (non-negotiable).** The LLM only *proposes*; every proposal is **replayed
+by the deterministic engine in a sandbox** and shown with its proof (what it catches,
+misses, breaks) before any write. The LLM never enters the verdict path. The LLM backends
+live behind an optional `[assist]` extra — **never in `[core]`**, which keeps its two
+runtime deps (PyYAML, tree-sitter) and its offline guarantee.
+
+*Rejected*: (a) claude-cli via subscription as the first backend — unusable in CI and for
+third parties (needs the `claude` binary); kept as a future seam implementation, not the
+default; (b) defer the whole choice to P3 — the seam is the architectural commitment now,
+the backend is an interchangeable detail behind it.
