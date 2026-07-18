@@ -7,19 +7,23 @@ from guideline_checker.distribution import Expectations
 from guideline_checker.fixers import ARTIFACT_PATH, FIX_CONTENT, apply_fix, plan_fixes
 from guideline_checker.loader import InstructionFile, SourceType
 
-_EXP = Expectations(canonical_standards="CANON\n", license_text="MIT\n")
+_EXP = Expectations(canonical_standards="# chrysa — Transverse Standards\nCANON\n", license_text="MIT\n")
 
 
 def test_license_fixer_returns_template() -> None:
     assert FIX_CONTENT["license-present"](_EXP) == "MIT\n"
 
 
-def test_standards_fixer_returns_canonical() -> None:
-    assert FIX_CONTENT["standards-file"](_EXP) == "CANON\n"
+def test_standards_block_is_fixable_via_injection() -> None:
+    # standards-block is injected into CLAUDE.md, not a whole-file template.
+    assert "standards-block" in ARTIFACT_PATH
+    assert "standards-block" not in FIX_CONTENT
+    assert ARTIFACT_PATH["standards-block"] == "CLAUDE.md"
 
 
 def test_artifact_paths_cover_all_fixers() -> None:
-    assert set(ARTIFACT_PATH) == set(FIX_CONTENT)
+    # Every whole-file template must have a target path; standards-block adds one more.
+    assert set(FIX_CONTENT) <= set(ARTIFACT_PATH)
 
 
 def _result(rules: list[str]) -> RuleResult:
@@ -34,8 +38,8 @@ def _result(rules: list[str]) -> RuleResult:
 
 
 def test_plan_includes_only_fixable_paths() -> None:
-    plan = plan_fixes(_result(["license-present", "standards-file"]), _EXP)
-    assert sorted(plan.paths) == sorted(["LICENSE", ".chrysa/STANDARDS.md"])
+    plan = plan_fixes(_result(["license-present", "standards-block"]), _EXP)
+    assert sorted(plan.paths) == sorted(["LICENSE", "CLAUDE.md"])
 
 
 def _full_result(rules: list[str]) -> RuleResult:
@@ -92,6 +96,8 @@ def test_apply_fix_happy_path_opens_pr() -> None:
             return GhResult(True, "", "", 0)  # create_branch
         if joined.endswith("--jq .sha"):
             return GhResult(False, "", "404", 1)  # no existing file content sha
+        if "contents/CLAUDE.md" in joined and "--jq" not in joined:
+            return GhResult(True, "# Repo alpha\n", "", 0)  # raw read for block injection
         if "--method PUT" in joined:
             return GhResult(True, "", "", 0)  # put_file
         if joined.startswith("pr create"):
@@ -101,7 +107,7 @@ def test_apply_fix_happy_path_opens_pr() -> None:
     out = apply_fix(
         "chrysa",
         "alpha",
-        _full_result(["license-present", "standards-file"]),
+        _full_result(["license-present", "standards-block"]),
         _EXP,
         GhClient(runner=runner),
         dry_run=False,
@@ -109,6 +115,8 @@ def test_apply_fix_happy_path_opens_pr() -> None:
     assert out == "https://github.com/chrysa/alpha/pull/7"
     assert any("git/refs" in c for c in calls)
     assert sum(1 for c in calls if "--method PUT" in c) == 2  # one PUT per fixable artifact
+    # standards-block injection reads CLAUDE.md before writing it back
+    assert any("contents/CLAUDE.md" in c and "--jq" not in c for c in calls)
 
 
 def test_apply_fix_returns_none_when_branch_creation_fails() -> None:

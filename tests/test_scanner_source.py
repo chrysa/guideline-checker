@@ -26,7 +26,7 @@ class TestOriginScanner:
             return GhResult(True, "content-on-develop", "", 0)
 
         scanner = OriginScanner("chrysa", "foo", GhClient(runner=runner))
-        assert scanner.read_file(".chrysa/STANDARDS.md") == "content-on-develop"
+        assert scanner.read_file("CLAUDE.md") == "content-on-develop"
         assert scanner.ref == "develop"
         # default branch resolved exactly once even across multiple reads
         scanner.read_file("CLAUDE.md")

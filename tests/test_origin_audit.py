@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from guideline_checker.distribution import Expectations
+from guideline_checker.distribution import Expectations, render_standards_block
 from guideline_checker.gh_client import GhClient, GhResult
 from guideline_checker.manifest import RepoTarget
 from guideline_checker.origin_audit import run_origin_audit
@@ -32,8 +32,7 @@ def _make_runner(repo_files: dict[str, dict[str, str]]):
 
 def _compliant() -> dict[str, str]:
     return {
-        ".chrysa/STANDARDS.md": _CANON,
-        "CLAUDE.md": "@.chrysa/STANDARDS.md\n",
+        "CLAUDE.md": "# Repo\n\n" + render_standards_block(_EXP),
         ".pre-commit-config.yaml": "repos:\n  - repo: https://github.com/chrysa/pre-commit-tools\n",
         "LICENSE": "MIT License\n",
     }
