@@ -11,12 +11,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, Depends, FastAPI
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, Field
 
 from guideline_checker.checker import RuleResult, run_checks
-from guideline_checker.loader import InstructionFile, load_all_sources
+from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources
+from guideline_checker.persist import apply_detector
+from guideline_checker.proposer import HeuristicProposer
 from guideline_checker.rule_health import RuleHealth, compute_rule_health, summarize
+from guideline_checker.sandbox import replay
 from guideline_checker.web.auth import require_auth
 
 # ── Configuration ──────────────────────────────────────────────────────────────
@@ -616,6 +620,88 @@ def get_rules_health() -> JSONResponse:
             "summary": _state.health_summary,
             "rules": _state.health,
             "total_rules": len(_state.health),
+        }
+    )
+
+
+class _ProposeRequest(BaseModel):
+    """Ask the workshop to propose a detector for a rule and prove it."""
+
+    rule: str
+    apply_to: str = "**/*"
+
+
+class _ArmRequest(BaseModel):
+    """Write a validated detector onto a referential rule (dry-run by default)."""
+
+    rule_id: str
+    forbid: list[str] = Field(default_factory=list)
+    forbid_regex: list[str] = Field(default_factory=list)
+    file_regex: list[str] = Field(default_factory=list)
+    ast: list[str] = Field(default_factory=list)
+    scan: list[str] = Field(default_factory=list)
+    match_in_comments: bool = False
+    dry_run: bool = True
+
+
+@app.post("/api/propose", response_model=None, dependencies=[Depends(require_auth)])
+def propose_detector(req: _ProposeRequest) -> JSONResponse:
+    """Propose a detector for a rule and replay it in the sandbox for proof.
+
+    Returns ``proposal: null`` when the deterministic heuristic cannot map the
+    rule's prose (e.g. the ``ai-models/`` rules) — the signal to escalate to an
+    LLM backend. The LLM never judges: any proposal is proven here before a write.
+    """
+    proposal = HeuristicProposer().propose(req.rule, req.apply_to)
+    if proposal is None:
+        return JSONResponse(
+            {
+                "rule": req.rule,
+                "proposal": None,
+                "proof": None,
+                "note": "No deterministic proposal; needs an LLM backend (P3).",
+            }
+        )
+    proof = replay(req.rule, proposal.detector, _SCAN_ROOT, req.apply_to)
+    return JSONResponse(
+        {
+            "rule": req.rule,
+            "proposal": {
+                "source": proposal.source,
+                "rationale": proposal.rationale,
+                "forbid": list(proposal.detector.forbid),
+                "match_in_comments": proposal.detector.match_in_comments,
+            },
+            "proof": {
+                "match_count": proof.match_count,
+                "files_scanned": proof.files_scanned,
+                "hits": [{"file": h.file, "line": h.line, "excerpt": h.excerpt} for h in proof.hits],
+            },
+        }
+    )
+
+
+@app.post("/api/rules/detector", response_model=None, dependencies=[Depends(require_auth)])
+def arm_rule(req: _ArmRequest) -> JSONResponse:
+    """Write a validated detector onto a referential rule; ``dry_run`` shows the diff only."""
+    detector = RuleDetector(
+        forbid=tuple(req.forbid),
+        forbid_regex=tuple(req.forbid_regex),
+        file_regex=tuple(req.file_regex),
+        ast_checks=tuple(req.ast),
+        scan_checks=tuple(req.scan),
+        match_in_comments=req.match_in_comments,
+    )
+    try:
+        result = apply_detector(_SCAN_ROOT, req.rule_id, detector, dry_run=req.dry_run)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return JSONResponse(
+        {
+            "rule_id": result.rule_id,
+            "file": str(result.file),
+            "diff": result.diff,
+            "written": result.written,
         }
     )
 
