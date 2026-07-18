@@ -506,3 +506,39 @@ runtime deps (PyYAML, tree-sitter) and its offline guarantee.
 third parties (needs the `claude` binary); kept as a future seam implementation, not the
 default; (b) defer the whole choice to P3 — the seam is the architectural commitment now,
 the backend is an interchangeable detail behind it.
+
+---
+
+## D-0013 — Claude CLI proposer as the default LLM backend
+
+**Date**: 2026-07-19
+**Status**: accepted
+
+D-0012 introduced the `Proposer` seam with Ollama (qwen2.5:7b) as the nominal LLM
+default. A live test on the host (einar) showed Ollama's `/api/generate` failing
+across three models (llama3.2:3b, llama3.1:8b, qwen2.5:7b) — root cause was memory
+pressure (~1 GiB free of 29), not model quality. A local model is therefore not a
+dependable backend here.
+
+**Decision.** Add `ClaudeProposer`, which shells out to the `claude` CLI on the
+user's subscription (`claude -p <prompt>`, with `ANTHROPIC_API_KEY`/`ANTHROPIC_KEY`
+stripped from the child env so the subscription session is used). It shares the
+exact parse path with `OllamaProposer` (`_proposal_from_reply`) and the same trust
+boundary: it only proposes; the sandbox proves the detector before any write.
+
+In the web `/api/propose` escalation, **Claude is preferred** (`GC_CLAUDE=1`),
+Ollama remains available (`GC_OLLAMA=1`) for the free/offline case when the host
+has spare RAM; both stay off by default.
+
+Live result on the 8 dead `ai-models/*.yml` rules: Claude proposed a sensible
+detector for the one mechanically-detectable rule (`import anthropic` /
+`from anthropic import` for the provider-seam rule) and **honestly returned `{}`
+(no proposal)** for the four purely-semantic ones (XML-tag structure, structured
+outputs, native function calling, explicit safety settings) — it does not
+hallucinate detectors for rules that cannot be caught from source text, which
+reinforces the advisory classification from D-0010.
+
+*Rejected*: (a) keep Ollama as the default — not runnable on the current host;
+(b) an API-key backend — the project bans a key dependency and the CLI already
+carries the subscription. `[assist]` stays dependency-free (both backends use
+stdlib transport: `urllib` for Ollama, `subprocess` for Claude).
