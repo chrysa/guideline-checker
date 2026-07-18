@@ -74,7 +74,7 @@ def _serialize_results(results: list[RuleResult]) -> list[dict[str, Any]]:
 
 def _serialize_health(health: list[RuleHealth]) -> list[dict[str, Any]]:
     """Convert RuleHealth list to JSON-serialisable dicts, worst state first."""
-    order = {"dead": 0, "suspect": 1, "armed": 2, "proven": 3}
+    order = {"dead": 0, "suspect": 1, "armed": 2, "proven": 3, "advisory": 4}
     ranked = sorted(health, key=lambda h: (order[h.state.value], h.instruction, h.rule))
     return [
         {

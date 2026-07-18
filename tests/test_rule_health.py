@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from guideline_checker.checker import RuleResult, Violation
-from guideline_checker.loader import InstructionFile, RuleDetector
+from guideline_checker.loader import InstructionFile, RuleDetector, SourceType
 from guideline_checker.rule_health import (
     HealthState,
     compute_rule_health,
@@ -23,6 +23,7 @@ def _instruction(
     name: str,
     rules: list[str],
     detectors: dict[str, RuleDetector] | None = None,
+    source_type: SourceType = SourceType.GUIDELINES_YAML,
 ) -> InstructionFile:
     return InstructionFile(
         path=Path(f".github/instructions/{name}.md"),
@@ -31,7 +32,12 @@ def _instruction(
         content="",
         rules=rules,
         rule_detectors=detectors or {},
+        source_type=source_type,
     )
+
+
+def _markdown(name: str, rules: list[str]) -> InstructionFile:
+    return _instruction(name, rules, source_type=SourceType.CLAUDE)
 
 
 def _result(instruction: InstructionFile, violations: list[Violation]) -> RuleResult:
@@ -63,8 +69,8 @@ def test_rule_matching_a_known_phrase_is_not_dead() -> None:
     assert entry.has_phrase_detection is True
 
 
-def test_rule_with_no_detector_and_no_phrase_is_dead() -> None:
-    # A prose rule the checker cannot recognise — the ai-models/ case.
+def test_undetectable_yaml_rule_is_dead() -> None:
+    # A YAML rule advertised as enforceable but carrying no detector — a real defect.
     instr = _instruction("claude", ["Respond in the user's own language when unsure"])
 
     health = compute_rule_health([instr])
@@ -73,6 +79,28 @@ def test_rule_with_no_detector_and_no_phrase_is_dead() -> None:
     assert entry.state is HealthState.DEAD
     assert entry.has_declarative_detector is False
     assert entry.has_phrase_detection is False
+
+
+def test_undetectable_markdown_bullet_is_advisory_not_dead() -> None:
+    # A prose bullet lifted from CLAUDE.md/AGENTS.md — guidance, never an enforced rule.
+    instr = _markdown("CLAUDE", ["Prefer intention-revealing names over comments"])
+
+    health = compute_rule_health([instr])
+
+    entry = health[0]
+    assert entry.state is HealthState.ADVISORY
+    assert entry.has_declarative_detector is False
+    assert entry.has_phrase_detection is False
+
+
+def test_detectable_markdown_bullet_still_proves() -> None:
+    # Even from markdown, a phrase-matched bullet is real detection, not advisory.
+    instr = _markdown("CLAUDE", ["Never use print for debugging output"])
+    fired = _result(instr, [Violation(Path("a.py"), 1, "print(x)", instr.rules[0], "warning")])
+
+    health = compute_rule_health([instr], [fired])
+
+    assert health[0].state is HealthState.PROVEN
 
 
 def test_max_function_length_phrase_is_detectable() -> None:
@@ -107,7 +135,7 @@ def test_detectable_rule_that_never_fires_is_armed() -> None:
     assert next(h for h in health if h.rule == rule).state is HealthState.ARMED
 
 
-def test_dead_rule_stays_dead_even_with_scan_results() -> None:
+def test_undetectable_yaml_rule_stays_dead_even_with_scan_results() -> None:
     instr = _instruction("claude", ["Respond in the user's own language when unsure"])
     clean = _result(instr, [])
 
@@ -117,7 +145,8 @@ def test_dead_rule_stays_dead_even_with_scan_results() -> None:
 
 
 def test_summary_counts_group_by_state() -> None:
-    dead = _instruction("claude", ["Be concise and thoughtful"])
+    advisory = _markdown("CLAUDE", ["Be concise and thoughtful"])
+    dead_yaml = _instruction("gemini", ["Keep answers grounded in provided context"])
     proven_rule = "no eval"
     armed_rule = "no pickle loads"
     coded = _instruction(
@@ -129,13 +158,15 @@ def test_summary_counts_group_by_state() -> None:
         },
     )
     results = [
-        _result(dead, []),
+        _result(advisory, []),
+        _result(dead_yaml, []),
         _result(coded, [Violation(Path("a.py"), 1, "eval(x)", proven_rule, "error")]),
     ]
 
-    health = compute_rule_health([dead, coded], results)
+    health = compute_rule_health([advisory, dead_yaml, coded], results)
 
     states = {h.rule: h.state for h in health}
-    assert states["Be concise and thoughtful"] is HealthState.DEAD
+    assert states["Be concise and thoughtful"] is HealthState.ADVISORY
+    assert states["Keep answers grounded in provided context"] is HealthState.DEAD
     assert states[proven_rule] is HealthState.PROVEN
     assert states[armed_rule] is HealthState.ARMED

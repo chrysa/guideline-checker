@@ -22,6 +22,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from guideline_checker.checker import _build_checks
+from guideline_checker.loader import SourceType
 
 if TYPE_CHECKING:
     from guideline_checker.checker import RuleResult
@@ -47,7 +48,8 @@ class HealthState(StrEnum):
 
     PROVEN = "proven"  # detectable, and fires on real code in this repo
     ARMED = "armed"  # detectable, fires nowhere (repo is clean)
-    DEAD = "dead"  # no detector and no phrase match -> never detects anything
+    DEAD = "dead"  # YAML rule advertised as enforceable but with no detector -> defect
+    ADVISORY = "advisory"  # undetectable markdown guidance -> surfaced, never enforced
     SUSPECT = "suspect"  # fires only on suppressed / baselined lines
 
 
@@ -120,14 +122,21 @@ def _rule_health(
     fire_count = fired[rule]
 
     if not has_detector and not has_phrase:
+        is_yaml = instruction.source_type is SourceType.GUIDELINES_YAML
+        state = HealthState.DEAD if is_yaml else HealthState.ADVISORY
+        reason = (
+            "YAML rule advertised as enforceable but carries no detector — fix or remove it."
+            if is_yaml
+            else "Markdown guidance with no recognised detector — surfaced, never enforced."
+        )
         return RuleHealth(
             rule=rule,
             instruction=source,
-            state=HealthState.DEAD,
+            state=state,
             has_declarative_detector=False,
             has_phrase_detection=False,
             fire_count=0,
-            reason="No declarative detector and no recognised phrase — cannot detect anything.",
+            reason=reason,
         )
 
     mechanism = "declarative detector" if has_detector else "phrase-derived check"
