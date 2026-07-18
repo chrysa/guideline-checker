@@ -43,16 +43,16 @@ def test_dashboard_returns_html(client: TestClient) -> None:
 
 def test_dashboard_contains_expected_text(client: TestClient) -> None:
     response = client.get("/")
-    assert "Guideline Checker" in response.text
+    assert "guideline-checker" in response.text
     assert "api/scan" in response.text
-    assert "api/results" in response.text
+    assert "api/rules-health" in response.text
 
 
-def test_dashboard_contains_constraints_tab(client: TestClient) -> None:
+def test_dashboard_exposes_the_workshop_surface(client: TestClient) -> None:
     response = client.get("/")
-    assert "api/constraints" in response.text
-    assert "tab-constraints" in response.text
-    assert "switchTab" in response.text
+    assert "api/propose" in response.text
+    assert "Propose" in response.text
+    assert "workshop" in response.text.lower()
 
 
 # ── /api/results ───────────────────────────────────────────────────────────────

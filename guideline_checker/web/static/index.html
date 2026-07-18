@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>guideline-checker · workshop</title>
+<style>
+  :root {
+    --ground: #0f172a; --panel: #1a2436; --panel-2: #141d2e; --edge: #2a3852;
+    --ink: #e8eef7; --ink-dim: #93a4bd; --ink-faint: #64748b;
+    --proven: #22c55e; --armed: #38bdf8; --dead: #f4517a; --advisory: #94a3b8; --accent: #22c55e;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: "Inter var", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  :root[data-theme="light"] {
+    --ground: #eef2f8; --panel: #ffffff; --panel-2: #f5f8fc; --edge: #d3dced;
+    --ink: #16233b; --ink-dim: #4a5a74; --ink-faint: #8493ab;
+    --proven: #15a349; --armed: #0284c7; --dead: #d81b60; --advisory: #64748b; --accent: #15a349;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--sans); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  a { color: var(--armed); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 1.4rem clamp(1rem, 3vw, 2rem) 4rem; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.6rem; }
+  .brand { font-family: var(--mono); font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em; display: flex; align-items: center; gap: 0.6rem; }
+  .brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
+  .actions { display: flex; gap: 0.5rem; align-items: center; }
+  .btn { font-family: var(--mono); font-size: 0.78rem; font-weight: 600; cursor: pointer; padding: 0.5rem 0.9rem; border-radius: 7px; border: 1px solid var(--edge); background: var(--panel); color: var(--ink); transition: border-color .15s, background .15s; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { border-color: color-mix(in srgb, var(--accent) 45%, var(--edge)); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .muted { color: var(--ink-faint); font-family: var(--mono); font-size: 0.72rem; }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.7rem; margin-bottom: 0.7rem; }
+  .tile { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 0.9rem 1rem; cursor: pointer; transition: border-color .15s; }
+  .tile:hover, .tile[aria-pressed="true"] { border-color: currentColor; }
+  .tile .n { font-family: var(--mono); font-size: 1.7rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
+  .tile .k { font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); margin-top: 0.4rem; }
+  .tile.proven { color: var(--proven); } .tile.armed { color: var(--armed); }
+  .tile.dead { color: var(--dead); } .tile.advisory { color: var(--advisory); }
+  .tile .n, .tile .k { color: var(--ink); } .tile.proven .n { color: var(--proven); } .tile.armed .n { color: var(--armed); } .tile.dead .n { color: var(--dead); } .tile.advisory .n { color: var(--advisory); }
+
+  .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; border: 1px solid var(--edge); margin-bottom: 2rem; }
+  .bar i { display: block; }
+  .bar .s-dead { background: var(--dead); } .bar .s-advisory { background: var(--advisory); } .bar .s-armed { background: var(--armed); } .bar .s-proven { background: var(--proven); }
+
+  h2 { font-family: var(--mono); font-size: 0.9rem; font-weight: 600; letter-spacing: 0.02em; margin: 0 0 0.8rem; color: var(--ink-dim); }
+
+  .layout { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.4rem; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } .tiles { grid-template-columns: repeat(2, 1fr); } }
+
+  .rules { border: 1px solid var(--edge); border-radius: 10px; overflow: hidden; }
+  .rules .row { display: grid; grid-template-columns: auto 1fr auto; gap: 0.8rem; align-items: center; padding: 0.6rem 0.85rem; border-bottom: 1px solid color-mix(in srgb, var(--edge) 55%, transparent); cursor: pointer; }
+  .rules .row:last-child { border-bottom: none; }
+  .rules .row:hover { background: var(--panel-2); }
+  .chip { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.18rem 0.45rem; border-radius: 5px; white-space: nowrap; }
+  .chip.proven { color: var(--proven); background: color-mix(in srgb, var(--proven) 15%, transparent); }
+  .chip.armed { color: var(--armed); background: color-mix(in srgb, var(--armed) 15%, transparent); }
+  .chip.dead { color: var(--dead); background: color-mix(in srgb, var(--dead) 15%, transparent); }
+  .chip.advisory { color: var(--advisory); background: color-mix(in srgb, var(--advisory) 15%, transparent); }
+  .rules .rule { font-size: 0.85rem; }
+  .rules .src { font-family: var(--mono); font-size: 0.62rem; color: var(--ink-faint); }
+  .rules .fires { font-family: var(--mono); font-size: 0.72rem; color: var(--proven); font-variant-numeric: tabular-nums; }
+  .empty { padding: 1.4rem; color: var(--ink-faint); font-family: var(--mono); font-size: 0.8rem; text-align: center; }
+
+  .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 1rem 1.1rem; position: sticky; top: 1rem; }
+  .panel label { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); display: block; margin-bottom: 0.4rem; }
+  textarea, input[type=text] { width: 100%; font-family: var(--mono); font-size: 0.82rem; background: var(--panel-2); border: 1px solid var(--edge); border-radius: 7px; color: var(--ink); padding: 0.55rem 0.65rem; resize: vertical; }
+  textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+  .field { margin-bottom: 0.8rem; }
+  .proof { margin-top: 0.9rem; font-size: 0.82rem; }
+  .proof .head { font-family: var(--mono); font-size: 0.76rem; color: var(--ink-dim); margin-bottom: 0.5rem; }
+  .proof .head b { color: var(--ink); }
+  .proof .src-tag { color: var(--accent); }
+  .hits { max-height: 240px; overflow-y: auto; border: 1px solid var(--edge); border-radius: 7px; }
+  .hit { display: grid; grid-template-columns: auto 1fr; gap: 0.6rem; padding: 0.4rem 0.6rem; border-bottom: 1px solid color-mix(in srgb, var(--edge) 45%, transparent); font-family: var(--mono); font-size: 0.72rem; }
+  .hit:last-child { border-bottom: none; }
+  .hit .loc { color: var(--ink-faint); white-space: nowrap; }
+  .hit .ex { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .note { font-family: var(--mono); font-size: 0.76rem; color: var(--advisory); padding: 0.6rem; border: 1px dashed var(--edge); border-radius: 7px; margin-top: 0.8rem; }
+  pre.diff { margin: 0.6rem 0 0; padding: 0.7rem; overflow-x: auto; font-family: var(--mono); font-size: 0.72rem; background: var(--panel-2); border: 1px solid var(--edge); border-radius: 7px; white-space: pre; }
+  pre.diff .add { color: var(--proven); } pre.diff .del { color: var(--dead); }
+  .toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--accent); color: var(--ink); font-family: var(--mono); font-size: 0.78rem; padding: 0.55rem 1rem; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><span class="dot"></span>guideline-checker · workshop</div>
+    <div class="actions">
+      <span class="muted" id="stamp">not scanned</span>
+      <button class="btn" id="theme" type="button" title="Toggle theme">◐</button>
+      <button class="btn primary" id="scan" type="button">Scan repo</button>
+    </div>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+  <div class="bar" id="bar" role="img" aria-label="rule health distribution"></div>
+
+  <div class="layout">
+    <section>
+      <h2 id="rules-title">Rules</h2>
+      <div class="rules" id="rules"><div class="empty">Scan the repo to load rule health.</div></div>
+    </section>
+
+    <section>
+      <h2>Workshop — propose &amp; prove</h2>
+      <div class="panel">
+        <div class="field">
+          <label for="rule">Rule text</label>
+          <textarea id="rule" rows="3" placeholder="e.g. Never unpickle untrusted data"></textarea>
+        </div>
+        <button class="btn primary" id="propose" type="button" style="width:100%">Propose &amp; replay</button>
+        <div id="result"></div>
+      </div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const STATES = ["dead", "advisory", "armed", "proven"];
+let health = [];
+let activeFilter = null;
+let lastProposal = null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// The server never embeds its key in this public page. When api_key auth is on,
+// the browser asks the user once and keeps the key in sessionStorage, sending it
+// as the X-Api-Key header — so an anonymous visitor of "/" never receives it.
+function authHeaders(extra) {
+  const headers = Object.assign({}, extra || {});
+  const key = sessionStorage.getItem("gc-api-key");
+  if (key) headers["X-Api-Key"] = key;
+  return headers;
+}
+async function api(path, opts) {
+  opts = opts || {};
+  let res = await fetch(path, Object.assign({}, opts, { headers: authHeaders(opts.headers) }));
+  if (res.status === 401) {
+    const key = prompt("API key required for this dashboard:");
+    if (key) {
+      sessionStorage.setItem("gc-api-key", key);
+      res = await fetch(path, Object.assign({}, opts, { headers: authHeaders(opts.headers) }));
+    }
+  }
+  if (!res.ok) throw new Error(`${path} → ${res.status}`);
+  return res.json();
+}
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 1800);
+}
+
+$("theme").addEventListener("click", () => {
+  const root = document.documentElement;
+  root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+});
+
+$("scan").addEventListener("click", runScan);
+async function runScan() {
+  $("scan").disabled = true; $("scan").textContent = "Scanning…";
+  try {
+    await api("/api/scan", { method: "POST" });
+    await pollHealth();
+  } catch (e) { toast(e.message); }
+  finally { $("scan").disabled = false; $("scan").textContent = "Scan repo"; }
+}
+
+async function pollHealth() {
+  for (let i = 0; i < 40; i++) {
+    const d = await api("/api/rules-health");
+    if (d.total_rules > 0) { render(d); return; }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+function render(d) {
+  health = d.rules || [];
+  const s = d.summary || {};
+  $("stamp").textContent = d.timestamp ? "scanned " + d.timestamp.slice(0, 19).replace("T", " ") : "scanned";
+  const total = d.total_rules || 1;
+  $("tiles").innerHTML = STATES.map((k) =>
+    `<div class="tile ${k}" data-state="${k}" role="button" tabindex="0" aria-pressed="${activeFilter === k}">
+       <div class="n">${s[k] || 0}</div><div class="k">${k}</div></div>`).join("");
+  $("bar").innerHTML = STATES.map((k) =>
+    `<i class="s-${k}" style="width:${((s[k] || 0) / total) * 100}%"></i>`).join("");
+  document.querySelectorAll("#tiles .tile").forEach((el) => {
+    const set = () => { activeFilter = activeFilter === el.dataset.state ? null : el.dataset.state; renderRules(); syncTiles(); };
+    el.addEventListener("click", set);
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); set(); } });
+  });
+  renderRules();
+}
+function syncTiles() {
+  document.querySelectorAll("#tiles .tile").forEach((el) =>
+    el.setAttribute("aria-pressed", String(activeFilter === el.dataset.state)));
+}
+
+function renderRules() {
+  const rows = activeFilter ? health.filter((r) => r.state === activeFilter) : health;
+  $("rules-title").textContent = activeFilter ? `Rules · ${activeFilter} (${rows.length})` : `Rules (${health.length})`;
+  if (!rows.length) { $("rules").innerHTML = `<div class="empty">No rules in this bucket.</div>`; return; }
+  $("rules").innerHTML = rows.slice(0, 300).map((r) =>
+    `<div class="row" data-rule="${esc(r.rule)}">
+       <span class="chip ${r.state}">${r.state}</span>
+       <div><div class="rule">${esc(r.rule)}</div><div class="src">${esc(r.instruction)}</div></div>
+       <span class="fires">${r.fire_count ? "×" + r.fire_count : ""}</span>
+     </div>`).join("");
+  document.querySelectorAll("#rules .row").forEach((el) =>
+    el.addEventListener("click", () => { $("rule").value = el.dataset.rule; $("rule").focus(); }));
+}
+
+$("propose").addEventListener("click", propose);
+async function propose() {
+  const rule = $("rule").value.trim();
+  if (!rule) { toast("Enter a rule first"); return; }
+  $("propose").disabled = true; $("propose").textContent = "Replaying…";
+  try {
+    const d = await api("/api/propose", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rule }),
+    });
+    lastProposal = d.proposal;
+    renderResult(d);
+  } catch (e) { toast(e.message); }
+  finally { $("propose").disabled = false; $("propose").textContent = "Propose & replay"; }
+}
+
+function renderResult(d) {
+  const box = $("result");
+  if (!d.proposal) {
+    box.innerHTML = `<div class="note">${esc(d.note || "No proposal.")}</div>`;
+    return;
+  }
+  const p = d.proposal, proof = d.proof;
+  const hits = (proof.hits || []).slice(0, 40).map((h) =>
+    `<div class="hit"><span class="loc">${esc(h.file)}:${h.line}</span><span class="ex">${esc(h.excerpt)}</span></div>`).join("");
+  box.innerHTML =
+    `<div class="proof">
+       <div class="head">Proposed by <span class="src-tag">${esc(p.source)}</span> · forbid ${esc(JSON.stringify(p.forbid))}
+         → <b>${proof.match_count}</b> hit(s) across ${proof.files_scanned} files</div>
+       <div class="hits">${hits || '<div class="empty">no matches</div>'}</div>
+       <p class="muted" style="margin:.7rem 0 .3rem">Review the hits for false positives before arming.</p>
+     </div>`;
+}
+</script>
+</body>
+</html>
