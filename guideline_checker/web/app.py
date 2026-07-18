@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from guideline_checker.checker import RuleResult, run_checks
 from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources
 from guideline_checker.persist import apply_detector
-from guideline_checker.proposer import HeuristicProposer
+from guideline_checker.proposer import HeuristicProposer, OllamaProposer, Proposal
 from guideline_checker.rule_health import RuleHealth, compute_rule_health, summarize
 from guideline_checker.sandbox import replay
 from guideline_checker.web.auth import require_auth
@@ -644,6 +644,22 @@ class _ArmRequest(BaseModel):
     dry_run: bool = True
 
 
+def _ollama_enabled() -> bool:
+    """The LLM proposer is opt-in — off unless GC_OLLAMA is truthy."""
+    return os.environ.get("GC_OLLAMA", "").lower() in {"1", "true", "yes"}
+
+
+def _propose(rule: str, apply_to: str) -> Proposal | None:
+    """Try the free heuristic first; escalate to Ollama only when enabled."""
+    proposal = HeuristicProposer().propose(rule, apply_to)
+    if proposal is None and _ollama_enabled():
+        proposal = OllamaProposer(
+            model=os.environ.get("GC_OLLAMA_MODEL", "qwen2.5:7b"),
+            host=os.environ.get("GC_OLLAMA_HOST", "http://localhost:11434"),
+        ).propose(rule, apply_to)
+    return proposal
+
+
 @app.post("/api/propose", response_model=None, dependencies=[Depends(require_auth)])
 def propose_detector(req: _ProposeRequest) -> JSONResponse:
     """Propose a detector for a rule and replay it in the sandbox for proof.
@@ -652,16 +668,14 @@ def propose_detector(req: _ProposeRequest) -> JSONResponse:
     rule's prose (e.g. the ``ai-models/`` rules) — the signal to escalate to an
     LLM backend. The LLM never judges: any proposal is proven here before a write.
     """
-    proposal = HeuristicProposer().propose(req.rule, req.apply_to)
+    proposal = _propose(req.rule, req.apply_to)
     if proposal is None:
-        return JSONResponse(
-            {
-                "rule": req.rule,
-                "proposal": None,
-                "proof": None,
-                "note": "No deterministic proposal; needs an LLM backend (P3).",
-            }
+        note = (
+            "No proposal: the LLM backend could not map this rule mechanically."
+            if _ollama_enabled()
+            else "No deterministic proposal; enable the Ollama backend (GC_OLLAMA=1) to try an LLM."
         )
+        return JSONResponse({"rule": req.rule, "proposal": None, "proof": None, "note": note})
     proof = replay(req.rule, proposal.detector, _SCAN_ROOT, req.apply_to)
     return JSONResponse(
         {

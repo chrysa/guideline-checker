@@ -11,11 +11,18 @@ tried before any model is called.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+import json
+import re
+import urllib.error
+import urllib.request
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any, Protocol, runtime_checkable
 
 from guideline_checker.checker import _build_checks
 from guideline_checker.loader import RuleDetector
+
+_JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -60,3 +67,89 @@ class HeuristicProposer:
             rationale=f"Recognised {len(forbid)} known anti-pattern substring(s): {joined}.",
             source=self.source,
         )
+
+
+_LLM_PROMPT = """\
+You propose a mechanical detector for a coding rule. Reply with ONE JSON object and nothing \
+else, using only these keys:
+  "forbid": list of case-insensitive substrings whose presence on a source line violates the \
+rule (e.g. "os.system(");
+  "forbid_regex": list of case-insensitive regexes for the same, when a substring is not \
+precise enough;
+  "match_in_comments": true only if the rule must also flag comments;
+  "rationale": one short sentence.
+Only return patterns that would actually appear in violating code. If the rule cannot be \
+detected mechanically from source text, return {{}}.
+
+Rule: {rule}
+JSON:"""
+
+
+@dataclass
+class OllamaProposer:
+    """Propose a detector via a local Ollama model — the LLM backend of the seam.
+
+    The model only *proposes*: every proposal is still replayed in the sandbox
+    for proof before any write (ADR D-0012). Lives behind the optional
+    ``[assist]`` extra conceptually; the transport is stdlib ``urllib`` so it
+    adds no runtime dependency. ``generate`` is injectable for offline tests.
+    """
+
+    model: str = "qwen2.5:7b"
+    host: str = "http://localhost:11434"
+    timeout: float = 30.0
+    generate: Callable[[str], str] | None = field(default=None, repr=False)
+    source: str = field(default="ollama", init=False)
+
+    def propose(self, rule: str, apply_to: str = "**/*") -> Proposal | None:
+        generate = self.generate or self._call_ollama
+        try:
+            reply = generate(_LLM_PROMPT.format(rule=rule))
+        except (OSError, urllib.error.URLError):
+            return None
+
+        data = _extract_json(reply)
+        if data is None:
+            return None
+        detector = RuleDetector(
+            forbid=tuple(_str_list(data.get("forbid"))),
+            forbid_regex=tuple(_str_list(data.get("forbid_regex"))),
+            file_regex=tuple(_str_list(data.get("file_regex"))),
+            match_in_comments=bool(data.get("match_in_comments", False)),
+        )
+        if not (detector.forbid or detector.forbid_regex or detector.file_regex):
+            return None
+        rationale = str(data.get("rationale") or "LLM-proposed detector")
+        return Proposal(rule=rule, detector=detector, rationale=rationale, source=self.source)
+
+    def _call_ollama(self, prompt: str) -> str:
+        payload = json.dumps(
+            {"model": self.model, "prompt": prompt, "stream": False, "options": {"temperature": 0}}
+        ).encode("utf-8")
+        request = urllib.request.Request(  # noqa: S310 - fixed localhost Ollama endpoint
+            f"{self.host}/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310
+            body = json.loads(response.read().decode("utf-8"))
+        return str(body.get("response", ""))
+
+
+def _extract_json(reply: str) -> dict[str, Any] | None:
+    """Pull the first JSON object out of a possibly chatty / fenced model reply."""
+    match = _JSON_OBJECT.search(reply)
+    if match is None:
+        return None
+    try:
+        parsed = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _str_list(value: object) -> list[str]:
+    """Coerce a model-supplied value into a clean list of non-empty strings."""
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item]
