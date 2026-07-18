@@ -74,6 +74,9 @@ Changelog = "https://github.com/chrysa/guideline-checker/blob/main/CHANGELOG.md"
 where = ["."]
 include = ["guideline_checker*"]
 
+[tool.setuptools.package-data]
+guideline_checker = ["web/static/*"]
+
 [tool.setuptools_scm]
 # No .git (Docker build context excludes it) and no SETUPTOOLS_SCM_PRETEND_VERSION
 # → fall back to this instead of failing the build.
