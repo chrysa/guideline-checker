@@ -558,6 +558,8 @@ def _evaluate_rule(
                 )
                 break  # one violation per line per rule
 
+    violations.extend(_credential_scan_violations(file_path, lines, rule, root))
+
     if detector is not None:
         violations.extend(_declared_violations(file_path, lines, rule, detector, root))
 
@@ -732,7 +734,6 @@ def _build_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
     checks.extend(_import_checks(rule_lower))
     checks.extend(_annotation_checks(rule_lower))
     checks.extend(_hygiene_checks(rule_lower))
-    checks.extend(_credential_checks(rule_lower))
     checks.extend(_typescript_checks(rule_lower))
     checks.extend(_python_strict_checks(rule_lower))
     checks.extend(_security_checks(rule_lower))
@@ -934,18 +935,50 @@ def _docker_checks(rule_lower: str) -> list[PatternCheck]:
     return checks
 
 
-def _credential_checks(rule_lower: str) -> list[PatternCheck]:
-    _secret_keywords = ("secret", "password", "credential", "key", "token", "api key", "api_key")
-    is_hardcoded_check = any(
-        phrase in rule_lower
-        for phrase in ("no hardcoded", "hardcoded api", "hardcoded secret", "never hardcode", "all via env")
-    )
-    if not is_hardcoded_check or not any(kw in rule_lower for kw in _secret_keywords):
+_CREDENTIAL_TRIGGERS = ("no hardcoded", "hardcoded api", "hardcoded secret", "never hardcode", "all via env")
+_CREDENTIAL_KEYWORDS = ("secret", "password", "credential", "key", "token", "api key", "api_key")
+
+
+def _is_hardcoded_credential_rule(rule_lower: str) -> bool:
+    """True when a rule forbids hardcoded credentials/secrets/API keys."""
+    return any(t in rule_lower for t in _CREDENTIAL_TRIGGERS) and any(kw in rule_lower for kw in _CREDENTIAL_KEYWORDS)
+
+
+def _credential_scan_violations(
+    file_path: Path,
+    lines: list[str],
+    rule: str,
+    root: Path | None,
+) -> list[Violation]:
+    """Detect hardcoded credentials via the entropy scanner, not naive substrings.
+
+    A bare ``token =`` / ``password =`` substring flags every variable whose name
+    contains a secret keyword — the bulk of them reads from a call, env lookups,
+    empty strings, or short placeholders. Routing the rule to ``secret-assignment``
+    fires only on a high-entropy quoted literal, so the rule is usable in a
+    blocking CI (596 -> ~6 findings on a real repo). See ADR D-0008.
+    """
+    if not _is_hardcoded_credential_rule(rule.lower()):
         return []
-    return [
-        PatternCheck(kw, "error")
-        for kw in ("password =", "password=", "secret =", "secret=", "api_key =", "api_key=", "token =", "token=")
-    ]
+    allow_paths, allow_values = _load_secrets_allowlist(root) if root is not None else ((), frozenset())
+    if root is not None and bool(allow_paths) and _is_excluded(file_path, root, list(allow_paths)):
+        return []
+    content = "\n".join(lines)
+    violations: list[Violation] = []
+    for lineno, snippet in run_scans(("secret-assignment",), content, allow_values):
+        line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
+        if DISABLE_COMMENT in line:
+            continue
+        violations.append(
+            Violation(
+                file=file_path,
+                line_number=lineno,
+                line_content=(line.strip() or snippet)[:120],
+                rule=rule,
+                severity="error",
+            ),
+        )
+    return violations
 
 
 def _typescript_checks(rule_lower: str) -> list[PatternCheck]:
