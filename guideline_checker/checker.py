@@ -42,6 +42,8 @@ IGNORE_DIRS = {
     ".vscode",
     ".idea",
     ".fleet",
+    # git worktree copies (e.g. .claude/worktrees/) — full repo duplicates, not source
+    "worktrees",
 }
 
 # Only scan text-based source/config files — skip binaries, images, archives, etc.
