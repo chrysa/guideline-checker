@@ -96,3 +96,26 @@ USER appuser
 
 ENTRYPOINT ["guideline-checker"]
 CMD ["--help"]
+
+# ── Stage 6: dev — production + test/lint/debug tooling (editable install) ─────
+FROM production AS dev
+
+ARG VERSION=0.0.0+unknown
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION}
+
+# Install dev/test/lint tooling as root, then drop back to the non-root user.
+USER root
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY tests/ ./tests/
+COPY guidelines/ ./guidelines/
+
+RUN pip install --no-cache-dir -e ".[dev]"
+
+USER appuser
+
+ENTRYPOINT []
+CMD ["bash"]
