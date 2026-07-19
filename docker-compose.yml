@@ -9,15 +9,25 @@ services:
     - PYTHONDONTWRITEBYTECODE=1
     - PYTHONUNBUFFERED=1
     - SCAN_ROOT=/workspace
+    - HOME=/tmp
+    - PYTHONPYCACHEPREFIX=/tmp/.toolcache/pycache
+    - RUFF_CACHE_DIR=/tmp/.toolcache/ruff
+    - MYPY_CACHE_DIR=/tmp/.toolcache/mypy
+    - PYTEST_ADDOPTS=-p no:cacheprovider
     healthcheck:
       interval: 30s
       retries: 3
       start_period: 15s
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:8080/health
       timeout: 10s
     ports:
     - 8080:8080
     restart: unless-stopped
+    user: ${UID:-1000}:${GID:-1000}
     volumes:
     - .:/workspace:ro
   lint:
