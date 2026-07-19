@@ -438,6 +438,16 @@ class TestCollectFiles:
         assert "guideline-report.json" not in names
         assert "module.ts" in names
 
+    def test_collect_files_excludes_git_worktree_copies(self, tmp_path: Path) -> None:
+        """git worktree copies (e.g. .claude/worktrees/) are duplicates, not source."""
+        wt = tmp_path / ".claude" / "worktrees" / "branch-x" / "src"
+        wt.mkdir(parents=True)
+        (wt / "dup.py").write_text("x = 1\n")
+        (tmp_path / "real.py").write_text("y = 2\n")
+        names = [p.name for p in _collect_files(tmp_path)]
+        assert "real.py" in names
+        assert "dup.py" not in names
+
     def test_collect_files_excludes_guideline_report_md(self, tmp_path: Path) -> None:
         """_collect_files should not return guideline-report.md."""
         (tmp_path / "guideline-report.md").write_text("# Report\n")

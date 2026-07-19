@@ -78,3 +78,13 @@ class TestShannonEntropy:
 
     def test_random_exceeds_word(self) -> None:
         assert shannon_entropy("Zx9Qm2Lp7Vt4Rk8Nw1Yb6Hs3DfAa5Cc") > shannon_entropy("passwordpassword")
+
+
+class TestNonSecretValues:
+    def test_url_value_is_not_a_secret(self) -> None:
+        # A key named *_token_url holding a URL is not a hardcoded secret.
+        line = "GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token'"
+        assert run_scans(["secret-assignment"], line) == []
+
+    def test_high_entropy_key_literal_still_flagged(self) -> None:
+        assert run_scans(["secret-assignment"], _FAKE_KEY_LINE) != []

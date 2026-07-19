@@ -31,6 +31,8 @@ _ASSIGNMENT_RE = re.compile(
 )
 # Values that are clearly environment-driven references or templated placeholders.
 _ENV_REF_RE = re.compile(r"(os\.environ|getenv|process\.env|\$\{?[A-Za-z_]|<[^>]+>|\{\{)", re.IGNORECASE)
+# URLs are not secrets even when the key names one (e.g. ``GITHUB_TOKEN_URL = "https://..."``).
+_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 # Shannon bits/char gate and minimum value length for a value to count as a secret.
 _MIN_ENTROPY = 3.5
@@ -77,7 +79,7 @@ def _scan_secret_assignment(content: str, allowed_values: frozenset[str]) -> lis
             continue
         if value in allowed_values:
             continue
-        if _ENV_REF_RE.search(value):
+        if _ENV_REF_RE.search(value) or _URL_RE.search(value):
             continue
         if len(value) < _MIN_VALUE_LEN or shannon_entropy(value) < _MIN_ENTROPY:
             continue
