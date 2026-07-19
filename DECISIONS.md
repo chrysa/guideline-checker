@@ -542,3 +542,37 @@ reinforces the advisory classification from D-0010.
 (b) an API-key backend — the project bans a key dependency and the CLI already
 carries the subscription. `[assist]` stays dependency-free (both backends use
 stdlib transport: `urllib` for Ollama, `subprocess` for Claude).
+
+---
+
+## D-0014 — Markdown credential rules route to the entropy scanner, not substrings
+
+**Date**: 2026-07-19
+**Status**: accepted
+
+Running the checker against real chrysa repos exposed the adoption blocker
+directly: a markdown "no hardcoded credentials / API keys" rule emitted naive
+substring checks (`token =`, `password =`, `secret=`, …) that flagged **every**
+variable whose name contained a secret keyword — **596 findings on one repo**,
+almost all of them `token = response.json()[...]`, env lookups, empty strings,
+or short placeholders. A rule that fires 596 times on non-issues cannot gate a
+CI, which is the project's own kill-test (`≥2 repos in blocking CI`).
+
+**Decision.** A hardcoded-credential rule (detected by the same prose trigger as
+before) now routes to the existing `secret-assignment` entropy scanner
+(`scanners.py`, ADR D-0008) instead of emitting substring `PatternCheck`s. The
+scanner fires only on a quoted string literal whose value clears the length
+(≥12) and Shannon-entropy (≥3.5) gates and is not an env reference, and it
+honours the repo's `.secrets-allowlist`. The naive `_credential_checks` substring
+emitter is removed.
+
+Measured on real repos: **ai-aggregator 47 → 0**, **dev-nexus 600 → 12** (the 12
+being genuine `ghp_`-shaped literals plus two `no any` and two `shell=True`), so
+`--fail-on error` becomes usable in another repo's blocking CI — the concrete
+prerequisite for the validation gate.
+
+*Rejected*: (a) keep the substrings and tune per-repo excludes — endless
+whack-a-mole; (b) add regex `PatternCheck`s requiring a quoted literal — cannot
+express the entropy gate that separates a real key from a dictionary placeholder;
+(c) drop credential detection from markdown rules entirely — loses the feature on
+repos with no `guidelines/` referential, which is where it matters most.
