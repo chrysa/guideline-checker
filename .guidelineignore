@@ -1,0 +1,8 @@
+# A pattern detector's own tests, fixtures, and docs necessarily contain the
+# patterns it detects (`: any`, `pickle.loads(`, `print(`, …) as test data or
+# documentation. Exclude them so `guideline-checker check` passes on this repo;
+# the library source under guideline_checker/ stays checked.
+tests
+README.md
+DECISIONS.md
+CHANGELOG.md
