@@ -10,6 +10,16 @@ PYTHON       ?= python3
 PIP          ?= pip
 PACKAGE_DIR   = guideline_checker
 
+# ─── Artifact isolation — tool caches out of the repo tree ────────────────────
+UID ?= $(shell id -u)
+GID ?= $(shell id -g)
+_CACHE_BASE ?= $(if $(XDG_CACHE_HOME),$(XDG_CACHE_HOME),$(HOME)/.cache)/chrysa/$(PROJECT_NAME)
+RUFF_CACHE_DIR ?= $(_CACHE_BASE)/ruff
+MYPY_CACHE_DIR ?= $(_CACHE_BASE)/mypy
+PYTHONPYCACHEPREFIX ?= $(_CACHE_BASE)/pycache
+PYTEST_ADDOPTS ?= -p no:cacheprovider
+export UID GID RUFF_CACHE_DIR MYPY_CACHE_DIR PYTHONPYCACHEPREFIX PYTEST_ADDOPTS
+
 .DEFAULT_GOAL := help
 
 .PHONY: $(shell grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | cut -d":" -f1 | tr "\n" " ")
