@@ -279,7 +279,9 @@ class TestRuleEngineV02:
         assert any("assert " in v.line_content for r in results for v in r.violations)
 
     def test_detects_hardcoded_password(self, tmp_path: Path) -> None:
-        root, inst = _make_project(tmp_path, "app.py", 'password = "supersecret"\n', "No hardcoded password or secret")
+        # Built at runtime so no single source literal reads as a real secret.
+        fake = "aB3xK9mP2q" + "R7sT1vWc0dE"
+        root, inst = _make_project(tmp_path, "app.py", f'password = "{fake}"\n', "No hardcoded password or secret")
         results = run_checks(root=root, instructions_dir=inst)
         assert any("password" in v.line_content for r in results for v in r.violations)
 
@@ -638,7 +640,7 @@ class TestLengthRules:
         assert "lines" in violations[0].line_content
 
 
-# --- _credential_checks / _docker_checks tests ---
+# --- credential (entropy scan) / _docker_checks tests ---
 
 
 class TestSecurityPatternChecks:
@@ -678,13 +680,14 @@ class TestSecurityPatternChecks:
         violations = _check_file(f, instr)
         assert any(":latest" in v.line_content for v in violations)
 
-    def test_credential_hardcoded_password(self, tmp_path: Path) -> None:
-        """Credential check: hardcoded password= is flagged as an error."""
+    def test_credential_hardcoded_secret_literal(self, tmp_path: Path) -> None:
+        """Credential check: a high-entropy hardcoded secret literal is an error."""
         from guideline_checker.checker import _check_file
         from guideline_checker.loader import InstructionFile
 
         f = tmp_path / "config.py"
-        f.write_text('DB_PASSWORD = "secret123"\n')
+        fake = "aB3xK9mP2q" + "R7sT1vWc0dE"  # runtime-built; no source literal reads as a secret
+        f.write_text(f'DB_PASSWORD = "{fake}"\n')
         instr = InstructionFile(
             path=tmp_path / "secrets.md",
             apply_to="**/*.py",
@@ -692,8 +695,24 @@ class TestSecurityPatternChecks:
             content="- No hardcoded password or secret in code, all via env vars",
             rules=["No hardcoded password or secret in code, all via env vars"],
         )
-        violations = _check_file(f, instr)
-        assert any("password" in v.line_content.lower() or "password" in v.rule.lower() for v in violations)
+        violations = _check_file(f, instr, root=tmp_path)
+        assert any(v.severity == "error" and "PASSWORD" in v.line_content for v in violations)
+
+    def test_credential_ignores_value_read_from_a_call(self, tmp_path: Path) -> None:
+        """Credential check: reading a token from a call is not a hardcoded secret."""
+        from guideline_checker.checker import _check_file
+        from guideline_checker.loader import InstructionFile
+
+        f = tmp_path / "auth.py"
+        f.write_text("token = response.json()['access_token']\n")
+        instr = InstructionFile(
+            path=tmp_path / "secrets.md",
+            apply_to="**/*.py",
+            description="no hardcoded secrets",
+            content="- No hardcoded password or secret in code, all via env vars",
+            rules=["No hardcoded password or secret in code, all via env vars"],
+        )
+        assert _check_file(f, instr, root=tmp_path) == []
 
 
 class TestDjangoChecks:
