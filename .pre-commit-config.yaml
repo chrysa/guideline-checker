@@ -1,9 +1,8 @@
 default_language_version:
   python: python3.14
+exclude: ^\.claude/
 fail_fast: false
 minimum_pre_commit_version: 4.1.0
-exclude: ^\.claude/
-
 repos:
 - hooks:
   - id: trailing-whitespace
@@ -38,18 +37,30 @@ repos:
   rev: v2.0.0
 - hooks:
   - id: makefile-check
-  - id: python-print-detection
-  - id: python-pprint-detection
+  # This tool IS a pattern detector, so its detection tables (checker.py), its
+  # scaffolded rule docs (init_cmd.py), its CLI/reporting output (cli.py,
+  # scripts/), and its own tests all legitimately contain "print(". Library
+  # internals stay guarded.
+  - exclude: ^(tests/|scripts/|guideline_checker/(cli|checker|init_cmd)\.py$)
+    id: python-print-detection
+  - exclude: ^(tests/|guideline_checker/checker\.py$)
+    id: python-pprint-detection
   - id: python-unreachable-code
   - exclude: ^\.github/(workflows|ISSUE_TEMPLATE)/|^\.github/dependabot\.yml$
     id: yaml-sorter
   - id: adr-gate
-  - id: no-bare-except
+  - exclude: ^tests/
+    id: no-bare-except
   - id: python-logger-detection
   - id: no-sync-in-async
-  - id: debugger-detection
+  # The debugger pattern appears as data/docs: the YAML rule that detects it
+  # (guidelines/), the shipped-rule catalog (README), the ADR log (DECISIONS),
+  # and the detector's own tests.
+  - exclude: ^(tests/|README\.md$|DECISIONS\.md$|guidelines/)
+    id: debugger-detection
   - id: fastapi-missing-response-model
-  - id: console-log-detection
+  - exclude: ^tests/
+    id: console-log-detection
   - id: console-debug-detection
   - id: no-console-warn
   - id: ts-unreachable-code
@@ -60,10 +71,13 @@ repos:
   - id: json-sorter
   - id: env-file-check
   - id: env-example-sync
-  - id: no-hardcoded-localhost
-    exclude: tests?/|\.test\.|\.spec\.
-  - id: fastapi-missing-links
-    exclude: ^tests/
+  # The Ollama default host is a documented default with a GC_OLLAMA_HOST env
+  # override (proposer.py declares it, web/app.py reads it) — not a hardcoded
+  # service URL.
+  - exclude: tests?/|\.test\.|\.spec\.|^guideline_checker/(proposer\.py$|web/app\.py$)
+    id: no-hardcoded-localhost
+  - exclude: ^tests/
+    id: fastapi-missing-links
   repo: https://github.com/chrysa/pre-commit-tools
   rev: v0.1.1-97
 - hooks:
@@ -105,11 +119,11 @@ repos:
     stages:
     - pre-push
   repo: local
-- repo: https://github.com/igorshubovych/markdownlint-cli
-  rev: v0.49.1
-  hooks:
+- hooks:
   - args:
     - --fix
     id: markdownlint
     stages:
     - manual
+  repo: https://github.com/igorshubovych/markdownlint-cli
+  rev: v0.49.1
