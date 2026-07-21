@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
+from httpx2 import ASGITransport, AsyncClient
 
 from guideline_checker.cli import _default_repo_name, _slug_repo, main
 from guideline_checker.web.central import central_app
+
+pytestmark = pytest.mark.anyio
 
 _SUMMARY: dict[str, int] = {
     "files_checked": 10,
@@ -34,8 +37,13 @@ def store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture()
-def client(store: Path) -> TestClient:
-    return TestClient(central_app)
+async def client(store: Path) -> AsyncIterator[AsyncClient]:
+    transport = ASGITransport(app=central_app, raise_app_exceptions=True)
+    async with (
+        central_app.router.lifespan_context(central_app),
+        AsyncClient(transport=transport, base_url="http://testserver") as c,
+    ):
+        yield c
 
 
 def _ingest_body(repo: str = "demo-repo", **over: Any) -> dict[str, Any]:
@@ -47,28 +55,28 @@ def _ingest_body(repo: str = "demo-repo", **over: Any) -> dict[str, Any]:
 # ── basic endpoints ─────────────────────────────────────────────────────────────
 
 
-def test_health(client: TestClient) -> None:
-    assert client.get("/health").json() == {"status": "ok"}
+async def test_health(client: AsyncClient) -> None:
+    assert (await client.get("/health")).json() == {"status": "ok"}
 
 
-def test_index_html(client: TestClient) -> None:
-    res = client.get("/")
+async def test_index_html(client: AsyncClient) -> None:
+    res = await client.get("/")
     assert res.status_code == 200
     assert "text/html" in res.headers["content-type"]
     assert "Central" in res.text
 
 
-def test_index_dashboard_consumes_history_endpoint(client: TestClient) -> None:
+async def test_index_dashboard_consumes_history_endpoint(client: AsyncClient) -> None:
     # Drift guard: the dashboard must render the per-repo trend by fetching the
     # history endpoint — otherwise that endpoint is dead UI weight.
-    html = client.get("/").text
+    html = (await client.get("/")).text
     assert "/history?limit=" in html
     assert "sparkline" in html
     assert "Error trend" in html
 
 
-def test_repos_empty_initially(client: TestClient) -> None:
-    res = client.get("/api/repos")
+async def test_repos_empty_initially(client: AsyncClient) -> None:
+    res = await client.get("/api/repos")
     assert res.status_code == 200
     assert res.json() == {"repos": [], "count": 0}
 
@@ -76,13 +84,13 @@ def test_repos_empty_initially(client: TestClient) -> None:
 # ── ingest round-trip ───────────────────────────────────────────────────────────
 
 
-def test_ingest_then_list(client: TestClient, store: Path) -> None:
-    res = client.post("/api/ingest", json=_ingest_body())
+async def test_ingest_then_list(client: AsyncClient, store: Path) -> None:
+    res = await client.post("/api/ingest", json=_ingest_body())
     assert res.status_code == 200
     assert res.json() == {"status": "stored", "repo": "demo-repo"}
     assert (store / "demo-repo.json").is_file()
 
-    listing = client.get("/api/repos").json()
+    listing = (await client.get("/api/repos")).json()
     assert listing["count"] == 1
     entry = listing["repos"][0]
     assert entry["repo"] == "demo-repo"
@@ -90,43 +98,43 @@ def test_ingest_then_list(client: TestClient, store: Path) -> None:
     assert entry["received_at"]  # server-stamped
 
 
-def test_ingest_overwrites_latest(client: TestClient) -> None:
-    client.post("/api/ingest", json=_ingest_body(commit="old"))
-    client.post("/api/ingest", json=_ingest_body(commit="new", summary={**_SUMMARY, "errors": 0}))
-    listing = client.get("/api/repos").json()
+async def test_ingest_overwrites_latest(client: AsyncClient) -> None:
+    await client.post("/api/ingest", json=_ingest_body(commit="old"))
+    await client.post("/api/ingest", json=_ingest_body(commit="new", summary={**_SUMMARY, "errors": 0}))
+    listing = (await client.get("/api/repos")).json()
     assert listing["count"] == 1
     assert listing["repos"][0]["commit"] == "new"
     assert listing["repos"][0]["summary"]["errors"] == 0
 
 
-def test_get_repo_returns_full_record(client: TestClient) -> None:
-    client.post("/api/ingest", json=_ingest_body(report={"summary": _SUMMARY, "rules": []}))
-    res = client.get("/api/repos/demo-repo")
+async def test_get_repo_returns_full_record(client: AsyncClient) -> None:
+    await client.post("/api/ingest", json=_ingest_body(report={"summary": _SUMMARY, "rules": []}))
+    res = await client.get("/api/repos/demo-repo")
     assert res.status_code == 200
     body = res.json()
     assert body["repo"] == "demo-repo"
     assert body["report"] == {"summary": _SUMMARY, "rules": []}
 
 
-def test_get_unknown_repo_404(client: TestClient) -> None:
-    assert client.get("/api/repos/nope").status_code == 404
+async def test_get_unknown_repo_404(client: AsyncClient) -> None:
+    assert (await client.get("/api/repos/nope")).status_code == 404
 
 
 @pytest.mark.parametrize("bad", ["../evil", "a/b", "with space", ""])
-def test_ingest_rejects_unsafe_repo_name(client: TestClient, bad: str) -> None:
-    res = client.post("/api/ingest", json=_ingest_body(repo=bad))
+async def test_ingest_rejects_unsafe_repo_name(client: AsyncClient, bad: str) -> None:
+    res = await client.post("/api/ingest", json=_ingest_body(repo=bad))
     assert res.status_code == 422
 
 
 # ── history & trend ──────────────────────────────────────────────────────────────
 
 
-def test_history_accumulates_oldest_first(client: TestClient, store: Path) -> None:
-    client.post("/api/ingest", json=_ingest_body(commit="c1", summary={**_SUMMARY, "errors": 5}))
-    client.post("/api/ingest", json=_ingest_body(commit="c2", summary={**_SUMMARY, "errors": 3}))
+async def test_history_accumulates_oldest_first(client: AsyncClient, store: Path) -> None:
+    await client.post("/api/ingest", json=_ingest_body(commit="c1", summary={**_SUMMARY, "errors": 5}))
+    await client.post("/api/ingest", json=_ingest_body(commit="c2", summary={**_SUMMARY, "errors": 3}))
     assert (store / "history" / "demo-repo.jsonl").is_file()
 
-    body = client.get("/api/repos/demo-repo/history").json()
+    body = (await client.get("/api/repos/demo-repo/history")).json()
     assert body["count"] == 2
     assert [e["commit"] for e in body["history"]] == ["c1", "c2"]  # oldest first
     assert [e["summary"]["errors"] for e in body["history"]] == [5, 3]
@@ -134,20 +142,20 @@ def test_history_accumulates_oldest_first(client: TestClient, store: Path) -> No
     assert "report" not in body["history"][0]
 
 
-def test_history_limit_keeps_most_recent(client: TestClient) -> None:
+async def test_history_limit_keeps_most_recent(client: AsyncClient) -> None:
     for i in range(4):
-        client.post("/api/ingest", json=_ingest_body(commit=f"c{i}"))
-    body = client.get("/api/repos/demo-repo/history", params={"limit": 2}).json()
+        await client.post("/api/ingest", json=_ingest_body(commit=f"c{i}"))
+    body = (await client.get("/api/repos/demo-repo/history", params={"limit": 2})).json()
     assert [e["commit"] for e in body["history"]] == ["c2", "c3"]
 
 
-def test_history_empty_for_unknown_repo(client: TestClient) -> None:
-    body = client.get("/api/repos/never-seen/history").json()
+async def test_history_empty_for_unknown_repo(client: AsyncClient) -> None:
+    body = (await client.get("/api/repos/never-seen/history")).json()
     assert body == {"repo": "never-seen", "history": [], "count": 0}
 
 
-def test_history_rejects_unsafe_repo_name(client: TestClient) -> None:
-    assert client.get("/api/repos/..%2Fevil/history").status_code == 404
+async def test_history_rejects_unsafe_repo_name(client: AsyncClient) -> None:
+    assert (await client.get("/api/repos/..%2Fevil/history")).status_code == 404
 
 
 # ── S2083 path-traversal regression (pythonsecurity:S2083) ─────────────────────
@@ -162,11 +170,11 @@ def test_history_rejects_unsafe_repo_name(client: TestClient) -> None:
         "a%2F..%2Fb",
     ],
 )
-def test_get_repo_rejects_traversal_attempt(client: TestClient, traversal: str) -> None:
+async def test_get_repo_rejects_traversal_attempt(client: AsyncClient, traversal: str) -> None:
     """get_repo must return 404 (not serve arbitrary FS paths) for traversal-like names."""
     # URL-encoded slashes are decoded by the ASGI layer; the router hands the
     # decoded string to the endpoint, which must reject it before building the path.
-    res = client.get(f"/api/repos/{traversal}")
+    res = await client.get(f"/api/repos/{traversal}")
     assert res.status_code == 404
 
 
@@ -178,31 +186,31 @@ def test_safe_repo_path_raises_on_traversal(tmp_path: Path) -> None:
         _safe_repo_path(tmp_path, "../outside.json")
 
 
-def test_history_capped_at_limit(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_history_capped_at_limit(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("guideline_checker.web.central._HISTORY_LIMIT", 3)
     for i in range(5):
-        client.post("/api/ingest", json=_ingest_body(commit=f"c{i}"))
-    body = client.get("/api/repos/demo-repo/history").json()
+        await client.post("/api/ingest", json=_ingest_body(commit=f"c{i}"))
+    body = (await client.get("/api/repos/demo-repo/history")).json()
     assert body["count"] == 3
     assert [e["commit"] for e in body["history"]] == ["c2", "c3", "c4"]
 
 
-def test_error_trend_in_listing(client: TestClient) -> None:
+async def test_error_trend_in_listing(client: AsyncClient) -> None:
     # single snapshot → no trend yet
-    client.post("/api/ingest", json=_ingest_body(summary={**_SUMMARY, "errors": 4}))
-    assert client.get("/api/repos").json()["repos"][0]["error_trend"] is None
+    await client.post("/api/ingest", json=_ingest_body(summary={**_SUMMARY, "errors": 4}))
+    assert (await client.get("/api/repos")).json()["repos"][0]["error_trend"] is None
     # second snapshot with fewer errors → negative delta
-    client.post("/api/ingest", json=_ingest_body(summary={**_SUMMARY, "errors": 1}))
-    assert client.get("/api/repos").json()["repos"][0]["error_trend"] == -3
+    await client.post("/api/ingest", json=_ingest_body(summary={**_SUMMARY, "errors": 1}))
+    assert (await client.get("/api/repos")).json()["repos"][0]["error_trend"] == -3
 
 
 # ── auth ─────────────────────────────────────────────────────────────────────────
 
 
-def test_ingest_requires_key_when_configured(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_ingest_requires_key_when_configured(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("API_KEY", "s3cret")
-    assert client.post("/api/ingest", json=_ingest_body()).status_code == 403
-    ok = client.post("/api/ingest", json=_ingest_body(), headers={"X-Api-Key": "s3cret"})
+    assert (await client.post("/api/ingest", json=_ingest_body())).status_code == 403
+    ok = await client.post("/api/ingest", json=_ingest_body(), headers={"X-Api-Key": "s3cret"})
     assert ok.status_code == 200
 
 
