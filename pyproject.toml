@@ -103,6 +103,9 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 
+[tool.guideline-checker]
+baseline = ".guideline-baseline.json"
+
 [[tool.mypy.overrides]]
 module = "cryptography.*"
 ignore_missing_imports = true
