@@ -11,4 +11,5 @@ concurrency:
 
 jobs:
     call:
+        if: github.event.pull_request.user.login == 'dependabot[bot]'
         uses: chrysa/github-actions/.github/workflows/dependabot-auto-merge.yml@v1.3.0
