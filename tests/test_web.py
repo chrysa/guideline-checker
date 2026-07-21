@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
+from httpx2 import ASGITransport, AsyncClient
 
 from guideline_checker.web.app import _state, app
 
+pytestmark = pytest.mark.anyio
+
 
 @pytest.fixture()
-def client() -> TestClient:
+async def client() -> AsyncIterator[AsyncClient]:
     """Return a TestClient with the startup scan mocked out."""
     _state.results = []
     _state.constraints = []
@@ -19,15 +22,20 @@ def client() -> TestClient:
     _state.running = False
     _state.error = None
 
-    with patch("guideline_checker.web.app._do_scan"), TestClient(app) as c:
-        yield c  # type: ignore[misc]
+    transport = ASGITransport(app=app, raise_app_exceptions=True)
+    with patch("guideline_checker.web.app._do_scan"):
+        async with (
+            app.router.lifespan_context(app),
+            AsyncClient(transport=transport, base_url="http://testserver") as c,
+        ):
+            yield c
 
 
 # ── /health ────────────────────────────────────────────────────────────────────
 
 
-def test_health_returns_ok(client: TestClient) -> None:
-    response = client.get("/health")
+async def test_health_returns_ok(client: AsyncClient) -> None:
+    response = await client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
@@ -35,21 +43,21 @@ def test_health_returns_ok(client: TestClient) -> None:
 # ── / (dashboard HTML) ─────────────────────────────────────────────────────────
 
 
-def test_dashboard_returns_html(client: TestClient) -> None:
-    response = client.get("/")
+async def test_dashboard_returns_html(client: AsyncClient) -> None:
+    response = await client.get("/")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
 
 
-def test_dashboard_contains_expected_text(client: TestClient) -> None:
-    response = client.get("/")
+async def test_dashboard_contains_expected_text(client: AsyncClient) -> None:
+    response = await client.get("/")
     assert "guideline-checker" in response.text
     assert "api/scan" in response.text
     assert "api/rules-health" in response.text
 
 
-def test_dashboard_exposes_the_workshop_surface(client: TestClient) -> None:
-    response = client.get("/")
+async def test_dashboard_exposes_the_workshop_surface(client: AsyncClient) -> None:
+    response = await client.get("/")
     assert "api/propose" in response.text
     assert "Propose" in response.text
     assert "workshop" in response.text.lower()
@@ -58,8 +66,8 @@ def test_dashboard_exposes_the_workshop_surface(client: TestClient) -> None:
 # ── /api/results ───────────────────────────────────────────────────────────────
 
 
-def test_api_results_empty_state(client: TestClient) -> None:
-    response = client.get("/api/results")
+async def test_api_results_empty_state(client: AsyncClient) -> None:
+    response = await client.get("/api/results")
     assert response.status_code == 200
     data = response.json()
     assert "results" in data
@@ -72,7 +80,7 @@ def test_api_results_empty_state(client: TestClient) -> None:
     assert data["error"] is None
 
 
-def test_api_results_with_violations(client: TestClient) -> None:
+async def test_api_results_with_violations(client: AsyncClient) -> None:
     _state.results = [
         {
             "instruction": "python.instructions.md",
@@ -91,7 +99,7 @@ def test_api_results_with_violations(client: TestClient) -> None:
     ]
     _state.timestamp = "2024-06-01T10:00:00+00:00"
 
-    response = client.get("/api/results")
+    response = await client.get("/api/results")
     assert response.status_code == 200
     data = response.json()
     assert data["timestamp"] == "2024-06-01T10:00:00+00:00"
@@ -107,16 +115,16 @@ def test_api_results_with_violations(client: TestClient) -> None:
     assert v["rule"] == "No debug imports"
 
 
-def test_api_results_shows_running_state(client: TestClient) -> None:
+async def test_api_results_shows_running_state(client: AsyncClient) -> None:
     _state.running = True
-    response = client.get("/api/results")
+    response = await client.get("/api/results")
     assert response.status_code == 200
     assert response.json()["running"] is True
 
 
-def test_api_results_shows_error(client: TestClient) -> None:
+async def test_api_results_shows_error(client: AsyncClient) -> None:
     _state.error = "instructions directory not found"
-    response = client.get("/api/results")
+    response = await client.get("/api/results")
     assert response.status_code == 200
     assert response.json()["error"] == "instructions directory not found"
 
@@ -124,16 +132,16 @@ def test_api_results_shows_error(client: TestClient) -> None:
 # ── /api/scan ──────────────────────────────────────────────────────────────────
 
 
-def test_api_scan_starts_when_idle(client: TestClient) -> None:
+async def test_api_scan_starts_when_idle(client: AsyncClient) -> None:
     with patch("guideline_checker.web.app._do_scan"):
-        response = client.post("/api/scan")
+        response = await client.post("/api/scan")
     assert response.status_code == 200
     assert response.json() == {"status": "started"}
 
 
-def test_api_scan_rejects_when_already_running(client: TestClient) -> None:
+async def test_api_scan_rejects_when_already_running(client: AsyncClient) -> None:
     _state.running = True
-    response = client.post("/api/scan")
+    response = await client.post("/api/scan")
     assert response.status_code == 200
     assert response.json() == {"status": "already_running"}
 
@@ -229,8 +237,8 @@ def test_do_scan_sets_running_false_on_completion() -> None:
 # ── /api/constraints ───────────────────────────────────────────────────────────
 
 
-def test_api_constraints_empty_state(client: TestClient) -> None:
-    response = client.get("/api/constraints")
+async def test_api_constraints_empty_state(client: AsyncClient) -> None:
+    response = await client.get("/api/constraints")
     assert response.status_code == 200
     data = response.json()
     assert "sources" in data
@@ -241,7 +249,7 @@ def test_api_constraints_empty_state(client: TestClient) -> None:
     assert data["total_sources"] == 0
 
 
-def test_api_constraints_with_data(client: TestClient) -> None:
+async def test_api_constraints_with_data(client: AsyncClient) -> None:
     _state.constraints = [
         {
             "name": "CLAUDE.md",
@@ -253,7 +261,7 @@ def test_api_constraints_with_data(client: TestClient) -> None:
             "rules": ["Never hardcode secrets", "Always use type annotations"],
         }
     ]
-    response = client.get("/api/constraints")
+    response = await client.get("/api/constraints")
     assert response.status_code == 200
     data = response.json()
     assert data["total_sources"] == 1
@@ -261,7 +269,7 @@ def test_api_constraints_with_data(client: TestClient) -> None:
     assert data["sources"][0]["source_type"] == "claude"
 
 
-def test_scan_state_has_constraints_field(client: TestClient) -> None:
+async def test_scan_state_has_constraints_field(client: AsyncClient) -> None:
     """_ScanState must have constraints initialised to []."""
     assert hasattr(_state, "constraints")
     assert isinstance(_state.constraints, list)
