@@ -3,7 +3,7 @@ name: Dependabot Auto-merge
 
 on:
     pull_request_target:
-        types: [opened, synchronize, reopened]
+        types: [labeled]
 
 concurrency:
     cancel-in-progress: false
@@ -11,4 +11,5 @@ concurrency:
 
 jobs:
     call:
+        if: github.event.label.name == 'dependencies' && github.event.pull_request.user.login == 'dependabot[bot]'
         uses: chrysa/github-actions/.github/workflows/dependabot-auto-merge.yml@v1.3.0
