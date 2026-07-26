@@ -105,3 +105,12 @@ rules:
   rationale: A committed breakpoint halts execution in production
   rule: Remove debugger entry points before committing
   severity: warning
+- category: architecture
+  detect:
+    forbid_regex:
+    - '^\s*(import|from)\s+(openai|anthropic|cohere|groq|mistralai)([\s.]|$)'
+    - '^\s*(import|from)\s+google\.(generativeai|genai)'
+  id: py-provider-sdk-direct
+  rationale: "LLM001 — a direct vendor SDK import in feature code is provider lock-in; route calls through a declared adapter (allowed in an adapter or ai-aggregator via a `# guideline: disable` comment). Ships warning-first per the Mark-L progressive rollout."
+  rule: Route AI provider calls through a provider adapter, never import a vendor SDK directly in feature code
+  severity: warning
