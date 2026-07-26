@@ -67,9 +67,9 @@ rules:
     - 'eval('
 - category: architecture
   id: ts-provider-sdk-direct
-  rationale: "LLM001 — a direct vendor SDK import in feature code is provider lock-in; route calls through a declared adapter (opt out in an adapter via a `guideline: disable` comment). Ships warning-first per the Mark-L progressive rollout."
+  rationale: "LLM001 — a direct vendor SDK import in feature code is provider lock-in; route calls through a declared adapter (opt out in an adapter via a `guideline: disable` comment). Promoted to error after a 0-false-positive report pass on the rollout targets."
   rule: Route AI provider calls through a provider adapter, never import a vendor SDK directly in feature code
-  severity: warning
+  severity: error
   detect:
     forbid_regex:
     - '(from|require\s*\()\s*[''"](openai|cohere-ai|groq-sdk|@anthropic-ai/sdk|@mistralai/mistralai|@google/(generative-ai|genai))[''"]'
