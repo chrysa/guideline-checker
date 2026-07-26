@@ -412,7 +412,7 @@ Every `languages/` rule below carries a working `detect:` block (AST, scanner, o
 | python | `py-no-os-system` | error | `os.system(` |
 | python | `py-safe-yaml` | warning | unsafe `yaml.load(` |
 | python | `py-no-debugger` | warning | `breakpoint(` / `pdb.set_trace(` |
-| python | `py-provider-sdk-direct` | warning | direct vendor LLM SDK import (`openai` / `anthropic` / … — Mark-L LLM001) |
+| python | `py-provider-sdk-direct` | error | direct vendor LLM SDK import (`openai` / `anthropic` / … — Mark-L LLM001) |
 | python | `py-no-weak-hash` | error | `hashlib.md5(` / `sha1(` (extends the security pack) |
 | pack | `pack-no-pickle-loads` | error | `pickle.loads(` (via `include: packs/security-strict.yml`) |
 | typescript | `ts-strict-types` | error | the `any` type |
@@ -420,7 +420,7 @@ Every `languages/` rule below carries a working `detect:` block (AST, scanner, o
 | typescript | `ts-no-non-null-assertion` | warning | postfix `x!` |
 | typescript | `ts-no-console-log` | warning | `console.log` / `console.debug` |
 | typescript | `ts-no-var` | warning | `var` declarations |
-| typescript | `ts-provider-sdk-direct` | warning | direct vendor LLM SDK import (`openai` / `@anthropic-ai/sdk` / … — Mark-L LLM001) |
+| typescript | `ts-provider-sdk-direct` | error | direct vendor LLM SDK import (`openai` / `@anthropic-ai/sdk` / … — Mark-L LLM001) |
 | typescript | `ts-no-debugger` | warning | `debugger;` |
 | typescript | `ts-no-eval` | error | `eval(` |
 | react | `react-hooks-top-level` | error | conditional/looped hook call |
