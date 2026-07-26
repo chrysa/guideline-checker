@@ -37,10 +37,6 @@ repos:
   rev: v2.3.0
 - hooks:
   - id: makefile-check
-  # This tool IS a pattern detector, so its detection tables (checker.py), its
-  # scaffolded rule docs (init_cmd.py), its CLI/reporting output (cli.py,
-  # scripts/), and its own tests all legitimately contain "print(". Library
-  # internals stay guarded.
   - exclude: ^(tests/|scripts/|guideline_checker/(cli|checker|init_cmd)\.py$)
     id: python-print-detection
   - exclude: ^(tests/|guideline_checker/checker\.py$)
@@ -53,9 +49,6 @@ repos:
     id: no-bare-except
   - id: python-logger-detection
   - id: no-sync-in-async
-  # The debugger pattern appears as data/docs: the YAML rule that detects it
-  # (guidelines/), the shipped-rule catalog (README), the ADR log (DECISIONS),
-  # and the detector's own tests.
   - exclude: ^(tests/|README\.md$|DECISIONS\.md$|guidelines/)
     id: debugger-detection
   - id: fastapi-missing-response-model
@@ -71,15 +64,15 @@ repos:
   - id: json-sorter
   - id: env-file-check
   - id: env-example-sync
-  # The Ollama default host is a documented default with a GC_OLLAMA_HOST env
-  # override (proposer.py declares it, web/app.py reads it) — not a hardcoded
-  # service URL.
   - exclude: tests?/|\.test\.|\.spec\.|^guideline_checker/(proposer\.py$|web/app\.py$)
     id: no-hardcoded-localhost
   - exclude: ^tests/
     id: fastapi-missing-links
+  - id: claude-skill-frontmatter
+  - id: claude-agent-frontmatter
+  - id: claude-mcp-config
   repo: https://github.com/chrysa/pre-commit-tools
-  rev: v0.1.1-97
+  rev: v0.1.1-98
 - hooks:
   - id: gitleaks
   repo: https://github.com/gitleaks/gitleaks
