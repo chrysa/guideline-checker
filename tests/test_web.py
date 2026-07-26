@@ -146,6 +146,38 @@ async def test_api_scan_rejects_when_already_running(client: AsyncClient) -> Non
     assert response.json() == {"status": "already_running"}
 
 
+# ── /api/projects + project switch ──────────────────────────────────────────────
+
+
+async def test_api_projects_lists_workspace(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from guideline_checker.workspace import Project
+
+    monkeypatch.setattr(
+        "guideline_checker.web.app.discover_projects",
+        lambda _ws: [Project("alpha", "/w/alpha"), Project("beta", "/w/beta")],
+    )
+    response = await client.get("/api/projects")
+    assert response.status_code == 200
+    assert [p["name"] for p in response.json()["projects"]] == ["alpha", "beta"]
+
+
+async def test_api_scan_switches_to_a_known_project(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from guideline_checker.workspace import Project
+
+    monkeypatch.setattr("guideline_checker.web.app.discover_projects", lambda _ws: [Project("alpha", "/w/alpha")])
+    _state.active_project = None
+    with patch("guideline_checker.web.app._do_scan"):
+        response = await client.post("/api/scan", json={"project": "alpha"})
+    assert response.status_code == 200
+    assert _state.active_project == "/w/alpha"
+
+
+async def test_api_scan_rejects_an_unknown_project(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("guideline_checker.web.app.discover_projects", lambda _ws: [])
+    response = await client.post("/api/scan", json={"project": "nope"})
+    assert response.status_code == 404
+
+
 # ── _serialize_results ─────────────────────────────────────────────────────────
 
 

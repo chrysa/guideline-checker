@@ -30,10 +30,22 @@ from guideline_checker.proposer import (
 from guideline_checker.rule_health import RuleHealth, compute_rule_health, summarize
 from guideline_checker.sandbox import replay
 from guideline_checker.web.auth import require_auth
+from guideline_checker.workspace import discover_projects
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
 _SCAN_ROOT: Path = Path(os.environ.get("SCAN_ROOT", "."))
+# Workspace = the directory holding sibling repos the workshop can switch between.
+# Defaults to the scan root's parent so the fleet shows up with zero config; set
+# GC_WORKSPACE to point elsewhere. Single-repo installs simply list one project.
+_WORKSPACE: Path = Path(os.environ.get("GC_WORKSPACE") or _SCAN_ROOT.resolve().parent)
+
+
+def _active_root() -> Path:
+    """The project the workshop currently targets (the picked one, else the default)."""
+    return Path(_state.active_project) if _state.active_project else _SCAN_ROOT
+
+
 # NOTE: the server-side API key is deliberately NOT read here. The dashboard
 # HTML is served on the public ``/`` route, so embedding the key would leak it
 # to every anonymous visitor and defeat ``api_key`` authentication entirely.
@@ -51,6 +63,7 @@ class _ScanState:
     constraints: list[dict[str, Any]] = field(default_factory=list)
     health: list[dict[str, Any]] = field(default_factory=list)
     health_summary: dict[str, int] = field(default_factory=dict)
+    active_project: str | None = None
     timestamp: str | None = None
     running: bool = False
     error: str | None = None
@@ -119,13 +132,14 @@ def _serialize_constraints(sources: list[InstructionFile]) -> list[dict[str, Any
 
 
 def _do_scan() -> None:
-    """Run a full compliance scan and update _state."""
+    """Run a full compliance scan of the active project and update _state."""
+    root = _active_root()
     _state.running = True
     _state.error = None
     try:
-        results = run_checks(_SCAN_ROOT, all_sources=True)
+        results = run_checks(root, all_sources=True)
         _state.results = _serialize_results(results)
-        all_srcs = load_all_sources(_SCAN_ROOT)
+        all_srcs = load_all_sources(root)
         _state.constraints = _serialize_constraints(all_srcs)
         health = compute_rule_health([r.instruction for r in results], results)
         _state.health = _serialize_health(health)
@@ -186,9 +200,42 @@ def dashboard() -> str:
     return _dashboard_html()
 
 
+class _ScanRequest(BaseModel):
+    """Optionally switch to another workspace project before scanning."""
+
+    project: str | None = None  # a discovered project's name or absolute path
+
+
+def _resolve_project(ident: str) -> str | None:
+    """Map a project name/path to a discovered project path, or None (never trust raw input)."""
+    for project in discover_projects(_WORKSPACE):
+        if ident in (project.name, project.path):
+            return project.path
+    return None
+
+
+@app.get("/api/projects", response_model=None, dependencies=[Depends(require_auth)])
+def get_projects() -> JSONResponse:
+    """List the workspace projects the workshop can scan, and which one is active."""
+    projects = discover_projects(_WORKSPACE)
+    active = _state.active_project or str(_SCAN_ROOT.resolve())
+    return JSONResponse(
+        {
+            "workspace": str(_WORKSPACE),
+            "active": active,
+            "projects": [{"name": p.name, "path": p.path} for p in projects],
+        }
+    )
+
+
 @app.post("/api/scan", response_model=dict[str, str], dependencies=[Depends(require_auth)])
-def trigger_scan(background_tasks: BackgroundTasks) -> dict[str, str]:
-    """Trigger a new compliance scan in the background."""
+def trigger_scan(background_tasks: BackgroundTasks, req: _ScanRequest | None = None) -> dict[str, str]:
+    """Trigger a scan in the background, optionally switching to another project first."""
+    if req is not None and req.project:
+        resolved = _resolve_project(req.project)
+        if resolved is None:
+            raise HTTPException(status_code=404, detail=f"Unknown project: {req.project!r}")
+        _state.active_project = resolved
     if _state.running:
         return {"status": "already_running"}
     background_tasks.add_task(_do_scan)
@@ -292,7 +339,7 @@ def propose_detector(req: _ProposeRequest) -> JSONResponse:
             else "No deterministic proposal; enable an LLM backend (GC_CLAUDE=1 or GC_OLLAMA=1)."
         )
         return JSONResponse({"rule": req.rule, "proposal": None, "proof": None, "note": note})
-    proof = replay(req.rule, proposal.detector, _SCAN_ROOT, req.apply_to)
+    proof = replay(req.rule, proposal.detector, _active_root(), req.apply_to)
     return JSONResponse(
         {
             "rule": req.rule,
@@ -323,7 +370,7 @@ def arm_rule(req: _ArmRequest) -> JSONResponse:
         match_in_comments=req.match_in_comments,
     )
     try:
-        result = apply_detector(_SCAN_ROOT, req.rule_id, detector, dry_run=req.dry_run)
+        result = apply_detector(_active_root(), req.rule_id, detector, dry_run=req.dry_run)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return JSONResponse(
