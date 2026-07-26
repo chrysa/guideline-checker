@@ -420,6 +420,7 @@ Every `languages/` rule below carries a working `detect:` block (AST, scanner, o
 | typescript | `ts-no-non-null-assertion` | warning | postfix `x!` |
 | typescript | `ts-no-console-log` | warning | `console.log` / `console.debug` |
 | typescript | `ts-no-var` | warning | `var` declarations |
+| typescript | `ts-provider-sdk-direct` | warning | direct vendor LLM SDK import (`openai` / `@anthropic-ai/sdk` / … — Mark-L LLM001) |
 | typescript | `ts-no-debugger` | warning | `debugger;` |
 | typescript | `ts-no-eval` | error | `eval(` |
 | react | `react-hooks-top-level` | error | conditional/looped hook call |
