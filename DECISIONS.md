@@ -576,3 +576,33 @@ whack-a-mole; (b) add regex `PatternCheck`s requiring a quoted literal — canno
 express the entropy gate that separates a real key from a dictionary placeholder;
 (c) drop credential detection from markdown rules entirely — loses the feature on
 repos with no `guidelines/` referential, which is where it matters most.
+
+---
+
+## D-0015 — Multi-project web workshop (workspace selector)
+
+**Date**: 2026-07-23
+**Status**: accepted
+
+The web workshop scanned only its own root (`SCAN_ROOT`). To operate the tool as
+a fleet cockpit — pick any repo, see its rule health, work on it — the UI needs a
+project selector.
+
+**Decision.** A filesystem-only `workspace.discover_projects(root)` lists the
+immediate git-repo sub-directories of a workspace that carry a rule source
+(CLAUDE.md/AGENTS.md/instructions/guidelines). `GC_WORKSPACE` sets the workspace
+(default: the scan root's parent, so the fleet appears with zero config). The
+server holds an `active_project`; `GET /api/projects` lists them, and
+`POST /api/scan {project}` switches to a **discovered** project (never a raw
+path — the input is resolved against the discovery whitelist, so no traversal)
+before scanning. Scan/health/propose/arm all target the active project via
+`_active_root()`. Single-repo installs list one project and hide the selector.
+
+This is a surface change: the deterministic engine, the trust boundary, and the
+CLI/pre-commit paths are untouched. `central.py` (the frozen push-model
+aggregate) stays frozen — this is a *pull* selector, not an aggregate server.
+
+*Rejected*: (a) revive `central.py`'s push/aggregate model — heavier, needs
+reporters pushing in; the selector is read-only and needs no per-repo agent;
+(b) accept an arbitrary root path in the API — path-traversal risk; the
+discovery whitelist is the safe boundary.
