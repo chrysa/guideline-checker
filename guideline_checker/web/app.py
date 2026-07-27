@@ -331,8 +331,8 @@ def propose_detector(req: _ProposeRequest) -> JSONResponse:
     """Propose a detector for a rule and replay it in the sandbox for proof.
 
     Returns ``proposal: null`` when the deterministic heuristic cannot map the
-    rule's prose (e.g. the ``ai-models/`` rules) — the signal to escalate to an
-    LLM backend. The LLM never judges: any proposal is proven here before a write.
+    rule's prose (semantic or provider-specific guidance) — the signal to escalate
+    to an LLM backend. The LLM never judges: any proposal is proven here before a write.
     """
     proposal = _propose(req.rule, req.apply_to)
     if proposal is None:
