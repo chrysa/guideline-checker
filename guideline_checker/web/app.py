@@ -110,6 +110,7 @@ def _serialize_health(health: list[RuleHealth]) -> list[dict[str, Any]]:
             "has_phrase_detection": h.has_phrase_detection,
             "fire_count": h.fire_count,
             "reason": h.reason,
+            "provenance": h.provenance,
         }
         for h in ranked
     ]

@@ -170,3 +170,26 @@ def test_summary_counts_group_by_state() -> None:
     assert states["Keep answers grounded in provided context"] is HealthState.DEAD
     assert states[proven_rule] is HealthState.PROVEN
     assert states[armed_rule] is HealthState.ARMED
+
+
+def test_provenance_flows_into_health_record() -> None:
+    """ADR D-0016: a rule's host prose sentence surfaces on its health record so
+    the workshop/report can show what host instruction each rule derives from."""
+    rule = "no pickle loads"
+    sentence = "Never deserialize untrusted data with pickle"
+    instr = _instruction("python", [rule], {rule: RuleDetector(forbid=("pickle.loads(",))})
+    instr.rule_provenance[rule] = sentence
+
+    health = compute_rule_health([instr])
+
+    entry = next(h for h in health if h.rule == rule)
+    assert entry.provenance == sentence
+
+
+def test_missing_provenance_defaults_to_empty() -> None:
+    rule = "no pickle loads"
+    instr = _instruction("python", [rule], {rule: RuleDetector(forbid=("pickle.loads(",))})
+
+    entry = next(h for h in compute_rule_health([instr]) if h.rule == rule)
+
+    assert entry.provenance == ""
