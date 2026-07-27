@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -55,6 +56,15 @@ class TestRunInit:
             content = (inst_dir / filename).read_text(encoding="utf-8")
             assert "applyTo:" in content
             assert "description:" in content
+
+    def test_scaffold_embeds_no_numeric_threshold(self) -> None:
+        """ADR D-0016: the tool ships MECHANISMS, never a host's VALUES. The
+        scaffold must not bake a numeric standard (file length, coverage,
+        complexity, version) — those come only from the host's own prose."""
+        threshold_bullet = re.compile(r"(?im)^-.*\b(length|lines?|coverage|complexity|version)\b[^\n]*\b\d{2,}\b")
+        for filename, content in _DEFAULT_INSTRUCTIONS.items():
+            offending = threshold_bullet.findall(content)
+            assert not offending, f"{filename} embeds a numeric threshold: {offending}"
 
 
 class TestCliInit:
