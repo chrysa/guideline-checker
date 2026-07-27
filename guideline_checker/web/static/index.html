@@ -70,6 +70,14 @@
   .rules .resolve { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.28rem 0.6rem; border-radius: 6px; border: 1px solid var(--armed); background: color-mix(in srgb, var(--armed) 14%, transparent); color: var(--armed); cursor: pointer; white-space: nowrap; }
   .rules .resolve:hover:not(:disabled) { background: color-mix(in srgb, var(--armed) 26%, transparent); }
   .rules .resolve:disabled { opacity: 0.6; cursor: default; }
+  .grade { display: none; font-family: var(--mono); font-weight: 700; font-size: 0.72rem; letter-spacing: 0.04em; padding: 0.12rem 0.5rem; border-radius: 6px; margin-left: 0.5rem; vertical-align: middle; }
+  .grade.show { display: inline-block; }
+  .grade.gA { color: var(--proven); background: color-mix(in srgb, var(--proven) 16%, transparent); }
+  .grade.gB { color: var(--armed); background: color-mix(in srgb, var(--armed) 16%, transparent); }
+  .grade.gC { color: #d19a1e; background: color-mix(in srgb, #d19a1e 16%, transparent); }
+  .grade.gD { color: #e07b39; background: color-mix(in srgb, #e07b39 18%, transparent); }
+  .grade.gF { color: var(--dead); background: color-mix(in srgb, var(--dead) 16%, transparent); }
+  .rules .pgrade { font-family: var(--mono); font-weight: 700; font-size: 0.7rem; }
   .empty { padding: 1.4rem; color: var(--ink-faint); font-family: var(--mono); font-size: 0.8rem; text-align: center; }
 
   .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 1rem 1.1rem; position: sticky; top: 1rem; }
@@ -96,7 +104,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="brand"><span class="dot"></span>guideline-checker · workshop</div>
+    <div class="brand"><span class="dot"></span>guideline-checker · workshop <span class="grade" id="grade" title="Compliance grade for the current view"></span></div>
     <div class="actions">
       <label class="sr-only" for="project">Project</label>
       <select class="select" id="project" title="Project to scan"></select>
@@ -172,8 +180,29 @@ $("theme").addEventListener("click", () => {
   root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
 });
 
-$("scan").addEventListener("click", () => { const p = $("project").value; p === "__all__" ? runScanAll() : runScan(); });
-$("project").addEventListener("change", () => { const p = $("project").value; p === "__all__" ? runScanAll() : runScan(p); });
+// Navigation is URL-addressable: the selected project lives in the hash so the
+// view is deep-linkable, survives reload, and Back/Forward move between projects.
+$("scan").addEventListener("click", () => applyRoute(true));
+$("project").addEventListener("change", () => setRoute($("project").value));
+window.addEventListener("hashchange", () => applyRoute(false));
+
+function setRoute(value) {
+  const h = value === "__all__" ? "all" : "p=" + encodeURIComponent(value);
+  if (location.hash === "#" + h) { applyRoute(true); } else { location.hash = h; }
+}
+async function applyRoute(force) {
+  const raw = location.hash.slice(1);
+  const sel = $("project");
+  if (raw === "all") { sel.value = "__all__"; return runScanAll(force); }
+  if (raw.startsWith("p=")) {
+    const name = decodeURIComponent(raw.slice(2));
+    if ([...sel.options].some((o) => o.value === name)) { sel.value = name; return runScan(name); }
+  }
+  // No/unknown route → the active project. Startup already scanned it, so just
+  // show that unless the user explicitly asked to rescan (Scan button).
+  return force ? runScan() : pollHealth(null).catch(() => {});
+}
+
 async function runScan(project) {
   $("scan").disabled = true; $("scan").textContent = "Scanning…";
   // Force a fresh poll: clear the table so a switch to another project shows its scan.
@@ -187,7 +216,13 @@ async function runScan(project) {
   finally { $("scan").disabled = false; $("scan").textContent = "Scan"; }
 }
 
-async function runScanAll() {
+async function runScanAll(force) {
+  // Reuse the cached fleet scan when returning to this view (Back/selector), so
+  // navigation is instant; only recompute on first load or an explicit rescan.
+  if (!force) {
+    const cached = await api("/api/health-all").catch(() => ({}));
+    if (!cached.running && cached.projects && cached.projects.length) { renderAll(cached); return; }
+  }
   $("scan").disabled = true; $("scan").textContent = "Scanning fleet…";
   $("rules").innerHTML = '<div class="empty">Scanning every project… (first run is slow)</div>';
   try {
@@ -204,6 +239,7 @@ async function runScanAll() {
 function renderAll(d) {
   const c = d.combined || {};
   const total = STATES.reduce((n, k) => n + (c[k] || 0), 0) || 1;
+  setGrade(d.compliance);
   $("stamp").textContent = d.timestamp ? "fleet scanned " + d.timestamp.slice(0, 19).replace("T", " ") : "fleet";
   $("tiles").innerHTML = STATES.map((k) =>
     `<div class="tile ${k}"><div class="n">${c[k] || 0}</div><div class="k">${k}</div></div>`).join("");
@@ -214,9 +250,13 @@ function renderAll(d) {
   $("rules").innerHTML = projects.map((p) => {
     if (p.error) return `<div class="row"><span class="chip dead">error</span><div><div class="rule">${esc(p.name)}</div><div class="src">${esc(p.error)}</div></div></div>`;
     const s = p.summary || {};
+    const g = p.compliance || {};
+    const gradeChip = g.grade && g.grade !== "n/a" ? `<span class="grade show g${g.grade}">${g.grade}${g.score != null ? " · " + g.score : ""}</span>` : `<span class="chip advisory">n/a</span>`;
     const badges = STATES.filter((k) => s[k]).map((k) => `<span class="chip ${k}">${k} ${s[k]}</span>`).join(" ");
-    return `<div class="row"><div><div class="rule">${esc(p.name)}</div><div class="src">${badges}${p.resolvable ? ` · <b>${p.resolvable}</b> resolvable` : ""}</div></div></div>`;
+    return `<div class="row" data-project="${esc(p.name)}" title="Open ${esc(p.name)}">${gradeChip}<div><div class="rule">${esc(p.name)}</div><div class="src">${badges}${p.resolvable ? ` · <b>${p.resolvable}</b> resolvable` : ""}</div></div><span class="fires">→</span></div>`;
   }).join("");
+  document.querySelectorAll("#rules .row[data-project]").forEach((el) =>
+    el.addEventListener("click", () => setRoute(el.dataset.project)));
 }
 
 async function loadProjects() {
@@ -241,9 +281,19 @@ async function pollHealth(prev) {
   }
 }
 
+// Set the header compliance grade badge for the current view; hide when n/a.
+function setGrade(c) {
+  const el = $("grade");
+  if (!c || !c.grade || c.grade === "n/a") { el.className = "grade"; el.textContent = ""; return; }
+  el.className = `grade show g${c.grade}`;
+  el.textContent = c.score != null ? `${c.grade} · ${c.score}` : c.grade;
+  el.title = `Compliance: grade ${c.grade}${c.score != null ? " (" + c.score + "/100)" : ""} — ${c.errors || 0} error(s), ${c.warnings || 0} warning(s)`;
+}
+
 function render(d) {
   health = d.rules || [];
   const s = d.summary || {};
+  setGrade(d.compliance);
   const stamp = d.timestamp ? "scanned " + d.timestamp.slice(0, 19).replace("T", " ") : "scanned";
   $("stamp").textContent = d.resolvable ? `${stamp} · ${d.resolvable} resolvable` : stamp;
   const total = d.total_rules || 1;
@@ -337,9 +387,8 @@ function renderResult(d) {
      </div>`;
 }
 
-// Init: populate the project selector and show the startup scan if it has finished.
-loadProjects();
-pollHealth(null).catch(() => {});
+// Init: populate the selector, then honour the URL hash (deep-link / reload).
+loadProjects().then(() => applyRoute(false));
 </script>
 </body>
 </html>

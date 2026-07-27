@@ -44,3 +44,21 @@ def test_serialize_health_exposes_resolvable_flag() -> None:
     payload = _serialize_health([_health("No print() calls in production", HealthState.DEAD)])
     assert payload[0]["resolvable"] is True
     assert payload[0]["state"] == "dead"
+
+
+def test_compliance_note_grades_by_violations() -> None:
+    from guideline_checker.web.app import _compliance_note
+
+    assert _compliance_note(0, 0, 0, 100)["grade"] == "A"
+    assert _compliance_note(0, 0, 0, 100)["score"] == 100
+    # Errors dominate and pull the grade down hard.
+    assert _compliance_note(9, 91, 8, 541)["grade"] == "F"
+    # A couple of warnings only: still a strong grade.
+    assert _compliance_note(0, 3, 0, 100)["grade"] == "A"
+
+
+def test_compliance_note_na_when_no_rules() -> None:
+    from guideline_checker.web.app import _compliance_note
+
+    note = _compliance_note(0, 0, 0, 0)
+    assert note["grade"] == "n/a" and note["score"] is None

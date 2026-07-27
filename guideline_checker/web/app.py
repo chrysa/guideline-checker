@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.resources
 import os
 import threading
+from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -67,6 +68,8 @@ class _ScanState:
     timestamp: str | None = None
     running: bool = False
     error: str | None = None
+    # Compliance grade for the active project (derived from scan violations).
+    compliance: dict[str, Any] = field(default_factory=dict)
     # Fleet aggregate (the "All projects" view): one health summary per
     # discovered project, computed on demand by _do_scan_all.
     all_summaries: list[dict[str, Any]] = field(default_factory=list)
@@ -159,6 +162,33 @@ def _serialize_constraints(sources: list[InstructionFile]) -> list[dict[str, Any
     ]
 
 
+def _count_severities(results: list[RuleResult]) -> tuple[int, int, int]:
+    """Total (errors, warnings, infos) across every violation of a scan."""
+    counts: Counter[str] = Counter(v.severity for r in results for v in r.violations)
+    return counts.get("error", 0), counts.get("warning", 0), counts.get("info", 0)
+
+
+def _compliance_note(errors: int, warnings: int, dead: int, total_rules: int) -> dict[str, Any]:
+    """Grade a project's compliance from its scan — a letter a human reads at a glance.
+
+    Compliance is about the code obeying its rules, so error/warning violations
+    dominate; a few dead referential rules shave a little off (the checker lied
+    about being able to enforce them). ``n/a`` when there is nothing to grade.
+    """
+    if total_rules == 0:
+        return {"grade": "n/a", "score": None, "errors": errors, "warnings": warnings, "dead": dead}
+    score = 100
+    score -= min(48, errors * 8)  # errors are blocking — heaviest, but bounded
+    score -= min(20, warnings)  # warnings sting lightly and cap out
+    score -= min(12, dead * 2)  # a rule that can't fire is a referential defect
+    score = max(0, score)
+    grade = next(g for threshold, g in _GRADE_BANDS if score >= threshold)
+    return {"grade": grade, "score": score, "errors": errors, "warnings": warnings, "dead": dead}
+
+
+_GRADE_BANDS: tuple[tuple[int, str], ...] = ((90, "A"), (75, "B"), (60, "C"), (45, "D"), (0, "F"))
+
+
 def _do_scan() -> None:
     """Run a full compliance scan of the active project and update _state."""
     root = _active_root()
@@ -172,6 +202,8 @@ def _do_scan() -> None:
         health = compute_rule_health([r.instruction for r in results], results)
         _state.health = _serialize_health(health)
         _state.health_summary = summarize(health)
+        errors, warnings, _infos = _count_severities(results)
+        _state.compliance = _compliance_note(errors, warnings, _state.health_summary.get("dead", 0), len(health))
         _state.timestamp = datetime.now(UTC).isoformat()
     except Exception as exc:  # pragma: no cover
         _state.error = str(exc)
@@ -189,7 +221,9 @@ def _project_health_summary(root: Path) -> dict[str, Any]:
     health = compute_rule_health([r.instruction for r in results], results)
     summary = summarize(health)
     resolvable = sum(1 for h in health if _is_resolvable(h))
-    return {"summary": summary, "total": len(health), "resolvable": resolvable}
+    errors, warnings, _infos = _count_severities(results)
+    compliance = _compliance_note(errors, warnings, summary.get("dead", 0), len(health))
+    return {"summary": summary, "total": len(health), "resolvable": resolvable, "compliance": compliance}
 
 
 def _do_scan_all() -> None:
@@ -327,6 +361,7 @@ def get_rules_health() -> JSONResponse:
             "timestamp": _state.timestamp,
             "summary": _state.health_summary,
             "resolvable": resolvable,
+            "compliance": _state.compliance,
             "rules": _state.health,
             "total_rules": len(_state.health),
         }
@@ -346,15 +381,22 @@ def trigger_scan_all(background_tasks: BackgroundTasks) -> dict[str, str]:
 def get_health_all() -> JSONResponse:
     """Return the per-project health summaries from the last fleet scan."""
     combined: dict[str, int] = {}
+    errors = warnings = dead = total = 0
     for entry in _state.all_summaries:
         for state_name, count in (entry.get("summary") or {}).items():
             combined[state_name] = combined.get(state_name, 0) + count
+        note = entry.get("compliance") or {}
+        errors += note.get("errors", 0)
+        warnings += note.get("warnings", 0)
+        dead += note.get("dead", 0)
+        total += entry.get("total", 0)
     return JSONResponse(
         {
             "timestamp": _state.all_timestamp,
             "running": _state.all_running,
             "projects": _state.all_summaries,
             "combined": combined,
+            "compliance": _compliance_note(errors, warnings, dead, total),
         }
     )
 
