@@ -78,6 +78,10 @@
   .grade.gD { color: #e07b39; background: color-mix(in srgb, #e07b39 18%, transparent); }
   .grade.gF { color: var(--dead); background: color-mix(in srgb, var(--dead) 16%, transparent); }
   .rules .pgrade { font-family: var(--mono); font-weight: 700; font-size: 0.7rem; }
+  .toolbar { display: flex; gap: 0.5rem; margin: 0 0 0.7rem; }
+  .toolbar[hidden] { display: none; }
+  .toolbar #q { flex: 1; width: auto; font-size: 0.78rem; padding: 0.45rem 0.6rem; }
+  .toolbar .select { max-width: none; }
   .empty { padding: 1.4rem; color: var(--ink-faint); font-family: var(--mono); font-size: 0.8rem; text-align: center; }
 
   .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 1rem 1.1rem; position: sticky; top: 1rem; }
@@ -120,6 +124,11 @@
   <div class="layout">
     <section>
       <h2 id="rules-title">Rules</h2>
+      <div class="toolbar" id="toolbar" hidden>
+        <input type="text" id="q" placeholder="filter…" autocomplete="off" aria-label="Filter rows">
+        <label class="sr-only" for="sort">Sort</label>
+        <select class="select" id="sort" title="Sort rows"></select>
+      </div>
       <div class="rules" id="rules"><div class="empty">Scan the repo to load rule health.</div></div>
     </section>
 
@@ -144,6 +153,38 @@ const STATES = ["dead", "advisory", "armed", "proven"];
 let health = [];
 let activeFilter = null;
 let lastProposal = null;
+let viewMode = "single";     // "single" (rules) | "all" (projects)
+let allProjects = [];        // cached fleet payload for client-side sort/filter
+
+// Sort options per view. Each comparator sorts ascending-friendly for its label.
+const STATE_RANK = { dead: 0, suspect: 1, armed: 2, proven: 3, advisory: 4 };
+const SORTS = {
+  single: {
+    worst: { label: "health (worst first)", cmp: (a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || a.rule.localeCompare(b.rule) },
+    fires: { label: "fires (most first)", cmp: (a, b) => (b.fire_count || 0) - (a.fire_count || 0) },
+    name: { label: "rule (A–Z)", cmp: (a, b) => a.rule.localeCompare(b.rule) },
+    source: { label: "source (A–Z)", cmp: (a, b) => a.instruction.localeCompare(b.instruction) || a.rule.localeCompare(b.rule) },
+  },
+  all: {
+    worst: { label: "grade (worst first)", cmp: (a, b) => pScore(a) - pScore(b) || pName(a).localeCompare(pName(b)) },
+    best: { label: "grade (best first)", cmp: (a, b) => pScore(b) - pScore(a) || pName(a).localeCompare(pName(b)) },
+    name: { label: "name (A–Z)", cmp: (a, b) => pName(a).localeCompare(pName(b)) },
+    dead: { label: "dead rules (most)", cmp: (a, b) => ((b.summary || {}).dead || 0) - ((a.summary || {}).dead || 0) },
+    proven: { label: "proven rules (most)", cmp: (a, b) => ((b.summary || {}).proven || 0) - ((a.summary || {}).proven || 0) },
+  },
+};
+let sortKey = { single: "worst", all: "worst" };
+const pName = (p) => p.name || "";
+const pScore = (p) => (p.error ? -1 : ((p.compliance || {}).score == null ? 101 : p.compliance.score)); // errors first, n/a last
+
+function showToolbar(mode) {
+  if (mode !== viewMode) $("q").value = "";  // a rule filter is meaningless in the project view
+  viewMode = mode;
+  const sel = $("sort");
+  sel.innerHTML = Object.entries(SORTS[mode]).map(([k, o]) => `<option value="${k}"${k === sortKey[mode] ? " selected" : ""}>↕ ${o.label}</option>`).join("");
+  $("q").placeholder = mode === "all" ? "filter projects (name or grade)…" : "filter rules…";
+  $("toolbar").hidden = false;
+}
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -239,14 +280,23 @@ async function runScanAll(force) {
 function renderAll(d) {
   const c = d.combined || {};
   const total = STATES.reduce((n, k) => n + (c[k] || 0), 0) || 1;
+  allProjects = d.projects || [];
   setGrade(d.compliance);
   $("stamp").textContent = d.timestamp ? "fleet scanned " + d.timestamp.slice(0, 19).replace("T", " ") : "fleet";
   $("tiles").innerHTML = STATES.map((k) =>
     `<div class="tile ${k}"><div class="n">${c[k] || 0}</div><div class="k">${k}</div></div>`).join("");
   $("bar").innerHTML = STATES.map((k) => `<i class="s-${k}" style="width:${((c[k] || 0) / total) * 100}%"></i>`).join("");
-  const projects = (d.projects || []).slice().sort((a, b) =>
-    (b.summary ? (b.summary.proven || 0) : -1) - (a.summary ? (a.summary.proven || 0) : -1));
-  $("rules-title").textContent = `Projects (${projects.length})`;
+  showToolbar("all");
+  renderAllRows();
+}
+
+function renderAllRows() {
+  const term = $("q").value.trim().toLowerCase();
+  let projects = allProjects.slice();
+  if (term) projects = projects.filter((p) => (p.name || "").toLowerCase().includes(term) || ((p.compliance || {}).grade || "").toLowerCase() === term);
+  projects.sort(SORTS.all[sortKey.all].cmp);
+  $("rules-title").textContent = `Projects (${projects.length}${projects.length !== allProjects.length ? "/" + allProjects.length : ""})`;
+  if (!projects.length) { $("rules").innerHTML = `<div class="empty">No projects match.</div>`; return; }
   $("rules").innerHTML = projects.map((p) => {
     if (p.error) return `<div class="row"><span class="chip dead">error</span><div><div class="rule">${esc(p.name)}</div><div class="src">${esc(p.error)}</div></div></div>`;
     const s = p.summary || {};
@@ -307,6 +357,7 @@ function render(d) {
     el.addEventListener("click", set);
     el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); set(); } });
   });
+  showToolbar("single");
   renderRules();
 }
 function syncTiles() {
@@ -315,9 +366,13 @@ function syncTiles() {
 }
 
 function renderRules() {
-  const rows = activeFilter ? health.filter((r) => r.state === activeFilter) : health;
-  $("rules-title").textContent = activeFilter ? `Rules · ${activeFilter} (${rows.length})` : `Rules (${health.length})`;
-  if (!rows.length) { $("rules").innerHTML = `<div class="empty">No rules in this bucket.</div>`; return; }
+  const term = $("q").value.trim().toLowerCase();
+  let rows = activeFilter ? health.filter((r) => r.state === activeFilter) : health.slice();
+  if (term) rows = rows.filter((r) => r.rule.toLowerCase().includes(term) || r.instruction.toLowerCase().includes(term) || (r.provenance || "").toLowerCase().includes(term));
+  rows.sort(SORTS.single[sortKey.single].cmp);
+  const label = activeFilter ? `Rules · ${activeFilter}` : "Rules";
+  $("rules-title").textContent = `${label} (${rows.length}${rows.length !== health.length ? "/" + health.length : ""})`;
+  if (!rows.length) { $("rules").innerHTML = `<div class="empty">No rules match.</div>`; return; }
   $("rules").innerHTML = rows.slice(0, 300).map((r) =>
     `<div class="row" data-rule="${esc(r.rule)}">
        <span class="chip ${r.state}">${r.state}</span>
@@ -386,6 +441,10 @@ function renderResult(d) {
        <p class="muted" style="margin:.7rem 0 .3rem">Review the hits for false positives before arming.</p>
      </div>`;
 }
+
+// Toolbar: live filter + sort re-render the current view from cached data.
+$("q").addEventListener("input", () => (viewMode === "all" ? renderAllRows() : renderRules()));
+$("sort").addEventListener("change", () => { sortKey[viewMode] = $("sort").value; viewMode === "all" ? renderAllRows() : renderRules(); });
 
 // Init: populate the selector, then honour the URL hash (deep-link / reload).
 loadProjects().then(() => applyRoute(false));
