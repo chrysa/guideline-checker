@@ -572,8 +572,14 @@ def resolve_rule(req: _ResolveRequest) -> JSONResponse:
             "source": proposal.source,
             "rationale": proposal.rationale,
             "forbid": list(proposal.detector.forbid),
+            "forbid_regex": list(proposal.detector.forbid_regex),
+            "file_regex": list(proposal.detector.file_regex),
         },
-        "proof": {"match_count": proof.match_count, "files_scanned": proof.files_scanned},
+        "proof": {
+            "match_count": proof.match_count,
+            "files_scanned": proof.files_scanned,
+            "hits": [{"file": h.file, "line": h.line, "excerpt": h.excerpt} for h in proof.hits],
+        },
         "armed": False,
     }
     rule_id = req.rule_id or find_rule_id_for_text(_active_root(), req.rule)

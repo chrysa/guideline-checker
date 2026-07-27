@@ -385,27 +385,50 @@ function renderRules() {
     btn.addEventListener("click", (e) => { e.stopPropagation(); resolveRule(btn.dataset.rule, btn); }));
 }
 
+// Verbose resolution: narrate each step in the result panel so the user sees the
+// detector being derived, proven, and (on confirm) armed — never an opaque wait.
+function resolveStep(rule, lines) {
+  $("result").innerHTML = `<div class="proof"><div class="head">Resolving “${esc(rule)}”</div>${lines.join("")}</div>`;
+}
 async function resolveRule(rule, btn) {
   btn.disabled = true; btn.textContent = "Resolving…";
+  $("rule").value = rule;
+  resolveStep(rule, [`<div class="note">① Deriving a detector (free heuristic → LLM if needed)…</div>`]);
   try {
-    // Dry-run first: derive + prove + preview the write, never commit blindly.
     const d = await api("/api/rules/resolve", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rule, dry_run: true }),
+      body: JSON.stringify({ rule, dry_run: true }),   // preview: derive + prove, write nothing
     });
-    if (!d.resolved) { toast(d.reason || "No detector could be derived"); btn.textContent = "Resolve"; btn.disabled = false; return; }
-    const hits = d.proof ? `${d.proof.match_count} hit(s)` : "";
-    if (!d.armed) { toast(`Proposed (${hits}) but not persistable: ${d.note || "no YAML target"}`); btn.textContent = "Resolve"; btn.disabled = false; return; }
-    if (!confirm(`Arm this rule?\n\nDetector: ${(d.proposal.forbid || []).join(", ")}\nProof: ${hits}\n\nWrites to ${d.file}`)) {
+    if (!d.resolved) {
+      resolveStep(rule, [`<div class="note">✗ No detector could be derived — ${esc(d.reason || "the rule is not mechanically detectable")}.</div>`]);
       btn.textContent = "Resolve"; btn.disabled = false; return;
     }
-    await api("/api/rules/resolve", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rule, dry_run: false }),
+    const patterns = [...(d.proposal.forbid || []), ...(d.proposal.forbid_regex || []).map((r) => r + " (regex)"), ...(d.proposal.file_regex || []).map((r) => r + " (file)")];
+    const hitRows = (d.proof.hits || []).slice(0, 40).map((h) =>
+      `<div class="hit"><span class="loc">${esc(h.file)}:${h.line}</span><span class="ex">${esc(h.excerpt)}</span></div>`).join("");
+    const base = [
+      `<div class="note">① Proposed by <b>${esc(d.proposal.source)}</b>: ${esc(JSON.stringify(patterns))}${d.proposal.rationale ? `<br><span class="muted">${esc(d.proposal.rationale)}</span>` : ""}</div>`,
+      `<div class="head" style="margin-top:.6rem">② Proven in sandbox → <b>${d.proof.match_count}</b> hit(s) across ${d.proof.files_scanned} files</div>`,
+      `<div class="hits">${hitRows || '<div class="empty">no matches</div>'}</div>`,
+    ];
+    if (!d.armed) {
+      resolveStep(rule, [...base, `<div class="note">③ ${esc(d.note || "Markdown-sourced rule")} — proposed &amp; proven only, nothing to persist.</div>`]);
+      btn.textContent = "Resolve"; btn.disabled = false; return;
+    }
+    resolveStep(rule, [...base, `<div class="note">③ Ready to arm → writes the detector into <b>${esc(d.file)}</b>.</div><button class="btn primary" id="arm-confirm" type="button" style="width:100%">Arm this rule</button>`]);
+    $("arm-confirm").addEventListener("click", async () => {
+      $("arm-confirm").disabled = true; $("arm-confirm").textContent = "Arming…";
+      try {
+        await api("/api/rules/resolve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rule, dry_run: false }) });
+        resolveStep(rule, [...base, `<div class="note">✓ Armed — detector written into <b>${esc(d.file)}</b>. Rescanning…</div>`]);
+        btn.textContent = "Armed ✓";
+        runScan($("project").value && $("project").value !== "__all__" ? $("project").value : undefined);
+      } catch (e) { toast(e.message); $("arm-confirm").disabled = false; $("arm-confirm").textContent = "Arm this rule"; }
     });
-    btn.textContent = "Armed ✓";
-    runScan($("project").value && $("project").value !== "__all__" ? $("project").value : undefined);
-  } catch (e) { toast(e.message); btn.textContent = "Resolve"; btn.disabled = false; }
+  } catch (e) {
+    resolveStep(rule, [`<div class="note">✗ ${esc(e.message)}</div>`]);
+    btn.textContent = "Resolve"; btn.disabled = false;
+  }
 }
 
 $("propose").addEventListener("click", propose);
