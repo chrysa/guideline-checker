@@ -433,9 +433,10 @@ function renderResult(d) {
   const p = d.proposal, proof = d.proof;
   const hits = (proof.hits || []).slice(0, 40).map((h) =>
     `<div class="hit"><span class="loc">${esc(h.file)}:${h.line}</span><span class="ex">${esc(h.excerpt)}</span></div>`).join("");
+  const patterns = [...(p.forbid || []), ...(p.forbid_regex || []).map((r) => r + " (regex)"), ...(p.file_regex || []).map((r) => r + " (file)")];
   box.innerHTML =
     `<div class="proof">
-       <div class="head">Proposed by <span class="src-tag">${esc(p.source)}</span> · forbid ${esc(JSON.stringify(p.forbid))}
+       <div class="head">Proposed by <span class="src-tag">${esc(p.source)}</span> · ${esc(JSON.stringify(patterns))}
          → <b>${proof.match_count}</b> hit(s) across ${proof.files_scanned} files</div>
        <div class="hits">${hits || '<div class="empty">no matches</div>'}</div>
        <p class="muted" style="margin:.7rem 0 .3rem">Review the hits for false positives before arming.</p>

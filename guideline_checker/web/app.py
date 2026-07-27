@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.resources
 import os
+import shutil
 import threading
 from collections import Counter
 from collections.abc import AsyncIterator
@@ -112,15 +113,16 @@ _HEURISTIC: HeuristicProposer = HeuristicProposer()
 
 
 def _is_resolvable(entry: RuleHealth) -> bool:
-    """A rule is resolvable when a detector can plausibly be derived for it.
+    """A rule is resolvable when the workshop can arm it in one click.
 
-    Only ``dead`` and ``advisory`` rules need resolving (proven/armed already
-    have a detector). Of those, one is actionable when the free heuristic maps
-    its prose **or** an LLM backend is enabled to attempt it. Advisory rules are
-    by construction the ones the phrase table cannot map, so with no LLM the
-    honest answer is that they are not mechanically resolvable.
+    Only ``dead`` rules qualify: they are YAML referential rules advertised as
+    enforceable but carrying no detector, so a proven detector can be written
+    back onto them. (``advisory`` rules are markdown-sourced — a detector can be
+    *proposed* for them in the panel, but there is no YAML entry to persist, so
+    they are not one-click resolvable.) Actionable when the free heuristic maps
+    the prose or an LLM backend is available to attempt it.
     """
-    if entry.state.value not in {"dead", "advisory"}:
+    if entry.state.value != "dead":
         return False
     return _HEURISTIC.propose(entry.rule) is not None or _llm_enabled()
 
@@ -427,14 +429,32 @@ def _truthy(name: str) -> bool:
     return os.environ.get(name, "").lower() in {"1", "true", "yes"}
 
 
+def _falsey(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"0", "false", "no"}
+
+
+def _claude_available() -> bool:
+    """The Claude CLI backend auto-enables in the workshop when it is installed.
+
+    ADR D-0013 makes the Claude CLI the default LLM backend; requiring a flag
+    made "propose a fix" silently do nothing out of the box. So when the CLI is
+    on PATH we use it automatically — set ``GC_CLAUDE=0`` to opt out. This only
+    affects the *workshop* proposal step; the CI/pre-commit gate never calls an
+    LLM (the deterministic boundary of D-0012 is untouched).
+    """
+    if _falsey("GC_CLAUDE"):
+        return False
+    return shutil.which(os.environ.get("GC_CLAUDE_BIN", "claude")) is not None
+
+
 def _llm_enabled() -> bool:
-    """The LLM escalation is opt-in — off unless a backend flag is set."""
-    return _truthy("GC_CLAUDE") or _truthy("GC_OLLAMA")
+    """True when a proposal backend is available (auto Claude CLI, or an opt-in flag)."""
+    return _truthy("GC_CLAUDE") or _truthy("GC_OLLAMA") or _claude_available()
 
 
 def _llm_proposer() -> Proposer | None:
-    """Pick the enabled LLM backend: Claude (portable) preferred, else Ollama (local)."""
-    if _truthy("GC_CLAUDE"):
+    """Pick the backend: Claude (auto when installed, or GC_CLAUDE) preferred, else Ollama."""
+    if _truthy("GC_CLAUDE") or _claude_available():
         return ClaudeProposer(binary=os.environ.get("GC_CLAUDE_BIN", "claude"))
     if _truthy("GC_OLLAMA"):
         return OllamaProposer(
@@ -478,6 +498,8 @@ def propose_detector(req: _ProposeRequest) -> JSONResponse:
                 "source": proposal.source,
                 "rationale": proposal.rationale,
                 "forbid": list(proposal.detector.forbid),
+                "forbid_regex": list(proposal.detector.forbid_regex),
+                "file_regex": list(proposal.detector.file_regex),
                 "match_in_comments": proposal.detector.match_in_comments,
             },
             "proof": {

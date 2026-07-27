@@ -28,16 +28,19 @@ def test_heuristic_mappable_dead_rule_is_resolvable() -> None:
     assert _is_resolvable(_health("No print() calls in production", HealthState.DEAD)) is True
 
 
-def test_semantic_rule_not_resolvable_without_llm(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.delenv("GC_CLAUDE", raising=False)
+def test_semantic_dead_rule_not_resolvable_without_backend(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # GC_CLAUDE=0 opts out of the Claude CLI auto-detect; no Ollama either.
+    monkeypatch.setenv("GC_CLAUDE", "0")
     monkeypatch.delenv("GC_OLLAMA", raising=False)
     entry = _health("Structure prompts with XML tags for adherence", HealthState.DEAD)
     assert _is_resolvable(entry) is False
 
 
-def test_proven_and_armed_rules_are_never_resolvable() -> None:
+def test_proven_armed_and_advisory_rules_are_never_resolvable() -> None:
+    # Only dead YAML rules are one-click resolvable (advisory is markdown — nothing to write to).
     assert _is_resolvable(_health("No print() calls", HealthState.PROVEN)) is False
     assert _is_resolvable(_health("No print() calls", HealthState.ARMED)) is False
+    assert _is_resolvable(_health("No print() calls", HealthState.ADVISORY)) is False
 
 
 def test_serialize_health_exposes_resolvable_flag() -> None:
