@@ -50,8 +50,8 @@ class HeuristicProposer:
     """Propose a detector by recycling the checker's phrase table — no LLM.
 
     If ``_build_checks`` recognises the rule's prose, its anti-pattern substrings
-    become the proposal's ``forbid`` list. Rules the table cannot map (e.g. the
-    ``ai-models/`` conventions) return ``None`` so the router escalates to an LLM.
+    become the proposal's ``forbid`` list. Rules the table cannot map (semantic or
+    provider-specific conventions) return ``None`` so the router escalates to an LLM.
     """
 
     source = "heuristic"

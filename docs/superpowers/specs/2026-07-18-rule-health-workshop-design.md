@@ -21,7 +21,7 @@ the author already voted with his behaviour (1 repo of 79).
 Three concrete lies compound the trust problem and are fixed in P1:
 
 - `pip install guideline-checker` + PyPI badge → the package returns **404**
-  (PyPI publish was explicitly rejected in D-0009; distribution is ghcr image +
+  (PyPI publish was explicitly rejected in D-0019; distribution is ghcr image +
   pre-commit git ref).
 - README asserts the 26 rules all have a working `detect:`, "none are dead
   prose" → false; 8 `ai-models/` rules have no detector.
@@ -122,7 +122,7 @@ sunset. The empty `Critère de sunset` is itself a governance bug filled in P1.
 
 ## 7. Non-goals
 
-- No PyPI publish (D-0009 stands).
+- No PyPI publish (D-0019 stands).
 - No remote/pip rule packs.
 - No fleet write (PR-on-79-repos) before P5's gate.
 - No LLM anywhere in the deterministic verdict path.
