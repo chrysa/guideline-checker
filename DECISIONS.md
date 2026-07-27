@@ -579,6 +579,63 @@ repos with no `guidelines/` referential, which is where it matters most.
 
 ---
 
+## D-0016 — Independent & pluggable engine: mechanisms in the tool, values in the host
+
+**Date**: 2026-07-27
+**Status**: accepted
+
+The tool ships `guidelines/*.yml` (ai-models, languages, packs) carrying **chrysa**
+values — the entropy threshold aside, rules encode chrysa's forbidden SDKs and the
+scaffolder bakes a chrysa number (`init_cmd.py:22` → `Max file length: 500`). That
+couples the binary to one org's standards, contradicting the tool's own vision:
+"nothing hardcoded, driven by the repo's files". A third party cloning the tool
+inherits chrysa's rules, not its own.
+
+**Decision — separate MECHANISMS from VALUES.**
+
+- **Mechanisms** (in the engine, generic, shipped): a small finite set of check
+  *kinds*, each knowing how to *measure* — `file-exists`, `numeric-threshold-on-metric`,
+  `forbidden-import`, `naming-convention`, `section-presence`, `file-freshness`. This is
+  the existing `detect.*` registry family (D-0004/5/6/8) reframed as the generic layer.
+- **Values / rules** (never in the engine): the metric target, threshold, module name,
+  or pattern come **exclusively from the host's prose** (`CLAUDE.md`, `AGENTS.md`,
+  `.github/instructions/*`, `copilot-instructions.md`) or its machine-readable config
+  (`thresholds.json`, `.quality-gate.json`). The engine knows no version, no threshold,
+  no target name.
+
+Adding a rule = map a prose sentence onto an existing kind + params; **no engine code
+changes, no literal written into the tool**. `guidelines/*.yml` is requalified from a
+*shipped chrysa referential* to a **per-repo derived cache** — the interpret-once output
+(LLM proposes, D-0012/13), sandbox-proven (D-0011 loop) and versioned **in the host
+repo**, regenerable, not part of the tool distribution.
+
+Determinism is preserved by the two-phase loop already accepted (D-0010→D-0014):
+interpret-once (LLM proposes a ruleset, each rule carrying its **provenance** — the exact
+source sentence) → sandbox-replay proves +/- → cache → CI/pre-commit apply the cache
+100% deterministically, never re-calling the LLM. Prose that maps to no kind stays
+**advisory** (D-0010), never a hard-fail.
+
+**Fatal hypothesis.** The finite kind set above covers the enforceable rules real host
+prose expresses, so a third-party repo yields a non-empty proven ruleset from its prose
+alone (no chrysa file). If most host rules need a bespoke kind the engine can't offer,
+the "generic mechanisms" model is wrong and this collapses back to a shipped referential.
+
+**Kill-test.** Clone the tool into a repo with **no** chrysa file, only its own
+`CLAUDE.md`; run interpret-once + sandbox. Measured 2026-Q3 on ≥3 non-chrysa repos: if
+< 3 rules per repo end `proven` from local prose, or if any version/threshold/target-name
+still appears as a **literal in the tool's code** (grep gate in CI), the hypothesis is
+false → revert to shipping `guidelines/` and mark this `Killed`.
+
+**Validation gate.** Before the engine refactor lands: (a) `init_cmd` scaffolds **zero**
+numeric chrysa literals; (b) a CI grep gate asserts no bare threshold/version literal in
+`guideline_checker/**`; (c) removing shipped `guidelines/` leaves the engine green
+(only the per-repo cache is lost, regenerable). This ADR's first commit delivers (a);
+(b) and (c) gate the subsequent kind-registry lots.
+
+*Rejected*: (a) keep `guidelines/` as the shipped source of truth — the coupling this
+ADR removes; (b) let the LLM judge at CI time — non-deterministic gate, violates
+D-0012's "LLM proposes, never judges"; the cache is the determinism boundary.
+
 ## D-0015 — Multi-project web workshop (workspace selector)
 
 **Date**: 2026-07-23
