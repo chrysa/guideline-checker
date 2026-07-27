@@ -7,8 +7,8 @@ A rule is detectable when it carries a declarative ``detect:`` block **or** its
 prose maps to a phrase-derived check (the ``_build_checks`` family, plus the
 presence/length triggers). A rule with neither is ``DEAD``: it can never flag a
 violation, however green the scan looks. This is what makes the referential
-honest — the 8 ``ai-models/`` prose rules surface as dead instead of hiding
-behind an empty violation list.
+honest — a YAML rule advertised as enforceable but carrying no detector surfaces
+as dead instead of hiding behind an empty violation list.
 
 See ``docs/superpowers/specs/2026-07-18-rule-health-workshop-design.md``.
 """

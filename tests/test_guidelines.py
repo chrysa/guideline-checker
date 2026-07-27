@@ -294,18 +294,20 @@ def test_severity_override_end_to_end(tmp_path: Path) -> None:
 
 
 def test_shipped_referential_covers_spec_targets() -> None:
-    """The repo's own guidelines/ tree ships every model/language in the spec."""
+    """The repo's own guidelines/ ships each shipped language dimension.
+
+    ADR D-0016: the tool ships only generic, detector-backed rules; the former
+    ``ai-models/`` prose dimension (semantic advice with no detector) was
+    dropped — such rules belong to a host's own prose, not the shipped tool.
+    """
     instructions = load_yaml_guidelines(_REPO_ROOT)
     descriptions = {i.description for i in instructions}
-    for dim, stem in [
-        ("ai-models", "gpt"),
-        ("ai-models", "gemini"),
-        ("ai-models", "mistral"),
-        ("languages", "react"),
-    ]:
+    for dim, stem in [("languages", "react")]:
         assert f"Guidelines — {dim}/{stem} [{stem}]" in descriptions
     react = next(i for i in instructions if i.description == "Guidelines — languages/react [react]")
     assert react.apply_to == "**/*.tsx,**/*.jsx"
+    # No ai-models dimension is shipped any more (D-0016).
+    assert not any("ai-models/" in d for d in descriptions)
 
 
 # --- L1.1 secret-scanner via detect.scan ---

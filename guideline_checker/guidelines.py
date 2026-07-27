@@ -5,11 +5,11 @@ The referential is 100 % filesystem-driven and Notion-agnostic: rules live in
 The loader is **generic** — adding a model, a language, or a whole new dimension
 is just dropping a file, never a code change:
 
-- Every sub-directory of ``guidelines/`` is a dimension (``ai-models/``,
-  ``languages/``, …). The directory name is free-form.
+- Every sub-directory of ``guidelines/`` is a dimension (``languages/``, …).
+  The directory name is free-form.
 - Each file declares its own target field by the ``<dim>_target`` convention —
-  ``model_target`` in ``ai-models/``, ``language_target`` in ``languages/``,
-  ``framework_target`` in a hypothetical ``frameworks/``. The loader reads
+  ``language_target`` in ``languages/``, ``framework_target`` in a hypothetical
+  ``frameworks/``. The loader reads
   whichever single ``*_target`` key the file carries; ``"*"`` / ``_common.yml``
   provide transverse rules.
 - A file may declare a file-level ``apply_to_glob`` to scope its rules to a file
