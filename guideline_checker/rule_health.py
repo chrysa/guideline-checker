@@ -64,6 +64,8 @@ class RuleHealth:
     has_phrase_detection: bool
     fire_count: int
     reason: str
+    # ADR D-0016: the host prose sentence this rule derives from ("" if none).
+    provenance: str = ""
 
 
 def compute_rule_health(
@@ -120,6 +122,7 @@ def _rule_health(
     has_detector = rule in instruction.rule_detectors
     has_phrase = _has_phrase_detection(rule)
     fire_count = fired[rule]
+    provenance = instruction.rule_provenance.get(rule, "")
 
     if not has_detector and not has_phrase:
         is_yaml = instruction.source_type is SourceType.GUIDELINES_YAML
@@ -137,6 +140,7 @@ def _rule_health(
             has_phrase_detection=False,
             fire_count=0,
             reason=reason,
+            provenance=provenance,
         )
 
     mechanism = "declarative detector" if has_detector else "phrase-derived check"
@@ -153,4 +157,5 @@ def _rule_health(
         has_phrase_detection=has_phrase,
         fire_count=fire_count,
         reason=reason,
+        provenance=provenance,
     )
