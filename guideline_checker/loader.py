@@ -49,7 +49,7 @@ class RuleFix:
 
     Anchored to a violation's line: ``remove_line`` drops the whole line, while
     ``replace`` / ``regex_replace`` rewrite it. Deterministic and idempotent — no
-    semantic or LLM rewriting. See ADR D-0007.
+    semantic or LLM rewriting. See ADR D-0017.
     """
 
     op: str  # "remove_line" | "replace" | "regex_replace"
@@ -75,7 +75,7 @@ class InstructionFile:
     # detection stays the sole path for markdown sources.
     rule_detectors: dict[str, RuleDetector] = field(default_factory=dict)
     # Maps a rule statement to its declarative autofix. Populated only by YAML rules
-    # that carry a ``fix:`` block; a rule with no entry here is detect-only (ADR D-0007).
+    # that carry a ``fix:`` block; a rule with no entry here is detect-only (ADR D-0017).
     rule_fixes: dict[str, RuleFix] = field(default_factory=dict)
     # Maps a rule statement to the host prose sentence it was derived from (ADR
     # D-0016). Populated only by YAML rules carrying a ``provenance:`` field; a
