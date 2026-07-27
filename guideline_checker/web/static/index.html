@@ -390,6 +390,12 @@ function renderRules() {
 function resolveStep(rule, lines) {
   $("result").innerHTML = `<div class="proof"><div class="head">Resolving “${esc(rule)}”</div>${lines.join("")}</div>`;
 }
+// The LLM is non-deterministic — a failed or unpersistable derivation can be
+// retried for a different detector without leaving the rule.
+function wireRePropose(rule, btn) {
+  const el = $("re-propose");
+  if (el) el.addEventListener("click", () => resolveRule(rule, btn));
+}
 async function resolveRule(rule, btn) {
   btn.disabled = true; btn.textContent = "Resolving…";
   $("rule").value = rule;
@@ -400,7 +406,13 @@ async function resolveRule(rule, btn) {
       body: JSON.stringify({ rule, dry_run: true }),   // preview: derive + prove, write nothing
     });
     if (!d.resolved) {
-      resolveStep(rule, [`<div class="note">✗ No detector could be derived — ${esc(d.reason || "the rule is not mechanically detectable")}.</div>`]);
+      // Derivation failed (no detector, or the LLM handed back an invalid pattern).
+      // The LLM is non-deterministic, so offer an inline re-propose (another attempt).
+      resolveStep(rule, [
+        `<div class="note">✗ No detector could be derived — ${esc(d.reason || "the rule is not mechanically detectable")}.</div>`,
+        `<button class="btn primary" id="re-propose" type="button" style="width:100%">↻ Re-propose</button>`,
+      ]);
+      wireRePropose(rule, btn);
       btn.textContent = "Resolve"; btn.disabled = false; return;
     }
     const patterns = [...(d.proposal.forbid || []), ...(d.proposal.forbid_regex || []).map((r) => r + " (regex)"), ...(d.proposal.file_regex || []).map((r) => r + " (file)")];
@@ -412,7 +424,11 @@ async function resolveRule(rule, btn) {
       `<div class="hits">${hitRows || '<div class="empty">no matches</div>'}</div>`,
     ];
     if (!d.armed) {
-      resolveStep(rule, [...base, `<div class="note">③ ${esc(d.note || "Markdown-sourced rule")} — proposed &amp; proven only, nothing to persist.</div>`]);
+      resolveStep(rule, [...base,
+        `<div class="note">③ ${esc(d.note || "Markdown-sourced rule")} — proposed &amp; proven only, nothing to persist.</div>`,
+        `<button class="btn" id="re-propose" type="button" style="width:100%">↻ Re-propose (try another detector)</button>`,
+      ]);
+      wireRePropose(rule, btn);
       btn.textContent = "Resolve"; btn.disabled = false; return;
     }
     resolveStep(rule, [...base, `<div class="note">③ Ready to arm → writes the detector into <b>${esc(d.file)}</b>.</div><button class="btn primary" id="arm-confirm" type="button" style="width:100%">Arm this rule</button>`]);

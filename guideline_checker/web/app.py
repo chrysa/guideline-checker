@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.resources
 import os
+import re
 import shutil
 import threading
 from collections import Counter
@@ -565,7 +566,14 @@ def resolve_rule(req: _ResolveRequest) -> JSONResponse:
     if proposal is None:
         return JSONResponse({"resolved": False, "armed": False, "reason": "no detector could be derived"})
 
-    proof = replay(req.rule, proposal.detector, _active_root(), req.apply_to)
+    try:
+        proof = replay(req.rule, proposal.detector, _active_root(), req.apply_to)
+    except re.error as exc:
+        # A non-deterministic LLM can hand back a malformed regex; that is an
+        # input error, not a server fault. Report it so the UI can re-propose.
+        return JSONResponse(
+            {"resolved": False, "armed": False, "reason": f"proposed detector is invalid ({exc}) — re-propose"}
+        )
     payload: dict[str, Any] = {
         "resolved": True,
         "proposal": {
