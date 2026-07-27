@@ -19,7 +19,6 @@ description: "Python coding standards"
 - No TODO or FIXME comments in production code
 - No type: ignore comments
 - No global statement usage
-- Max file length: 500
 """,
     "typescript.instructions.md": """\
 ---
