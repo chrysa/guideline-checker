@@ -16,7 +16,7 @@ Teams and solo developers who maintain AI-agent instruction files (`.github/inst
 
 - **Multi-source rule discovery** — automatically loads rules from `.github/instructions/*.instructions.md`, `.github/copilot-instructions.md`, `CLAUDE.md` / `.claude/CLAUDE.md`, and `AGENTS.md` / `.claude/agents/*.md`. One set of guidelines, no duplication.
 - **Pattern-based anti-pattern detection** — recognises rule phrasing (e.g. "no print", "no bare except", "no `any`", "no `@ts-ignore`", "run as non-root", "no `:latest` tag", "no hardcoded secrets", max file/function length) and flags matching lines with `error` / `warning` / `info` severity.
-- **Structured YAML referential** — author rules as data in `guidelines/<dimension>/*.yml` (dimensions `ai-models/` and `languages/`) with explicit `id` / `category` / `severity` / `rationale`. The explicit `severity` overrides the phrasing-derived default, a shared `categories.yml` keeps dimensions from diverging, and discovery is by folder convention (drop a file → it's loaded).
+- **Structured YAML referential** — author rules as data in `guidelines/<dimension>/*.yml` (e.g. the shipped `languages/` dimension) with explicit `id` / `category` / `severity` / `rationale`. The explicit `severity` overrides the phrasing-derived default, a shared `categories.yml` keeps dimensions from diverging, and discovery is by folder convention (drop a file → it's loaded). The shipped tree stays generic and detector-backed; project-specific conventions live in your host prose, not here (ADR D-0016).
 - **`applyTo` scoping** — rules apply only to the files their glob targets; generic rules are auto-narrowed by filename (a `python.instructions.md` rule won't fire on JSON files).
 - **Inline suppression** — add a `guideline: disable` comment on any line to skip it.
 - **`--diff` mode** — check only files changed in the git working tree for fast incremental pre-commit runs.
@@ -305,9 +305,6 @@ Alongside markdown sources, a `guidelines/` directory at the project root provid
 ```
 guidelines/
   categories.yml         # shared category registry (validated against)
-  ai-models/             # rules keyed by model_target (claude, gpt, …)
-    _common.yml          #   model_target: "*"  → transverse
-    claude.yml
   languages/             # rules keyed by language_target (python, typescript, react)
     _common.yml          #   language_target: "*"  → transverse
     python.yml
@@ -395,7 +392,7 @@ Files under `guidelines/packs/` are **not** auto-loaded — a pack's abstract ba
 
 ### Shipped rule catalog
 
-Every `languages/` rule below carries a working `detect:` block (AST, scanner, or `forbid`/regex) and is enforced. The `ai-models/` rules are **advisory**: they express provider conventions the checker surfaces but cannot yet detect mechanically — `guideline-checker web` reports them as `advisory` (not `dead`), and wiring detectors onto them is tracked work, not a shipped guarantee. Author your own by dropping a file in `guidelines/<dimension>/`.
+Every `languages/` rule below carries a working `detect:` block (AST, scanner, or `forbid`/regex) and is enforced — the shipped referential is generic and detector-backed only. Semantic, provider-specific conventions (the former `ai-models/` prose) are **not** shipped: per ADR D-0016 they belong to a host's own instruction files, from which the workshop derives and proves detectors. Author your own by dropping a file in `guidelines/<dimension>/`.
 
 | dimension | rule id | severity | detects |
 |-----------|---------|----------|---------|

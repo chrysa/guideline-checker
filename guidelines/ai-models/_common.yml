@@ -1,8 +1,0 @@
-# Transverse rules that apply to every AI model (model_target: "*").
-model_target: "*"
-rules:
-  - id: no-provider-hardcoded
-    category: architecture
-    severity: error
-    rule: "Route every AI provider call through a provider seam, never a vendor SDK directly"
-    rationale: "Hidden lock-in; violates the AI-agnosticism axis"

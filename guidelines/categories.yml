@@ -1,6 +1,6 @@
 # Shared category registry for the multi-dimension rule referential.
 # Every rule's `category` MUST exist here — the loader fails on an unknown one.
-# Defined once so the ai-models/ and languages/ dimensions never diverge.
+# Defined once so every guidelines/ dimension shares one category vocabulary.
 categories:
   - id: prompt-format
     description: "Prompt and instruction formatting"
