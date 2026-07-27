@@ -95,6 +95,33 @@ def detector_to_detect(detector: RuleDetector) -> dict[str, Any]:
     return detect
 
 
+def find_rule_id_for_text(root: Path, rule_text: str) -> str | None:
+    """Return the id of the YAML rule whose ``rule:`` text matches, or ``None``.
+
+    The web health payload keys rules by their prose (ids are dropped at the
+    ``InstructionFile`` boundary), so one-click resolution recovers the id here
+    to know which referential rule to arm. Markdown-sourced rules have no YAML
+    entry and yield ``None``.
+    """
+    guidelines = root / "guidelines"
+    if not guidelines.is_dir():
+        return None
+    for path in sorted(guidelines.rglob("*.yml")):
+        if path.name == "categories.yml":
+            continue
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        for rule in data.get("rules", []):
+            if isinstance(rule, dict) and str(rule.get("rule", "")).strip() == rule_text.strip():
+                rule_id = rule.get("id")
+                return str(rule_id) if rule_id is not None else None
+    return None
+
+
 def _find_rule_file(root: Path, rule_id: str) -> Path | None:
     """Return the referential file that declares ``rule_id``, or ``None``."""
     guidelines = root / "guidelines"

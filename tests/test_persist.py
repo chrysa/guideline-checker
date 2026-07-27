@@ -112,3 +112,19 @@ def test_no_provenance_leaves_rule_unannotated(tmp_path: Path) -> None:
     apply_detector(tmp_path, "py-no-print", RuleDetector(forbid=("print(",)), dry_run=False)
 
     assert "provenance:" not in target.read_text(encoding="utf-8")
+
+
+def test_find_rule_id_for_text_matches(tmp_path: Path) -> None:
+    from guideline_checker.persist import find_rule_id_for_text
+
+    _referential(tmp_path)
+    assert find_rule_id_for_text(tmp_path, "Never use print for debugging output") == "py-no-print"
+
+
+def test_find_rule_id_for_text_none_when_absent(tmp_path: Path) -> None:
+    from guideline_checker.persist import find_rule_id_for_text
+
+    _referential(tmp_path)
+    assert find_rule_id_for_text(tmp_path, "some markdown bullet with no yaml rule") is None
+    # No guidelines/ dir at all -> None, never raises.
+    assert find_rule_id_for_text(tmp_path / "nope", "x") is None

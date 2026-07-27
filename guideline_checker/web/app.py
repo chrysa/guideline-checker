@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from guideline_checker.checker import RuleResult, run_checks
 from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources
-from guideline_checker.persist import apply_detector
+from guideline_checker.persist import apply_detector, find_rule_id_for_text
 from guideline_checker.proposer import (
     ClaudeProposer,
     HeuristicProposer,
@@ -67,6 +67,11 @@ class _ScanState:
     timestamp: str | None = None
     running: bool = False
     error: str | None = None
+    # Fleet aggregate (the "All projects" view): one health summary per
+    # discovered project, computed on demand by _do_scan_all.
+    all_summaries: list[dict[str, Any]] = field(default_factory=list)
+    all_timestamp: str | None = None
+    all_running: bool = False
 
 
 _state: _ScanState = _ScanState()
@@ -97,6 +102,26 @@ def _serialize_results(results: list[RuleResult]) -> list[dict[str, Any]]:
     ]
 
 
+# A single heuristic proposer answers the "can this rule be resolved?" question
+# without any LLM: if it maps the rule's prose to a detector, the rule is one
+# click away from being armed (see the /api/rules/resolve endpoint).
+_HEURISTIC: HeuristicProposer = HeuristicProposer()
+
+
+def _is_resolvable(entry: RuleHealth) -> bool:
+    """A rule is resolvable when a detector can plausibly be derived for it.
+
+    Only ``dead`` and ``advisory`` rules need resolving (proven/armed already
+    have a detector). Of those, one is actionable when the free heuristic maps
+    its prose **or** an LLM backend is enabled to attempt it. Advisory rules are
+    by construction the ones the phrase table cannot map, so with no LLM the
+    honest answer is that they are not mechanically resolvable.
+    """
+    if entry.state.value not in {"dead", "advisory"}:
+        return False
+    return _HEURISTIC.propose(entry.rule) is not None or _llm_enabled()
+
+
 def _serialize_health(health: list[RuleHealth]) -> list[dict[str, Any]]:
     """Convert RuleHealth list to JSON-serialisable dicts, worst state first."""
     order = {"dead": 0, "suspect": 1, "armed": 2, "proven": 3, "advisory": 4}
@@ -111,6 +136,7 @@ def _serialize_health(health: list[RuleHealth]) -> list[dict[str, Any]]:
             "fire_count": h.fire_count,
             "reason": h.reason,
             "provenance": h.provenance,
+            "resolvable": _is_resolvable(h),
         }
         for h in ranked
     ]
@@ -150,6 +176,37 @@ def _do_scan() -> None:
         _state.error = str(exc)
     finally:
         _state.running = False
+
+
+def _project_health_summary(root: Path) -> dict[str, Any]:
+    """Scan one project and return only its health summary — the fleet-view unit.
+
+    Deliberately light: no per-rule payload, just the state counts plus how many
+    rules are resolvable, so the aggregate stays cheap across many repos.
+    """
+    results = run_checks(root, all_sources=True)
+    health = compute_rule_health([r.instruction for r in results], results)
+    summary = summarize(health)
+    resolvable = sum(1 for h in health if _is_resolvable(h))
+    return {"summary": summary, "total": len(health), "resolvable": resolvable}
+
+
+def _do_scan_all() -> None:
+    """Compute a health summary for every discovered project (the fleet cockpit)."""
+    _state.all_running = True
+    try:
+        summaries: list[dict[str, Any]] = []
+        for project in discover_projects(_WORKSPACE):
+            try:
+                data = _project_health_summary(Path(project.path))
+            except Exception as exc:  # pragma: no cover - one bad repo must not sink the fleet view
+                summaries.append({"name": project.name, "path": project.path, "error": str(exc)})
+                continue
+            summaries.append({"name": project.name, "path": project.path, **data})
+        _state.all_summaries = summaries
+        _state.all_timestamp = datetime.now(UTC).isoformat()
+    finally:
+        _state.all_running = False
 
 
 # ── App lifecycle ──────────────────────────────────────────────────────────────
@@ -263,12 +320,40 @@ def get_rules_health() -> JSONResponse:
     A ``dead`` rule carries no detector and no recognised phrase, so it can never
     flag a violation however clean the report looks.
     """
+    resolvable = sum(1 for r in _state.health if r.get("resolvable"))
     return JSONResponse(
         {
             "timestamp": _state.timestamp,
             "summary": _state.health_summary,
+            "resolvable": resolvable,
             "rules": _state.health,
             "total_rules": len(_state.health),
+        }
+    )
+
+
+@app.post("/api/scan-all", response_model=dict[str, str], dependencies=[Depends(require_auth)])
+def trigger_scan_all(background_tasks: BackgroundTasks) -> dict[str, str]:
+    """Compute a health summary for every workspace project (the fleet cockpit)."""
+    if _state.all_running:
+        return {"status": "already_running"}
+    background_tasks.add_task(_do_scan_all)
+    return {"status": "started"}
+
+
+@app.get("/api/health-all", response_model=None, dependencies=[Depends(require_auth)])
+def get_health_all() -> JSONResponse:
+    """Return the per-project health summaries from the last fleet scan."""
+    combined: dict[str, int] = {}
+    for entry in _state.all_summaries:
+        for state_name, count in (entry.get("summary") or {}).items():
+            combined[state_name] = combined.get(state_name, 0) + count
+    return JSONResponse(
+        {
+            "timestamp": _state.all_timestamp,
+            "running": _state.all_running,
+            "projects": _state.all_summaries,
+            "combined": combined,
         }
     )
 
@@ -332,7 +417,7 @@ def propose_detector(req: _ProposeRequest) -> JSONResponse:
 
     Returns ``proposal: null`` when the deterministic heuristic cannot map the
     rule's prose (semantic or provider-specific guidance) — the signal to escalate
-    to an LLM backend. The LLM never judges: any proposal is proven here before a write.
+    to an LLM backend. The LLM never judges: any proposal is proven before a write.
     """
     proposal = _propose(req.rule, req.apply_to)
     if proposal is None:
@@ -390,6 +475,55 @@ def arm_rule(req: _ArmRequest) -> JSONResponse:
             "written": result.written,
         }
     )
+
+
+class _ResolveRequest(BaseModel):
+    """One-click resolution of a dead/advisory rule: propose → prove → arm."""
+
+    rule: str
+    rule_id: str | None = None  # required to write the detector (YAML rules only)
+    apply_to: str = "**/*"
+    dry_run: bool = True  # preview the diff; set false to actually write the detector
+
+
+@app.post("/api/rules/resolve", response_model=None, dependencies=[Depends(require_auth)])
+def resolve_rule(req: _ResolveRequest) -> JSONResponse:
+    """Resolve a rule end to end: derive a detector, prove it, then arm it.
+
+    Chains the existing steps (``_propose`` → ``replay`` → ``apply_detector``)
+    into one action. Detection stays deterministic: the proposal is always
+    replayed for proof, and a rule with no YAML id (a markdown-sourced advisory)
+    is proposed-and-proven only — there is nowhere to persist it, so it is
+    reported ``armed: false`` rather than silently dropped.
+    """
+    proposal = _propose(req.rule, req.apply_to)
+    if proposal is None:
+        return JSONResponse({"resolved": False, "armed": False, "reason": "no detector could be derived"})
+
+    proof = replay(req.rule, proposal.detector, _active_root(), req.apply_to)
+    payload: dict[str, Any] = {
+        "resolved": True,
+        "proposal": {
+            "source": proposal.source,
+            "rationale": proposal.rationale,
+            "forbid": list(proposal.detector.forbid),
+        },
+        "proof": {"match_count": proof.match_count, "files_scanned": proof.files_scanned},
+        "armed": False,
+    }
+    rule_id = req.rule_id or find_rule_id_for_text(_active_root(), req.rule)
+    if rule_id:
+        try:
+            result = apply_detector(
+                _active_root(), rule_id, proposal.detector, dry_run=req.dry_run, provenance=req.rule
+            )
+        except KeyError:
+            payload["note"] = "No YAML rule with this id — proposed and proven only (markdown source)."
+        else:
+            payload.update(rule_id=rule_id, armed=True, written=result.written, diff=result.diff, file=str(result.file))
+    else:
+        payload["note"] = "Markdown-sourced rule — proposed and proven only (no YAML entry to write to)."
+    return JSONResponse(payload)
 
 
 @app.get("/api/constraints", response_model=None, dependencies=[Depends(require_auth)])

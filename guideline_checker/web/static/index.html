@@ -66,6 +66,9 @@
   .rules .rule { font-size: 0.85rem; }
   .rules .src { font-family: var(--mono); font-size: 0.62rem; color: var(--ink-faint); }
   .rules .fires { font-family: var(--mono); font-size: 0.72rem; color: var(--proven); font-variant-numeric: tabular-nums; }
+  .rules .resolve { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.28rem 0.6rem; border-radius: 6px; border: 1px solid var(--armed); background: color-mix(in srgb, var(--armed) 14%, transparent); color: var(--armed); cursor: pointer; white-space: nowrap; }
+  .rules .resolve:hover:not(:disabled) { background: color-mix(in srgb, var(--armed) 26%, transparent); }
+  .rules .resolve:disabled { opacity: 0.6; cursor: default; }
   .empty { padding: 1.4rem; color: var(--ink-faint); font-family: var(--mono); font-size: 0.8rem; text-align: center; }
 
   .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 1rem 1.1rem; position: sticky; top: 1rem; }
@@ -168,8 +171,8 @@ $("theme").addEventListener("click", () => {
   root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
 });
 
-$("scan").addEventListener("click", () => runScan());
-$("project").addEventListener("change", () => runScan($("project").value));
+$("scan").addEventListener("click", () => { const p = $("project").value; p === "__all__" ? runScanAll() : runScan(); });
+$("project").addEventListener("change", () => { const p = $("project").value; p === "__all__" ? runScanAll() : runScan(p); });
 async function runScan(project) {
   $("scan").disabled = true; $("scan").textContent = "Scanning…";
   // Force a fresh poll: clear the table so a switch to another project shows its scan.
@@ -183,14 +186,48 @@ async function runScan(project) {
   finally { $("scan").disabled = false; $("scan").textContent = "Scan"; }
 }
 
+async function runScanAll() {
+  $("scan").disabled = true; $("scan").textContent = "Scanning fleet…";
+  $("rules").innerHTML = '<div class="empty">Scanning every project… (first run is slow)</div>';
+  try {
+    await api("/api/scan-all", { method: "POST" });
+    for (let i = 0; i < 240; i++) {
+      const d = await api("/api/health-all");
+      if (!d.running && d.projects && d.projects.length) { renderAll(d); return; }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  } catch (e) { toast(e.message); }
+  finally { $("scan").disabled = false; $("scan").textContent = "Scan"; }
+}
+
+function renderAll(d) {
+  const c = d.combined || {};
+  const total = STATES.reduce((n, k) => n + (c[k] || 0), 0) || 1;
+  $("stamp").textContent = d.timestamp ? "fleet scanned " + d.timestamp.slice(0, 19).replace("T", " ") : "fleet";
+  $("tiles").innerHTML = STATES.map((k) =>
+    `<div class="tile ${k}"><div class="n">${c[k] || 0}</div><div class="k">${k}</div></div>`).join("");
+  $("bar").innerHTML = STATES.map((k) => `<i class="s-${k}" style="width:${((c[k] || 0) / total) * 100}%"></i>`).join("");
+  const projects = (d.projects || []).slice().sort((a, b) =>
+    (b.summary ? (b.summary.proven || 0) : -1) - (a.summary ? (a.summary.proven || 0) : -1));
+  $("rules-title").textContent = `Projects (${projects.length})`;
+  $("rules").innerHTML = projects.map((p) => {
+    if (p.error) return `<div class="row"><span class="chip dead">error</span><div><div class="rule">${esc(p.name)}</div><div class="src">${esc(p.error)}</div></div></div>`;
+    const s = p.summary || {};
+    const badges = STATES.filter((k) => s[k]).map((k) => `<span class="chip ${k}">${k} ${s[k]}</span>`).join(" ");
+    return `<div class="row"><div><div class="rule">${esc(p.name)}</div><div class="src">${badges}${p.resolvable ? ` · <b>${p.resolvable}</b> resolvable` : ""}</div></div></div>`;
+  }).join("");
+}
+
 async function loadProjects() {
   try {
     const d = await api("/api/projects");
     const sel = $("project");
-    if (!d.projects || d.projects.length < 2) { sel.style.display = "none"; return; }
-    sel.innerHTML = d.projects
+    if (!d.projects || !d.projects.length) { sel.style.display = "none"; return; }
+    const opts = d.projects
       .map((p) => `<option value="${esc(p.name)}"${p.path === d.active ? " selected" : ""}>${esc(p.name)}</option>`)
       .join("");
+    // "All projects" aggregates health across every discovered repo (fleet cockpit).
+    sel.innerHTML = `<option value="__all__">◇ All projects (${d.projects.length})</option>` + opts;
   } catch { $("project").style.display = "none"; }
 }
 
@@ -206,7 +243,8 @@ async function pollHealth(prev) {
 function render(d) {
   health = d.rules || [];
   const s = d.summary || {};
-  $("stamp").textContent = d.timestamp ? "scanned " + d.timestamp.slice(0, 19).replace("T", " ") : "scanned";
+  const stamp = d.timestamp ? "scanned " + d.timestamp.slice(0, 19).replace("T", " ") : "scanned";
+  $("stamp").textContent = d.resolvable ? `${stamp} · ${d.resolvable} resolvable` : stamp;
   const total = d.total_rules || 1;
   $("tiles").innerHTML = STATES.map((k) =>
     `<div class="tile ${k}" data-state="${k}" role="button" tabindex="0" aria-pressed="${activeFilter === k}">
@@ -233,10 +271,35 @@ function renderRules() {
     `<div class="row" data-rule="${esc(r.rule)}">
        <span class="chip ${r.state}">${r.state}</span>
        <div><div class="rule">${esc(r.rule)}</div><div class="src">${esc(r.instruction)}${r.provenance ? ` · from “${esc(r.provenance)}”` : ""}</div></div>
-       <span class="fires">${r.fire_count ? "×" + r.fire_count : ""}</span>
+       ${r.resolvable ? `<button class="resolve" data-rule="${esc(r.rule)}" title="Derive, prove and arm a detector">Resolve</button>` : `<span class="fires">${r.fire_count ? "×" + r.fire_count : ""}</span>`}
      </div>`).join("");
   document.querySelectorAll("#rules .row").forEach((el) =>
     el.addEventListener("click", () => { $("rule").value = el.dataset.rule; $("rule").focus(); }));
+  document.querySelectorAll("#rules .resolve").forEach((btn) =>
+    btn.addEventListener("click", (e) => { e.stopPropagation(); resolveRule(btn.dataset.rule, btn); }));
+}
+
+async function resolveRule(rule, btn) {
+  btn.disabled = true; btn.textContent = "Resolving…";
+  try {
+    // Dry-run first: derive + prove + preview the write, never commit blindly.
+    const d = await api("/api/rules/resolve", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rule, dry_run: true }),
+    });
+    if (!d.resolved) { toast(d.reason || "No detector could be derived"); btn.textContent = "Resolve"; btn.disabled = false; return; }
+    const hits = d.proof ? `${d.proof.match_count} hit(s)` : "";
+    if (!d.armed) { toast(`Proposed (${hits}) but not persistable: ${d.note || "no YAML target"}`); btn.textContent = "Resolve"; btn.disabled = false; return; }
+    if (!confirm(`Arm this rule?\n\nDetector: ${(d.proposal.forbid || []).join(", ")}\nProof: ${hits}\n\nWrites to ${d.file}`)) {
+      btn.textContent = "Resolve"; btn.disabled = false; return;
+    }
+    await api("/api/rules/resolve", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rule, dry_run: false }),
+    });
+    btn.textContent = "Armed ✓";
+    runScan($("project").value && $("project").value !== "__all__" ? $("project").value : undefined);
+  } catch (e) { toast(e.message); btn.textContent = "Resolve"; btn.disabled = false; }
 }
 
 $("propose").addEventListener("click", propose);
