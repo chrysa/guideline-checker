@@ -43,11 +43,15 @@ def apply_detector(
     detector: RuleDetector,
     *,
     dry_run: bool = True,
+    provenance: str | None = None,
 ) -> ApplyResult:
     """Write ``detector`` onto rule ``rule_id`` in its referential file.
 
     Raises ``KeyError`` if no referential rule carries ``rule_id``. With
-    ``dry_run`` the file is untouched and only the diff is returned.
+    ``dry_run`` the file is untouched and only the diff is returned. When
+    ``provenance`` is given (ADR D-0016), it is stamped onto the rule as the
+    host prose sentence the detector was derived from, so the referential stays
+    a cache traceable back to the host's own instructions.
     """
     target = _find_rule_file(root, rule_id)
     if target is None:
@@ -59,6 +63,8 @@ def apply_detector(
     for rule in data.get("rules", []):
         if isinstance(rule, dict) and rule.get("id") == rule_id:
             rule["detect"] = detector_to_detect(detector)
+            if provenance:
+                rule["provenance"] = provenance
             break
 
     after = header + yaml.safe_dump(data, sort_keys=True, allow_unicode=True)

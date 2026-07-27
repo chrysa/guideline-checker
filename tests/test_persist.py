@@ -79,3 +79,36 @@ def test_unknown_rule_id_raises(tmp_path: Path) -> None:
     _referential(tmp_path)
     with pytest.raises(KeyError):
         apply_detector(tmp_path, "does-not-exist", RuleDetector(forbid=("x",)), dry_run=True)
+
+
+def test_provenance_is_stamped_and_round_trips(tmp_path: Path) -> None:
+    """ADR D-0016: arming a detector records the host prose sentence it derives
+    from, and the referential still loads cleanly with that annotation."""
+    _referential(tmp_path)
+    target = tmp_path / "guidelines" / "languages" / "python.yml"
+    sentence = "Never use print for debugging output"
+
+    result = apply_detector(
+        tmp_path,
+        "py-no-print",
+        RuleDetector(forbid=("print(",)),
+        dry_run=False,
+        provenance=sentence,
+    )
+
+    assert result.written is True
+    text = target.read_text(encoding="utf-8")
+    assert "provenance:" in text and sentence in text
+    # The annotation must not break the real loader.
+    instructions = load_yaml_guidelines(tmp_path)
+    detectors = {r: d for instr in instructions for r, d in instr.rule_detectors.items()}
+    assert any("print(" in d.forbid for d in detectors.values())
+
+
+def test_no_provenance_leaves_rule_unannotated(tmp_path: Path) -> None:
+    _referential(tmp_path)
+    target = tmp_path / "guidelines" / "languages" / "python.yml"
+
+    apply_detector(tmp_path, "py-no-print", RuleDetector(forbid=("print(",)), dry_run=False)
+
+    assert "provenance:" not in target.read_text(encoding="utf-8")
