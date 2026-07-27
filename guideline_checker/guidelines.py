@@ -98,6 +98,10 @@ class GuidelineRule:
     rationale: str = ""
     detect: RuleDetector | None = None
     fix: RuleFix | None = None
+    # ADR D-0016: the host prose sentence this rule was derived from. Empty for
+    # rules authored by hand; set when the workshop arms a proposed detector so
+    # the derived cache traces back to the host's own instructions.
+    provenance: str = ""
 
 
 @dataclass
@@ -141,6 +145,8 @@ class _RawRule:
     # The declaring file's target — anchors the target fallback when a rule in
     # another file inherits this one via cross-file extends (D-0008).
     file_target: str = _WILDCARD_TARGET
+    # ADR D-0016: host prose sentence this rule derives from (optional).
+    provenance: str = ""
 
 
 def load_yaml_guidelines(root: Path) -> list[InstructionFile]:
@@ -430,6 +436,7 @@ def _parse_raw_rule(
         detect=_build_detector(path, raw),
         fix=_build_fix(path, rule_id, raw),
         file_target=file_target,
+        provenance=str(raw.get("provenance", "")).strip(),
     )
 
 
@@ -479,6 +486,7 @@ def _merge_rr_with_base(
     target = rr.target or (base.target if base else None) or rr.file_target
     detect = _merge_detectors(base.detect if base else None, rr.detect)
     fix = rr.fix or (base.fix if base else None)
+    provenance = rr.provenance or (base.provenance if base else "")
 
     if category is None:
         raise GuidelineError(f"{rr.path}: rule {rule_id!r} is missing a 'category' (none declared or inherited).")
@@ -495,6 +503,7 @@ def _merge_rr_with_base(
         rationale=rationale,
         detect=detect,
         fix=fix,
+        provenance=provenance,
     )
 
 

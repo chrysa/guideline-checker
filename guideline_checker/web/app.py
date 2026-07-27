@@ -290,6 +290,8 @@ class _ArmRequest(BaseModel):
     scan: list[str] = Field(default_factory=list)
     match_in_comments: bool = False
     dry_run: bool = True
+    # ADR D-0016: the host prose sentence this detector was derived from.
+    provenance: str = ""
 
 
 def _truthy(name: str) -> bool:
@@ -370,7 +372,13 @@ def arm_rule(req: _ArmRequest) -> JSONResponse:
         match_in_comments=req.match_in_comments,
     )
     try:
-        result = apply_detector(_active_root(), req.rule_id, detector, dry_run=req.dry_run)
+        result = apply_detector(
+            _active_root(),
+            req.rule_id,
+            detector,
+            dry_run=req.dry_run,
+            provenance=req.provenance or None,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return JSONResponse(
