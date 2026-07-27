@@ -76,7 +76,7 @@ _DETECT_SCAN_KEY = "scan"
 _FIX_FIELD = "fix"
 _FIX_OPS = frozenset({"remove_line", "replace", "regex_replace"})
 
-# Cross-file inheritance + rule packs (D-0008). Files under guidelines/packs/ are
+# Cross-file inheritance + rule packs (D-0018). Files under guidelines/packs/ are
 # parsed (so their bases are extends-available) but emitted only where included.
 _INCLUDE_FIELD = "include"
 _PACKS_DIR = "packs"
@@ -116,7 +116,7 @@ class _DimensionFile:
 
 @dataclass
 class _ParsedFile:
-    """One referential file after pass 1 — raw rules only, before global resolution (D-0008)."""
+    """One referential file after pass 1 — raw rules only, before global resolution (D-0018)."""
 
     path: Path
     dimension: str
@@ -143,7 +143,7 @@ class _RawRule:
     detect: RuleDetector | None
     fix: RuleFix | None
     # The declaring file's target — anchors the target fallback when a rule in
-    # another file inherits this one via cross-file extends (D-0008).
+    # another file inherits this one via cross-file extends (D-0018).
     file_target: str = _WILDCARD_TARGET
     # ADR D-0016: host prose sentence this rule derives from (optional).
     provenance: str = ""
@@ -159,7 +159,7 @@ def load_yaml_guidelines(root: Path) -> list[InstructionFile]:
     2. Read each file's own ``*_target`` field, overridable per rule;
        ``"*"`` / ``_common.yml`` provide transverse rules.
     3. Parse every file into one global id→rule registry, then resolve ``extends:``
-       against it, so a base may live in another file or an included pack (D-0008);
+       against it, so a base may live in another file or an included pack (D-0018);
        ``abstract: true`` bases are not emitted.
     4. De-duplicate ``id``: a duplicate **within one file** is an authoring bug
        and raises; a duplicate **across files** is an intentional transverse
@@ -318,7 +318,7 @@ def _parse_file(
     """Pass 1 — parse one referential file's header, ``include:`` list, and raw rules.
 
     Resolution is deferred to :func:`_emit_resolved_rules` against the global registry,
-    so a child may extend a base declared in another file or an included pack (D-0008).
+    so a child may extend a base declared in another file or an included pack (D-0018).
     """
     data = _safe_load(path)
     if not isinstance(data, dict):
@@ -464,7 +464,7 @@ def _resolve_base(
     if rr.extends not in raw_by_id:
         raise GuidelineError(
             f"{rr.path}: rule {rule_id!r} extends unknown base {rr.extends!r} — "
-            f"declare the base in this file or an included pack (D-0008).",
+            f"declare the base in this file or an included pack (D-0018).",
         )
     return _resolve_rule(rr.extends, raw_by_id, resolved, categories, (*stack, rule_id))
 
@@ -553,7 +553,7 @@ def _union(base: tuple[str, ...], extra: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def _build_fix(path: Path, rule_id: str, raw: dict[str, object]) -> RuleFix | None:
-    """Validate a rule's optional ``fix:`` block into a :class:`RuleFix` (ADR D-0007)."""
+    """Validate a rule's optional ``fix:`` block into a :class:`RuleFix` (ADR D-0017)."""
     if _FIX_FIELD not in raw:
         return None
     block = raw[_FIX_FIELD]
