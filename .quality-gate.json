@@ -4,7 +4,7 @@
     "coverage": "make test-cov",
     "lint": "make lint",
     "tests": "make test",
-    "types": "make type-check"
+    "types": "make typecheck"
   },
   "description": "Quality gate configuration for Python project",
   "thresholds": {
