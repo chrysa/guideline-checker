@@ -77,6 +77,10 @@ class InstructionFile:
     # Maps a rule statement to its declarative autofix. Populated only by YAML rules
     # that carry a ``fix:`` block; a rule with no entry here is detect-only (ADR D-0007).
     rule_fixes: dict[str, RuleFix] = field(default_factory=dict)
+    # Maps a rule statement to the host prose sentence it was derived from (ADR
+    # D-0016). Populated only by YAML rules carrying a ``provenance:`` field; a
+    # rule with no entry was hand-authored and traces to nothing in host prose.
+    rule_provenance: dict[str, str] = field(default_factory=dict)
 
 
 def load_instructions(instructions_dir: Path) -> list[InstructionFile]:
