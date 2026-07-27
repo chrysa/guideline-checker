@@ -3,7 +3,7 @@
 Distinct from :mod:`guideline_checker.fixers`, which opens remote distribution-fix PRs.
 This module rewrites the *local working tree* for the exact lines that a fixable rule
 flagged. Detection stays the source of truth — a line is only touched where a violation
-fired. All operations are mechanical and idempotent (ADR D-0007).
+fired. All operations are mechanical and idempotent (ADR D-0017).
 """
 
 from __future__ import annotations

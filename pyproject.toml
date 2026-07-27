@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "guideline-checker"
-# Version is derived from git tags by setuptools-scm (never bumped manually — D-0009).
+# Version is derived from git tags by setuptools-scm (never bumped manually — D-0019).
 # Builds without a .git (e.g. the Docker image) use fallback_version, or the
 # SETUPTOOLS_SCM_PRETEND_VERSION env var when the release/deploy stamps the tag.
 dynamic = ["version"]

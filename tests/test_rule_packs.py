@@ -1,4 +1,4 @@
-"""Tests for cross-file rule inheritance and distributable rule packs (L2.4 / D-0008)."""
+"""Tests for cross-file rule inheritance and distributable rule packs (L2.4 / D-0018)."""
 
 from __future__ import annotations
 

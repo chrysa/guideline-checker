@@ -284,10 +284,15 @@ every reporter + the dashboard for free.
 
 ---
 
-## D-0007 — Local autofix via a declarative `fix:` block
+## D-0017 — Local autofix via a declarative `fix:` block
 
 **Date**: 2026-07-07
 **Status**: accepted
+
+> Renumbered 2026-07-27 from a duplicate `D-0007` (ID collided with the
+> `extends:` inheritance ADR above). The three 2026-07-07 records (autofix,
+> rule packs, version-from-tags) reused D-0007/8/9 and are renumbered to
+> D-0017/18/19; their content and dates are unchanged.
 
 The checker could only *flag* violations. `fixers.py` exists but is a fleet-level
 distribution-drift remediator — it opens one GitHub PR per repo through a `GhClient`
@@ -335,10 +340,12 @@ contract, the same reasoning as D-0004.
 
 ---
 
-## D-0008 — Cross-file rule inheritance and distributable rule packs
+## D-0018 — Cross-file rule inheritance and distributable rule packs
 
 **Date**: 2026-07-07
 **Status**: accepted
+
+> Renumbered 2026-07-27 from a duplicate `D-0008` (see D-0017's note).
 
 D-0004/L1.4 gave rules a same-file `extends:` — a child could only inherit from a base
 declared in the *same* referential file, because resolution ran per file against that
@@ -385,10 +392,12 @@ load-time concern and the checker is unchanged.
 
 ---
 
-## D-0009 — Version derived from git tags (setuptools-scm), never hardcoded
+## D-0019 — Version derived from git tags (setuptools-scm), never hardcoded
 
 **Date**: 2026-07-07
 **Status**: accepted
+
+> Renumbered 2026-07-27 from a duplicate `D-0009` (see D-0017's note).
 
 The package version was hardcoded in **two** places — `pyproject.toml` (`version = "1.0.0"`)
 and `guideline_checker/__init__.py` (`__version__ = "1.0.0"`) — and never updated, while

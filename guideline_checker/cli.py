@@ -602,7 +602,7 @@ def _severity_counts(results: list[RuleResult]) -> tuple[int, int]:
 
 
 def _run_autofix(args: argparse.Namespace, results: list[RuleResult], root: Path) -> int:
-    """Apply (or preview) local autofixes, then gate on the post-fix state (ADR D-0007)."""
+    """Apply (or preview) local autofixes, then gate on the post-fix state (ADR D-0017)."""
     from guideline_checker.autofix import apply_local_fixes
     from guideline_checker.guidelines import load_yaml_guidelines
 

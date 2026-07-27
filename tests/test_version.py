@@ -1,4 +1,4 @@
-"""Guard the setuptools-scm version single-sourcing (D-0009)."""
+"""Guard the setuptools-scm version single-sourcing (D-0019)."""
 
 from __future__ import annotations
 
