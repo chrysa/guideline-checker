@@ -232,7 +232,7 @@ function renderRules() {
   $("rules").innerHTML = rows.slice(0, 300).map((r) =>
     `<div class="row" data-rule="${esc(r.rule)}">
        <span class="chip ${r.state}">${r.state}</span>
-       <div><div class="rule">${esc(r.rule)}</div><div class="src">${esc(r.instruction)}</div></div>
+       <div><div class="rule">${esc(r.rule)}</div><div class="src">${esc(r.instruction)}${r.provenance ? ` · from “${esc(r.provenance)}”` : ""}</div></div>
        <span class="fires">${r.fire_count ? "×" + r.fire_count : ""}</span>
      </div>`).join("");
   document.querySelectorAll("#rules .row").forEach((el) =>

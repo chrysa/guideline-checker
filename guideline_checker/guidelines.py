@@ -671,6 +671,7 @@ def _to_instruction_files(df: _DimensionFile) -> list[InstructionFile]:
                 rule_severity={r.rule: r.severity for r in rules},
                 rule_detectors={r.rule: r.detect for r in rules if r.detect is not None},
                 rule_fixes={r.rule: r.fix for r in rules if r.fix is not None},
+                rule_provenance={r.rule: r.provenance for r in rules if r.provenance},
             ),
         )
     return instruction_files
