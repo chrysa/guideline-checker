@@ -25,6 +25,8 @@ _PYDANTIC_V1_NAMES = frozenset({"validator", "root_validator", "BaseSettings"})
 _PYDANTIC_V1_DECORATORS = frozenset({"validator", "root_validator"})
 # HTTP method attributes that mark a FastAPI/Starlette/APIRouter route decorator.
 _ROUTE_METHODS = frozenset({"get", "post", "put", "patch", "delete", "head", "options"})
+# Exception names whose catch is blanket rather than targeted.
+_BLANKET_EXCEPTIONS = frozenset({"Exception", "BaseException"})
 # Identifiers a route decorator is typically called on (``@app.get`` / ``@router.post``).
 _ROUTE_OWNERS = frozenset({"app", "router"})
 
@@ -113,10 +115,46 @@ def _check_mutable_default(tree: ast.Module) -> list[tuple[int, str]]:
     return findings
 
 
+def _check_silent_exception(tree: ast.Module) -> list[tuple[int, str]]:
+    """An exception caught broadly and discarded without a trace.
+
+    ``except Exception: pass`` turns a failure into silence: the program carries
+    on with wrong state instead of stopping. A narrow handler that acts is fine,
+    so only a bare or blanket catch whose body is nothing but ``pass`` fires.
+    """
+    findings: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ExceptHandler):
+            continue
+        body_is_silent = all(isinstance(stmt, ast.Pass) for stmt in node.body)
+        catches_everything = node.type is None or (
+            isinstance(node.type, ast.Name) and node.type.id in _BLANKET_EXCEPTIONS
+        )
+        if body_is_silent and catches_everything:
+            findings.append((node.lineno, "exception caught and silently discarded"))
+    return findings
+
+
+def _check_assert_as_validation(tree: ast.Module) -> list[tuple[int, str]]:
+    """``assert`` used to guard runtime behaviour.
+
+    Python removes asserts under ``-O``, so a check that protects execution must
+    not be one. Test files use ``assert`` legitimately; scoping this check to
+    non-test paths is the referential's job, via ``applyTo``.
+    """
+    return [
+        (node.lineno, "assert used as a runtime check; -O removes it")
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assert)
+    ]
+
+
 _AST_CHECKS: dict[str, AstCheck] = {
     "pydantic-v1": _check_pydantic_v1,
     "sync-fastapi-route": _check_sync_fastapi_route,
     "mutable-default-arg": _check_mutable_default,
+    "silent-exception": _check_silent_exception,
+    "assert-as-validation": _check_assert_as_validation,
 }
 
 # Exposed for the YAML loader to validate ``detect.ast`` names against.
