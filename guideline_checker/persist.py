@@ -22,6 +22,7 @@ _PATTERN_FIELDS = (
     ("forbid", "forbid"),
     ("forbid_regex", "forbid_regex"),
     ("file_regex", "file_regex"),
+    ("require_regex", "require_regex"),
     ("ast_checks", "ast"),
     ("scan_checks", "scan"),
 )

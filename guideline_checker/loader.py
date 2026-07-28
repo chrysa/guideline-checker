@@ -38,6 +38,7 @@ class RuleDetector:
     forbid: tuple[str, ...] = ()  # per-line, case-insensitive substring
     forbid_regex: tuple[str, ...] = ()  # per-line, case-insensitive regex
     file_regex: tuple[str, ...] = ()  # whole-file regex (MULTILINE | IGNORECASE)
+    require_regex: tuple[str, ...] = ()  # whole-file regex that MUST match — absence is the violation
     ast_checks: tuple[str, ...] = ()  # named Python AST checks (see ast_python.VALID_AST_CHECKS)
     scan_checks: tuple[str, ...] = ()  # named content scanners (see scanners.VALID_SCANS)
     match_in_comments: bool = False  # applies to forbid / forbid_regex

@@ -67,7 +67,7 @@ _EXTENDS_FIELD = "extends"
 _ABSTRACT_FIELD = "abstract"
 _DETECT_FIELD = "detect"
 # The list-of-pattern keys a ``detect:`` block may carry (all optional).
-_DETECT_PATTERN_KEYS = ("forbid", "forbid_regex", "file_regex")
+_DETECT_PATTERN_KEYS = ("forbid", "forbid_regex", "file_regex", "require_regex")
 # Named AST checks (validated against _ALL_AST_CHECKS: Python + JS/TS engines).
 _DETECT_AST_KEY = "ast"
 # Named content scanners (validated against scanners.VALID_SCANS).
@@ -542,7 +542,10 @@ def _merge_detectors(base: RuleDetector | None, child: RuleDetector | None) -> R
         forbid=_union(base.forbid, child.forbid),
         forbid_regex=_union(base.forbid_regex, child.forbid_regex),
         file_regex=_union(base.file_regex, child.file_regex),
+        require_regex=_union(base.require_regex, child.require_regex),
         ast_checks=_union(base.ast_checks, child.ast_checks),
+        # scan_checks was missing here: a base's scanner silently vanished on extends.
+        scan_checks=_union(base.scan_checks, child.scan_checks),
         match_in_comments=base.match_in_comments or child.match_in_comments,
     )
 
@@ -629,6 +632,7 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
         forbid=patterns["forbid"],
         forbid_regex=patterns["forbid_regex"],
         file_regex=patterns["file_regex"],
+        require_regex=patterns["require_regex"],
         ast_checks=ast_checks,
         scan_checks=scan_checks,
         match_in_comments=match_in_comments,
