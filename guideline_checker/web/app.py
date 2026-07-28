@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import importlib.resources
 import os
+import re
+import shutil
 import threading
+from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -68,6 +71,8 @@ class _ScanState:
     timestamp: str | None = None
     running: bool = False
     error: str | None = None
+    # Compliance grade for the active project (derived from scan violations).
+    compliance: dict[str, Any] = field(default_factory=dict)
     # Fleet aggregate (the "All projects" view): one health summary per
     # discovered project, computed on demand by _do_scan_all.
     all_summaries: list[dict[str, Any]] = field(default_factory=list)
@@ -115,15 +120,16 @@ _HEURISTIC: HeuristicProposer = HeuristicProposer()
 
 
 def _is_resolvable(entry: RuleHealth) -> bool:
-    """A rule is resolvable when a detector can plausibly be derived for it.
+    """A rule is resolvable when the workshop can arm it in one click.
 
-    Only ``dead`` and ``advisory`` rules need resolving (proven/armed already
-    have a detector). Of those, one is actionable when the free heuristic maps
-    its prose **or** an LLM backend is enabled to attempt it. Advisory rules are
-    by construction the ones the phrase table cannot map, so with no LLM the
-    honest answer is that they are not mechanically resolvable.
+    Only ``dead`` rules qualify: they are YAML referential rules advertised as
+    enforceable but carrying no detector, so a proven detector can be written
+    back onto them. (``advisory`` rules are markdown-sourced — a detector can be
+    *proposed* for them in the panel, but there is no YAML entry to persist, so
+    they are not one-click resolvable.) Actionable when the free heuristic maps
+    the prose or an LLM backend is available to attempt it.
     """
-    if entry.state.value not in {"dead", "advisory"}:
+    if entry.state.value != "dead":
         return False
     return _HEURISTIC.propose(entry.rule) is not None or _llm_enabled()
 
@@ -165,6 +171,33 @@ def _serialize_constraints(sources: list[InstructionFile]) -> list[dict[str, Any
     ]
 
 
+def _count_severities(results: list[RuleResult]) -> tuple[int, int, int]:
+    """Total (errors, warnings, infos) across every violation of a scan."""
+    counts: Counter[str] = Counter(v.severity for r in results for v in r.violations)
+    return counts.get("error", 0), counts.get("warning", 0), counts.get("info", 0)
+
+
+def _compliance_note(errors: int, warnings: int, dead: int, total_rules: int) -> dict[str, Any]:
+    """Grade a project's compliance from its scan — a letter a human reads at a glance.
+
+    Compliance is about the code obeying its rules, so error/warning violations
+    dominate; a few dead referential rules shave a little off (the checker lied
+    about being able to enforce them). ``n/a`` when there is nothing to grade.
+    """
+    if total_rules == 0:
+        return {"grade": "n/a", "score": None, "errors": errors, "warnings": warnings, "dead": dead}
+    score = 100
+    score -= min(48, errors * 8)  # errors are blocking — heaviest, but bounded
+    score -= min(20, warnings)  # warnings sting lightly and cap out
+    score -= min(12, dead * 2)  # a rule that can't fire is a referential defect
+    score = max(0, score)
+    grade = next(g for threshold, g in _GRADE_BANDS if score >= threshold)
+    return {"grade": grade, "score": score, "errors": errors, "warnings": warnings, "dead": dead}
+
+
+_GRADE_BANDS: tuple[tuple[int, str], ...] = ((90, "A"), (75, "B"), (60, "C"), (45, "D"), (0, "F"))
+
+
 def _do_scan() -> None:
     """Run a full compliance scan of the active project and update _state."""
     root = _active_root()
@@ -178,6 +211,8 @@ def _do_scan() -> None:
         health = compute_rule_health([r.instruction for r in results], results)
         _state.health = _serialize_health(health)
         _state.health_summary = summarize(health)
+        errors, warnings, _infos = _count_severities(results)
+        _state.compliance = _compliance_note(errors, warnings, _state.health_summary.get("dead", 0), len(health))
         _state.timestamp = datetime.now(UTC).isoformat()
     except Exception as exc:  # pragma: no cover
         _state.error = str(exc)
@@ -195,7 +230,9 @@ def _project_health_summary(root: Path) -> dict[str, Any]:
     health = compute_rule_health([r.instruction for r in results], results)
     summary = summarize(health)
     resolvable = sum(1 for h in health if _is_resolvable(h))
-    return {"summary": summary, "total": len(health), "resolvable": resolvable}
+    errors, warnings, _infos = _count_severities(results)
+    compliance = _compliance_note(errors, warnings, summary.get("dead", 0), len(health))
+    return {"summary": summary, "total": len(health), "resolvable": resolvable, "compliance": compliance}
 
 
 def _do_scan_all() -> None:
@@ -366,6 +403,7 @@ def get_rules_health() -> JSONResponse:
             "timestamp": _state.timestamp,
             "summary": _state.health_summary,
             "resolvable": resolvable,
+            "compliance": _state.compliance,
             "rules": _state.health,
             "total_rules": len(_state.health),
         }
@@ -385,15 +423,22 @@ def trigger_scan_all(background_tasks: BackgroundTasks) -> dict[str, str]:
 def get_health_all() -> JSONResponse:
     """Return the per-project health summaries from the last fleet scan."""
     combined: dict[str, int] = {}
+    errors = warnings = dead = total = 0
     for entry in _state.all_summaries:
         for state_name, count in (entry.get("summary") or {}).items():
             combined[state_name] = combined.get(state_name, 0) + count
+        note = entry.get("compliance") or {}
+        errors += note.get("errors", 0)
+        warnings += note.get("warnings", 0)
+        dead += note.get("dead", 0)
+        total += entry.get("total", 0)
     return JSONResponse(
         {
             "timestamp": _state.all_timestamp,
             "running": _state.all_running,
             "projects": _state.all_summaries,
             "combined": combined,
+            "compliance": _compliance_note(errors, warnings, dead, total),
         }
     )
 
@@ -445,14 +490,32 @@ def _truthy(name: str) -> bool:
     return os.environ.get(name, "").lower() in {"1", "true", "yes"}
 
 
+def _falsey(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"0", "false", "no"}
+
+
+def _claude_available() -> bool:
+    """The Claude CLI backend auto-enables in the workshop when it is installed.
+
+    ADR D-0013 makes the Claude CLI the default LLM backend; requiring a flag
+    made "propose a fix" silently do nothing out of the box. So when the CLI is
+    on PATH we use it automatically — set ``GC_CLAUDE=0`` to opt out. This only
+    affects the *workshop* proposal step; the CI/pre-commit gate never calls an
+    LLM (the deterministic boundary of D-0012 is untouched).
+    """
+    if _falsey("GC_CLAUDE"):
+        return False
+    return shutil.which(os.environ.get("GC_CLAUDE_BIN", "claude")) is not None
+
+
 def _llm_enabled() -> bool:
-    """The LLM escalation is opt-in — off unless a backend flag is set."""
-    return _truthy("GC_CLAUDE") or _truthy("GC_OLLAMA")
+    """True when a proposal backend is available (auto Claude CLI, or an opt-in flag)."""
+    return _truthy("GC_CLAUDE") or _truthy("GC_OLLAMA") or _claude_available()
 
 
 def _llm_proposer() -> Proposer | None:
-    """Pick the enabled LLM backend: Claude (portable) preferred, else Ollama (local)."""
-    if _truthy("GC_CLAUDE"):
+    """Pick the backend: Claude (auto when installed, or GC_CLAUDE) preferred, else Ollama."""
+    if _truthy("GC_CLAUDE") or _claude_available():
         return ClaudeProposer(binary=os.environ.get("GC_CLAUDE_BIN", "claude"))
     if _truthy("GC_OLLAMA"):
         return OllamaProposer(
@@ -496,6 +559,8 @@ def propose_detector(req: _ProposeRequest) -> JSONResponse:
                 "source": proposal.source,
                 "rationale": proposal.rationale,
                 "forbid": list(proposal.detector.forbid),
+                "forbid_regex": list(proposal.detector.forbid_regex),
+                "file_regex": list(proposal.detector.file_regex),
                 "match_in_comments": proposal.detector.match_in_comments,
             },
             "proof": {
@@ -561,15 +626,28 @@ def resolve_rule(req: _ResolveRequest) -> JSONResponse:
     if proposal is None:
         return JSONResponse({"resolved": False, "armed": False, "reason": "no detector could be derived"})
 
-    proof = replay(req.rule, proposal.detector, _active_root(), req.apply_to)
+    try:
+        proof = replay(req.rule, proposal.detector, _active_root(), req.apply_to)
+    except re.error as exc:
+        # A non-deterministic LLM can hand back a malformed regex; that is an
+        # input error, not a server fault. Report it so the UI can re-propose.
+        return JSONResponse(
+            {"resolved": False, "armed": False, "reason": f"proposed detector is invalid ({exc}) — re-propose"}
+        )
     payload: dict[str, Any] = {
         "resolved": True,
         "proposal": {
             "source": proposal.source,
             "rationale": proposal.rationale,
             "forbid": list(proposal.detector.forbid),
+            "forbid_regex": list(proposal.detector.forbid_regex),
+            "file_regex": list(proposal.detector.file_regex),
         },
-        "proof": {"match_count": proof.match_count, "files_scanned": proof.files_scanned},
+        "proof": {
+            "match_count": proof.match_count,
+            "files_scanned": proof.files_scanned,
+            "hits": [{"file": h.file, "line": h.line, "excerpt": h.excerpt} for h in proof.hits],
+        },
         "armed": False,
     }
     rule_id = req.rule_id or find_rule_id_for_text(_active_root(), req.rule)
