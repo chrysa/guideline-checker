@@ -645,6 +645,54 @@ numeric chrysa literals; (b) a CI grep gate asserts no bare threshold/version li
 ADR removes; (b) let the LLM judge at CI time — non-deterministic gate, violates
 D-0012's "LLM proposes, never judges"; the cache is the determinism boundary.
 
+## D-0020 — The MECHANISMS taxonomy: a finite set of generic check kinds
+
+**Date**: 2026-07-28
+**Status**: accepted
+
+D-0016 draws the line — mechanisms in the engine, values in the host — but the
+mechanism layer was only *implicit*: which generic check a rule used was an
+accident of which `detect.*` field (`forbid`, `forbid_regex`, `file_regex`,
+`ast`, `scan`) it happened to carry, or which phrase the checker recognised.
+Nothing named the finite set of mechanisms or let a rule (or a reader) say *how*
+a rule is measured, independently of *what* it enforces.
+
+**Decision.** Name the mechanism layer as a first-class, value-free taxonomy in
+`kinds.py` — a `CheckKind` enum with a fixed set: `forbidden-pattern`,
+`file-content`, `ast-structure`, `content-scan`, `numeric-threshold`,
+`file-presence`, and `advisory` (no mechanical kind). Each kind describes only
+what it *measures*; the pattern, metric, threshold or path it measures against
+always comes from host prose/config, never from this table. `kind_of_detector`
+classifies a `RuleDetector` and `kind_of_phrase` a phrase-detected rule, so every
+rule reports exactly one kind. `RuleHealth` carries it, `/api/rules-health`
+serialises it, and the workshop shows it next to each rule.
+
+This is **purely additive**: classification is derived from the existing
+`RuleDetector` and phrase table, so detection behaviour is unchanged — the engine
+runs exactly as before. It makes the D-0016 mechanism/value split inspectable and
+is the anchor for later work (interpret-once maps a host sentence onto a kind +
+its params; a kind not yet implemented — e.g. `file-freshness`, an explicit
+`naming-convention` — is added here once, not case by case across the checker).
+
+**Fatal hypothesis.** The rules real host prose expresses fall into this finite
+kind set; a rule needing a mechanism outside it is rare enough to add as one new
+kind, not a reason to abandon the fixed taxonomy.
+
+**Kill-test.** Across the fleet self-scan, every enforceable rule classifies into
+a kind (no `advisory` rule that actually carries a working detector). If a class
+of enforceable rules cannot be expressed as a bounded kind set — each new rule
+needing a bespoke mechanism — the taxonomy is the wrong abstraction and this is
+`Killed`.
+
+**Validation gate.** Landed additive with no detection change (existing suite
+green); `kind` visible in the health API and workshop before any interpret-once
+mapping is built on top.
+
+*Rejected*: (a) leave the mechanism implicit in `detect.*` — a reader cannot see
+the mechanism without reading the YAML internals, and interpret-once has no target
+vocabulary to map prose onto; (b) model kinds as free-form strings — a taxonomy
+that is not a closed set cannot be reasoned about or kill-tested.
+
 ## D-0015 — Multi-project web workshop (workspace selector)
 
 **Date**: 2026-07-23

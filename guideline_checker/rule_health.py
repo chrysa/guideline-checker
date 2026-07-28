@@ -22,6 +22,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from guideline_checker.checker import _build_checks
+from guideline_checker.kinds import CheckKind, kind_of_detector, kind_of_phrase
 from guideline_checker.loader import SourceType
 
 if TYPE_CHECKING:
@@ -66,6 +67,8 @@ class RuleHealth:
     reason: str
     # ADR D-0016: the host prose sentence this rule derives from ("" if none).
     provenance: str = ""
+    # ADR D-0020: the generic mechanism (kind) this rule is checked by.
+    kind: str = CheckKind.ADVISORY.value
 
 
 def compute_rule_health(
@@ -141,7 +144,10 @@ def _rule_health(
             fire_count=0,
             reason=reason,
             provenance=provenance,
+            kind=CheckKind.ADVISORY.value,
         )
+
+    kind = kind_of_detector(instruction.rule_detectors.get(rule)) if has_detector else kind_of_phrase(rule)
 
     mechanism = "declarative detector" if has_detector else "phrase-derived check"
     if fire_count > 0:
@@ -158,4 +164,5 @@ def _rule_health(
         fire_count=fire_count,
         reason=reason,
         provenance=provenance,
+        kind=(kind or CheckKind.FORBIDDEN_PATTERN).value,
     )
