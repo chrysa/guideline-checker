@@ -121,6 +121,6 @@ repos:
   repo: https://github.com/igorshubovych/markdownlint-cli
   rev: v0.49.1
 - repo: https://github.com/chrysa/guideline-checker
-  rev: v1.25.0
+  rev: v1.27.0
   hooks:
   - id: guideline-check

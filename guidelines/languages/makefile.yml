@@ -1,0 +1,36 @@
+apply_to_glob: '**/Makefile'
+language_target: makefile
+rules:
+- category: correctness
+  detect:
+    forbid_regex:
+    - '^type-check\s*:'
+    - '^test_cov\s*:'
+    - '^quality_gate_verify\s*:'
+  id: mk-canonical-target-names
+  rationale: A renamed target silently breaks every caller that follows the referential
+    — CI, hooks, and the docs that cite it
+  rule: Use the canonical target spelling, never a renamed variant
+  severity: error
+- category: correctness
+  detect:
+    require_regex:
+    - '^help\s*:'
+    - '^install\s*:'
+    - '^install-dev\s*:'
+    - '^lint\s*:'
+    - '^format\s*:'
+    - '^format-check\s*:'
+    - '^typecheck\s*:'
+    - '^test\s*:'
+    - '^test-cov\s*:'
+    - '^pre-commit\s*:'
+    - '^clean\s*:'
+    - '^ci\s*:'
+    - '^quality-gate-baseline\s*:'
+    - '^quality-gate-verify\s*:'
+  id: mk-mandatory-target-socle
+  rationale: A missing target makes the documented workflow unrunnable, and the gap
+    only surfaces when someone tries the command and it fails
+  rule: Expose the mandatory Makefile target socle
+  severity: warning
