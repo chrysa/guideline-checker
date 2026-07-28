@@ -8,8 +8,8 @@ rules:
     - '^test_cov\s*:'
     - '^quality_gate_verify\s*:'
   id: mk-canonical-target-names
-  rationale: A renamed target silently breaks every caller that follows the referential
-    — CI, hooks, and the docs that cite it
+  rationale: A renamed target silently breaks every caller that follows the
+    referential, from CI to hooks to the docs that cite it
   rule: Use the canonical target spelling, never a renamed variant
   severity: error
 - category: correctness

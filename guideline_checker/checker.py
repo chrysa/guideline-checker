@@ -142,6 +142,9 @@ def _is_text_file(path: Path, max_file_size: int) -> bool:
     return suffix in _TEXT_EXTENSIONS or (suffix == "" and path.stat().st_size < 512_000)
 
 
+# ``define_in`` value asking the lookup to happen inside the citing file itself.
+_SELF_REFERENCE = "@self"
+
 # Inline suppression marker — add this comment on any line to skip all rule checks
 DISABLE_COMMENT = "guideline: disable"
 
@@ -657,6 +660,56 @@ def _require_regex_violations(
     ]
 
 
+def _cross_reference_violations(
+    file_path: Path,
+    lines: list[str],
+    rule: str,
+    detector: RuleDetector,
+    root: Path | None,
+) -> list[Violation]:
+    """Flag a citation whose definition cannot be found where it should be.
+
+    Neither file is wrong on its own: the documentation reads fine, and so does
+    the file it points at. The defect lives in the gap, which is why every
+    single-file mechanism was blind to it.
+    """
+    reference = detector.cross_reference
+    if reference is None:
+        return []
+    definitions = _definition_text(file_path, lines, reference.define_in, root)
+    if definitions is None:
+        return []  # nothing to check against: a missing target file is a different defect
+    violations: list[Violation] = []
+    for lineno, line in enumerate(lines, start=1):
+        for match in _compile_regex(reference.cite).finditer(line):
+            name = match.group(1) if match.groups() else match.group(0)
+            shape = reference.define_as.replace("{name}", re.escape(name))
+            if _compile_regex(shape).search(definitions):
+                continue
+            violations.append(
+                Violation(
+                    file=file_path,
+                    line_number=lineno,
+                    line_content=f"{name} — not defined in {reference.define_in}"[:120],
+                    rule=rule,
+                    severity="warning",
+                ),
+            )
+    return violations
+
+
+def _definition_text(file_path: Path, lines: list[str], define_in: str, root: Path | None) -> str | None:
+    """Read the file a citation must resolve against, or ``None`` if unavailable."""
+    if define_in == _SELF_REFERENCE:
+        return "\n".join(lines)
+    base = root if root is not None else file_path.parent
+    target = base / define_in
+    try:
+        return target.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
 def _ast_violations(
     file_path: Path,
     lines: list[str],
@@ -734,6 +787,7 @@ def _declared_violations(
     violations.extend(_per_line_violations(file_path, lines, rule, detector))
     violations.extend(_file_regex_violations(file_path, lines, rule, detector))
     violations.extend(_require_regex_violations(file_path, lines, rule, detector))
+    violations.extend(_cross_reference_violations(file_path, lines, rule, detector, root))
     violations.extend(_ast_violations(file_path, lines, rule, detector))
     violations.extend(_scan_violations(file_path, lines, rule, detector, root))
     return violations

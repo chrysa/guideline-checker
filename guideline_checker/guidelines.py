@@ -37,7 +37,7 @@ import yaml
 
 from guideline_checker.ast_javascript import VALID_JS_AST_CHECKS, unknown_js_checks
 from guideline_checker.ast_python import VALID_AST_CHECKS, unknown_checks
-from guideline_checker.loader import InstructionFile, RuleDetector, RuleFix, SourceType
+from guideline_checker.loader import CrossReference, InstructionFile, RuleDetector, RuleFix, SourceType
 from guideline_checker.scanners import VALID_SCANS, unknown_scans
 
 logger = logging.getLogger(__name__)
@@ -72,6 +72,9 @@ _DETECT_PATTERN_KEYS = ("forbid", "forbid_regex", "file_regex", "require_regex")
 _DETECT_AST_KEY = "ast"
 # Named content scanners (validated against scanners.VALID_SCANS).
 _DETECT_SCAN_KEY = "scan"
+# A citation here, its definition elsewhere (see loader.CrossReference).
+_DETECT_CROSSREF_KEY = "cross_reference"
+_CROSSREF_FIELDS = ("cite", "define_in", "define_as")
 
 _FIX_FIELD = "fix"
 _FIX_OPS = frozenset({"remove_line", "replace", "regex_replace"})
@@ -546,6 +549,7 @@ def _merge_detectors(base: RuleDetector | None, child: RuleDetector | None) -> R
         ast_checks=_union(base.ast_checks, child.ast_checks),
         # scan_checks was missing here: a base's scanner silently vanished on extends.
         scan_checks=_union(base.scan_checks, child.scan_checks),
+        cross_reference=child.cross_reference or base.cross_reference,
         match_in_comments=base.match_in_comments or child.match_in_comments,
     )
 
@@ -590,7 +594,13 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
     if not isinstance(block, dict):
         raise GuidelineError(f"{path}: rule {raw['id']!r} 'detect' must be a mapping.")
 
-    allowed = {*_DETECT_PATTERN_KEYS, _DETECT_AST_KEY, _DETECT_SCAN_KEY, "match_in_comments"}
+    allowed = {
+        *_DETECT_PATTERN_KEYS,
+        _DETECT_AST_KEY,
+        _DETECT_SCAN_KEY,
+        _DETECT_CROSSREF_KEY,
+        "match_in_comments",
+    }
     unknown = set(block) - allowed
     if unknown:
         raise GuidelineError(
@@ -621,8 +631,9 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
     if not isinstance(match_in_comments, bool):
         raise GuidelineError(f"{path}: rule {raw['id']!r} 'detect.match_in_comments' must be a boolean.")
 
-    if not any(patterns.values()) and not ast_checks and not scan_checks:
-        detect_keys = sorted((*_DETECT_PATTERN_KEYS, _DETECT_AST_KEY, _DETECT_SCAN_KEY))
+    cross_reference = _build_cross_reference(path, raw, block)
+    if not any(patterns.values()) and not ast_checks and not scan_checks and cross_reference is None:
+        detect_keys = sorted((*_DETECT_PATTERN_KEYS, _DETECT_AST_KEY, _DETECT_SCAN_KEY, _DETECT_CROSSREF_KEY))
         raise GuidelineError(
             f"{path}: rule {raw['id']!r} 'detect' declares no patterns — "
             f"add at least one of {detect_keys} or drop the block.",
@@ -633,10 +644,36 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
         forbid_regex=patterns["forbid_regex"],
         file_regex=patterns["file_regex"],
         require_regex=patterns["require_regex"],
+        cross_reference=cross_reference,
         ast_checks=ast_checks,
         scan_checks=scan_checks,
         match_in_comments=match_in_comments,
     )
+
+
+def _build_cross_reference(path: Path, raw: dict[str, object], block: dict[str, object]) -> CrossReference | None:
+    """Validate the optional ``detect.cross_reference`` mapping.
+
+    All three fields are required together: a citation with nowhere to look it up,
+    or a lookup with no shape to match, would load fine and check nothing.
+    """
+    value = block.get(_DETECT_CROSSREF_KEY)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise GuidelineError(f"{path}: rule {raw['id']!r} 'detect.cross_reference' must be a mapping.")
+    missing = [field for field in _CROSSREF_FIELDS if not isinstance(value.get(field), str) or not value[field]]
+    if missing:
+        raise GuidelineError(
+            f"{path}: rule {raw['id']!r} 'detect.cross_reference' is missing {missing} "
+            f"(required: {list(_CROSSREF_FIELDS)}).",
+        )
+    unknown = sorted(set(value) - set(_CROSSREF_FIELDS))
+    if unknown:
+        raise GuidelineError(
+            f"{path}: rule {raw['id']!r} 'detect.cross_reference' has unknown key(s) {unknown}.",
+        )
+    return CrossReference(cite=str(value["cite"]), define_in=str(value["define_in"]), define_as=str(value["define_as"]))
 
 
 def _coerce_pattern_list(path: Path, rule_id: object, key: str, value: object) -> tuple[str, ...]:
