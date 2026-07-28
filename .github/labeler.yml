@@ -60,7 +60,6 @@ Makefiles:
 - changed-files:
   - any-glob-to-any-file:
     - Makefile
-    - makefiles/**
 Pre-commit:
 - changed-files:
   - any-glob-to-any-file:

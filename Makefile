@@ -1,8 +1,5 @@
 #!make
 # makefile-tier: python-app
-ifneq (,)
-	$(error This Makefile requires GNU Make)
-endif
 
 # ─── Variables ────────────────────────────────────────────────────────────────
 PROJECT_NAME ?= guideline-checker
@@ -103,7 +100,12 @@ docker-test: ## Run tests inside Docker container
 	@# -T disables pseudo-TTY allocation so the target also runs from non-interactive
 	@# contexts (CI, the run-tests pre-push hook), which otherwise fail with
 	@# "the input device is not a TTY".
-	docker compose run --rm -T test
+	@# --build is not optional: the test image COPYs the sources, so without it a run
+	@# reuses a stale image and reports a pass for code it never executed. The pre-push
+	@# hook runs this target, so the omission let the gate go green on unbuilt code.
+	@# Costs ~11s when nothing changed (layer cache), which is the price of the gate
+	@# meaning what it says.
+	@docker compose run --rm -T --build test
 
 docker-lint: ## Run lint + type-check inside Docker container
 	docker compose run --rm -T lint
@@ -141,14 +143,18 @@ quality-gate-baseline: ## Record baseline metrics for regression detection
 quality-gate-verify: ## Verify no regression since baseline
 	@python3 scripts/quality_gate.py verify
 
+# ─── Release ─────────────────────────────────────────────────────────────────
+
+changelog: ## Regenerate CHANGELOG.md from the git history (git-cliff)
+	@git-cliff --output CHANGELOG.md
+
 # ─── Compat aliases ───────────────────────────────────────────────────────────
 
+dev: ## Install package + dev dependencies (alias → install-dev)
+	@$(MAKE) install-dev
 
-dev: ## Start development environment (install in editable mode)
-	pip install -e .[dev]
-
-build: ## Build package (alias → docker-build)
-	$(MAKE) docker-build
+build: ## Build the Docker images (alias → docker-build)
+	@$(MAKE) docker-build
 
 # ─── CI gate ─────────────────────────────────────
 ci: lint typecheck test ## Run the full local gate (lint + typecheck + test)

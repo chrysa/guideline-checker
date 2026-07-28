@@ -21,7 +21,6 @@ coverage.xml
 guideline-report.html
 *.html
 docs/
-makefiles/
 scripts/
 *.md
 !README.md
