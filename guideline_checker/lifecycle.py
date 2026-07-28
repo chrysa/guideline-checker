@@ -146,9 +146,7 @@ def check_liveness(path: Path, *, stale_after_days: int = DEFAULT_STALE_AFTER_DA
 
     found: list[Violation] = []
     if _NAME_MARKERS.search(name):
-        found.append(
-            _violation(name, "the name carries an age or archive marker", "repo-deprecated", "info")
-        )
+        found.append(_violation(name, "the name carries an age or archive marker", "repo-deprecated", "info"))
     marker = _deprecation_marker(path)
     if marker:
         found.append(
@@ -161,9 +159,7 @@ def check_liveness(path: Path, *, stale_after_days: int = DEFAULT_STALE_AFTER_DA
         )
     days = _inactive_days(path)
     if days is not None and days >= stale_after_days:
-        found.append(
-            _violation(name, f"no commit for {days} days", "repo-inactive", "warning")
-        )
+        found.append(_violation(name, f"no commit for {days} days", "repo-inactive", "warning"))
     return found
 
 
@@ -241,9 +237,7 @@ def check_scratch_files(path: Path) -> list[Violation]:
         if entry.is_dir() or name.startswith("."):
             continue
         if name.startswith(_SCRATCH_PREFIXES) or name.endswith(_SCRATCH_SUFFIXES):
-            found.append(
-                _violation(name, "working file left at the repository root", "scratch-file", "info")
-            )
+            found.append(_violation(name, "working file left at the repository root", "scratch-file", "info"))
     return found
 
 

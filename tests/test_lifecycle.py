@@ -31,8 +31,11 @@ def _git(path: Path, *args: str) -> None:
     (``core.hooksPath``): the suite becomes slow enough to time out and its
     result depends on the workstation.
     """
+    git = shutil.which("git")
+    assert git is not None
+    # Safe subprocess: fixed binary resolved via shutil.which, list args, no shell.
     subprocess.run(
-        ["git", "-c", "core.hooksPath=", "-C", str(path), *args],
+        [git, "-c", "core.hooksPath=", "-C", str(path), *args],
         check=True,
         capture_output=True,
         env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull},
