@@ -76,7 +76,7 @@ def kind_of_detector(detector: RuleDetector | None) -> CheckKind | None:
         return CheckKind.AST_STRUCTURE
     if detector.scan_checks:
         return CheckKind.CONTENT_SCAN
-    if detector.file_regex:
+    if detector.file_regex or detector.require_regex:
         return CheckKind.FILE_CONTENT
     if detector.forbid or detector.forbid_regex:
         return CheckKind.FORBIDDEN_PATTERN
