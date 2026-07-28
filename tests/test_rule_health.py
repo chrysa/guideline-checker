@@ -193,3 +193,22 @@ def test_missing_provenance_defaults_to_empty() -> None:
     entry = next(h for h in compute_rule_health([instr]) if h.rule == rule)
 
     assert entry.provenance == ""
+
+
+def test_health_carries_the_check_kind() -> None:
+    """ADR D-0020: every rule reports its generic mechanism (kind)."""
+    from guideline_checker.kinds import CheckKind
+
+    rule = "no pickle loads"
+    instr = _instruction("python", [rule], {rule: RuleDetector(forbid=("pickle.loads(",))})
+    entry = next(h for h in compute_rule_health([instr]) if h.rule == rule)
+    assert entry.kind == CheckKind.FORBIDDEN_PATTERN.value
+
+
+def test_dead_rule_kind_is_advisory() -> None:
+    from guideline_checker.kinds import CheckKind
+
+    rule = "Structure prompts with XML tags"  # YAML rule, no detector -> dead
+    instr = _instruction("ai", [rule])
+    entry = next(h for h in compute_rule_health([instr]) if h.rule == rule)
+    assert entry.kind == CheckKind.ADVISORY.value
