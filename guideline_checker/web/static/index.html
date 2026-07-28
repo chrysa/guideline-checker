@@ -123,6 +123,7 @@
           <textarea id="rule" rows="3" placeholder="e.g. Never unpickle untrusted data"></textarea>
         </div>
         <button class="btn primary" id="propose" type="button" style="width:100%">Propose &amp; replay</button>
+        <button class="btn" id="interpret" type="button" style="width:100%;margin-top:.5rem" title="Derive detectors for this project's advisory prose (LLM, bounded)">Interpret advisory prose →</button>
         <div id="result"></div>
       </div>
     </section>
@@ -315,8 +316,38 @@ async function propose() {
     });
     lastProposal = d.proposal;
     renderResult(d);
-  } catch (e) { toast(e.message); }
+  } catch (e) { $("result").innerHTML = `<div class="note bad">✗ ${esc(e.message)}</div>`; toast(e.message, true); }
   finally { $("propose").disabled = false; $("propose").textContent = "Propose & replay"; }
+}
+
+// Interpret-once: derive detectors for the project's advisory prose (LLM, bounded),
+// each proven in the sandbox — the D-0016 "read prose once → kinded ruleset" step.
+$("interpret").addEventListener("click", interpret);
+async function interpret() {
+  const btn = $("interpret");
+  btn.disabled = true; btn.textContent = "Interpreting…";
+  $("result").innerHTML = `<div class="note"><span class="spinner" aria-hidden="true"></span>Reading advisory prose and deriving detectors (LLM, bounded)…</div>`;
+  try {
+    await api("/api/interpret", { method: "POST" });
+    let d = { running: true };
+    for (let i = 0; i < 300 && d.running; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      d = await api("/api/interpret");
+    }
+    renderDerived(d.derived || []);
+  } catch (e) { $("result").innerHTML = `<div class="note bad">✗ ${esc(e.message)}</div>`; toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "Interpret advisory prose →"; }
+}
+function renderDerived(derived) {
+  if (!derived.length) { $("result").innerHTML = `<div class="note">No detectors could be derived from the advisory prose (it is semantic, or no LLM backend is available).</div>`; return; }
+  const rows = derived.map((d) =>
+    `<div class="hit"><span class="loc"><span class="kind">${esc(d.kind)}</span> ·${d.match_count} hit(s)</span><span class="ex">${esc(d.rule)}</span></div>`).join("");
+  $("result").innerHTML =
+    `<div class="proof">
+       <div class="head">Interpreted <b>${derived.length}</b> advisory rule(s) into proven detectors</div>
+       <div class="hits">${rows}</div>
+       <p class="note">Derived from host prose (ADR D-0016). Click a rule in the list to arm it via the workshop.</p>
+     </div>`;
 }
 
 function renderResult(d) {
