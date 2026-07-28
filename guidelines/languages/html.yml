@@ -13,6 +13,16 @@ rules:
   severity: warning
 - category: correctness
   detect:
+    require_regex:
+    - '\A(?:(?!<head\b)[\s\S])*\Z|<meta[^>]+name=["'']?viewport'
+  id: html-needs-viewport
+  rationale: Without it a mobile browser lays the page out at desktop width and scales
+    it down, so every touch target and every line of text arrives too small. The first
+    alternative exempts a fragment that carries no head — a partial is not a page
+  rule: Declare a viewport meta tag in any page that carries a head
+  severity: warning
+- category: correctness
+  detect:
     forbid_regex:
     - '<img(?![^>]*\balt\s*=)[^>]*>'
   id: html-image-needs-alt
