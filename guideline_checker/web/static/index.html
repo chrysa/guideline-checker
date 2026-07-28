@@ -65,6 +65,7 @@
   .chip.advisory { color: var(--advisory); background: color-mix(in srgb, var(--advisory) 15%, transparent); }
   .rules .rule { font-size: 0.85rem; }
   .rules .src { font-family: var(--mono); font-size: 0.62rem; color: var(--ink-faint); }
+  .rules .kind { color: var(--armed); }
   .rules .fires { font-family: var(--mono); font-size: 0.72rem; color: var(--proven); font-variant-numeric: tabular-nums; }
   .rules .resolve { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.28rem 0.6rem; border-radius: 6px; border: 1px solid var(--armed); background: color-mix(in srgb, var(--armed) 14%, transparent); color: var(--armed); cursor: pointer; white-space: nowrap; }
   .rules .resolve:hover:not(:disabled) { background: color-mix(in srgb, var(--armed) 26%, transparent); }
@@ -270,7 +271,7 @@ function renderRules() {
   $("rules").innerHTML = rows.slice(0, 300).map((r) =>
     `<div class="row" data-rule="${esc(r.rule)}">
        <span class="chip ${r.state}">${r.state}</span>
-       <div><div class="rule">${esc(r.rule)}</div><div class="src">${esc(r.instruction)}${r.provenance ? ` · from “${esc(r.provenance)}”` : ""}</div></div>
+       <div><div class="rule">${esc(r.rule)}</div><div class="src">${esc(r.instruction)}${r.kind && r.kind !== "advisory" ? ` · <span class="kind">${esc(r.kind)}</span>` : ""}${r.provenance ? ` · from “${esc(r.provenance)}”` : ""}</div></div>
        ${r.resolvable ? `<button class="resolve" data-rule="${esc(r.rule)}" title="Derive, prove and arm a detector">Resolve</button>` : `<span class="fires">${r.fire_count ? "×" + r.fire_count : ""}</span>`}
      </div>`).join("");
   document.querySelectorAll("#rules .row").forEach((el) =>
