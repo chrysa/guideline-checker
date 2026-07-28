@@ -6,6 +6,15 @@ rules:
 - extends: base-weak-hash
   id: py-no-weak-hash
   severity: error
+- category: correctness
+  detect:
+    ast:
+    - silent-exception
+  id: py-no-silent-exception
+  rationale: A discarded failure lets the program carry on with wrong state, and leaves
+    nothing behind to explain how it got there
+  rule: Never catch an exception broadly and discard it without a trace
+  severity: error
 - category: stack
   detect:
     ast:
