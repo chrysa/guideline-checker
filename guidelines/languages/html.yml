@@ -1,0 +1,31 @@
+apply_to_glob: '**/*.html,**/*.htm'
+language_target: html
+rules:
+- category: correctness
+  detect:
+    forbid_regex:
+    - '\son(click|change|input|submit|keydown|keyup|load|blur|focus)\s*='
+  id: html-no-inline-event-handler
+  rationale: Inline handlers are inline script — they block a strict Content Security
+    Policy and put behaviour out of reach of any test that does not drive a browser
+  rule: Wire behaviour from the script through event delegation, never with an on*
+    attribute
+  severity: warning
+- category: correctness
+  detect:
+    forbid_regex:
+    - '<img(?![^>]*\balt\s*=)[^>]*>'
+  id: html-image-needs-alt
+  rationale: A screen reader announces the file name, or nothing at all
+  rule: Give every img an alt attribute — empty alt="" when the image is decorative
+  severity: error
+- category: correctness
+  detect:
+    forbid_regex:
+    - '<(?:button|a|span)\b[^>]*>\s*[←-⇿⌀-⏿■-➿⬀-⯿]\s*</'
+  id: html-no-emoji-as-icon
+  rationale: An emoji depends on the system font — it renders differently from one
+    machine to the next and follows neither the colour nor the theme
+  rule: Use a vector icon inheriting currentColor, not an emoji glyph, as a control
+    icon
+  severity: warning
