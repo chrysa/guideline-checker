@@ -26,6 +26,26 @@ class SourceType(StrEnum):
 
 
 @dataclass(frozen=True)
+class CrossReference:
+    """A claim in one file that must be backed by a definition in another.
+
+    Every other mechanism reads one file in isolation, so a whole family of
+    defects was invisible: documentation that cites a command nobody defined, a
+    CSS variable used but never declared. What they share is that neither file is
+    wrong on its own — the defect lives in the gap between them.
+
+    ``cite`` captures a name where the claim is made; ``define_as`` is the shape
+    that name must take in ``define_in`` (``{name}`` is substituted with the
+    captured text, escaped). ``define_in`` is a path relative to the scanned root,
+    or ``"@self"`` to look the definition up in the citing file itself.
+    """
+
+    cite: str
+    define_in: str
+    define_as: str
+
+
+@dataclass(frozen=True)
 class RuleDetector:
     """A declarative detector a structured rule carries inline.
 
@@ -41,6 +61,7 @@ class RuleDetector:
     require_regex: tuple[str, ...] = ()  # whole-file regex that MUST match — absence is the violation
     ast_checks: tuple[str, ...] = ()  # named Python AST checks (see ast_python.VALID_AST_CHECKS)
     scan_checks: tuple[str, ...] = ()  # named content scanners (see scanners.VALID_SCANS)
+    cross_reference: CrossReference | None = None  # a citation here, its definition elsewhere
     match_in_comments: bool = False  # applies to forbid / forbid_regex
 
 
