@@ -38,6 +38,12 @@ COPY tests/ ./tests/
 # The shipped referential — tests assert against it (test_guidelines, test_declarative_detectors).
 COPY guidelines/ ./guidelines/
 
+# The compose service runs as the host UID, which is unknown at build time and owns
+# nothing here. Several CLI tests invoke `check` without --output, so the report
+# lands in the working directory; without this they die on PermissionError. Only the
+# directory entry is opened up, not its contents, and only in the throwaway test image.
+RUN chmod a+w /app
+
 CMD ["pytest", "tests", "-v", \
     "--cov=guideline_checker", \
     "--cov-report=xml:/app/coverage.xml", \
