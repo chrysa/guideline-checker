@@ -8,6 +8,7 @@ untracked rather than deleted.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -36,6 +37,9 @@ def _git(path: Path, *args: str) -> None:
         capture_output=True,
         env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull},
     )
+
+
+pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git is required")
 
 
 @pytest.fixture
