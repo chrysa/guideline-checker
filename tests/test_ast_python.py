@@ -194,6 +194,7 @@ def test_shipped_python_rules_use_ast(tmp_path: Path) -> None:
     ast_by_rule = {r: d.ast_checks for i in instructions for r, d in i.rule_detectors.items()}
     assert ast_by_rule.get("Use Pydantic v2 models exclusively; v1 syntax is forbidden") == ("pydantic-v1",)
     assert ast_by_rule.get("Define FastAPI route handlers as async def") == ("sync-fastapi-route",)
+    assert ast_by_rule.get("Never catch an exception broadly and discard it without a trace") == ("silent-exception",)
 
 
 # ─── silent-exception ─────────────────────────────────────────────────────────
