@@ -5,118 +5,191 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>guideline-checker · workshop</title>
 <style>
+  /* ── Design tokens (Exaggerated Minimalism · Fira · #1E293B/#22C55E/#0F172A) ── */
   :root {
-    --ground: #0f172a; --panel: #1a2436; --panel-2: #141d2e; --edge: #2a3852;
-    --ink: #e8eef7; --ink-dim: #93a4bd; --ink-faint: #64748b;
-    --proven: #22c55e; --armed: #38bdf8; --dead: #f4517a; --advisory: #94a3b8; --accent: #22c55e;
-    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
-    --sans: "Inter var", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --ground: #0f172a; --panel: #1e293b; --panel-2: #17212f; --edge: #33425c;
+    --ink: #eaf1fa; --ink-dim: #a7b6cd; --ink-faint: #8496af;
+    --proven: #22c55e; --armed: #38bdf8; --dead: #fb5f8a; --advisory: #9aa8bf;
+    --warn: #e6a531; --accent: #22c55e;
+    --mono: "Fira Code", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: "Fira Sans", "Inter var", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --radius: 10px; --radius-sm: 7px;
+    --sp-1: 0.4rem; --sp-2: 0.7rem; --sp-3: 1rem; --sp-4: 1.4rem; --sp-5: 2rem;
+    --shadow: 0 1px 2px rgba(0,0,0,.25), 0 8px 24px -12px rgba(0,0,0,.4);
   }
   :root[data-theme="light"] {
-    --ground: #eef2f8; --panel: #ffffff; --panel-2: #f5f8fc; --edge: #d3dced;
-    --ink: #16233b; --ink-dim: #4a5a74; --ink-faint: #8493ab;
-    --proven: #15a349; --armed: #0284c7; --dead: #d81b60; --advisory: #64748b; --accent: #15a349;
+    --ground: #eef2f8; --panel: #ffffff; --panel-2: #f4f7fc; --edge: #d3dced;
+    --ink: #16233b; --ink-dim: #43536e; --ink-faint: #64748b;
+    --proven: #12924a; --armed: #0273b0; --dead: #cf1667; --advisory: #64748b;
+    --warn: #b7791f; --accent: #12924a;
+    --shadow: 0 1px 2px rgba(16,32,60,.06), 0 10px 26px -14px rgba(16,32,60,.22);
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--sans); line-height: 1.5; -webkit-font-smoothing: antialiased; }
   a { color: var(--armed); }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 1.4rem clamp(1rem, 3vw, 2rem) 4rem; }
-
-  header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.6rem; }
-  .brand { font-family: var(--mono); font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em; display: flex; align-items: center; gap: 0.6rem; }
-  .brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
-  .actions { display: flex; gap: 0.5rem; align-items: center; }
-  .btn { font-family: var(--mono); font-size: 0.78rem; font-weight: 600; cursor: pointer; padding: 0.5rem 0.9rem; border-radius: 7px; border: 1px solid var(--edge); background: var(--panel); color: var(--ink); transition: border-color .15s, background .15s; }
-  .btn:hover { border-color: var(--accent); }
-  .btn.primary { border-color: color-mix(in srgb, var(--accent) 45%, var(--edge)); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
-  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .btn:disabled { opacity: .5; cursor: default; }
-  .muted { color: var(--ink-faint); font-family: var(--mono); font-size: 0.72rem; }
-  .select { font-family: var(--mono); font-size: 0.78rem; padding: 0.45rem 0.6rem; border-radius: 7px; border: 1px solid var(--edge); background: var(--panel); color: var(--ink); max-width: 220px; cursor: pointer; }
-  .select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: var(--sp-4) clamp(1rem, 3vw, 2rem) 4rem; }
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .skip { position: absolute; left: -999px; top: 0.5rem; z-index: 20; background: var(--panel); color: var(--ink); border: 1px solid var(--accent); padding: 0.5rem 0.9rem; border-radius: var(--radius-sm); font-family: var(--mono); font-size: 0.8rem; }
+  .skip:focus { left: 0.8rem; }
 
-  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.7rem; margin-bottom: 0.7rem; }
-  .tile { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 0.9rem 1rem; cursor: pointer; transition: border-color .15s; }
+  /* ── Top bar ── */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-4); }
+  .brand { font-family: var(--mono); font-weight: 600; font-size: 1.1rem; letter-spacing: -0.01em; display: flex; align-items: center; gap: 0.55rem; margin: 0; }
+  .brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); flex: none; }
+  .brand .sub { color: var(--ink-faint); font-weight: 400; }
+  .actions { display: flex; gap: var(--sp-1); align-items: center; flex-wrap: wrap; }
+  .btn { font-family: var(--mono); font-size: 0.78rem; font-weight: 600; cursor: pointer; padding: 0.5rem 0.9rem; border-radius: var(--radius-sm); border: 1px solid var(--edge); background: var(--panel); color: var(--ink); transition: border-color .15s, background .15s, color .15s; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn.primary { border-color: color-mix(in srgb, var(--accent) 55%, var(--edge)); background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+  .btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn.icon { padding: 0.5rem 0.6rem; }
+  .select { font-family: var(--mono); font-size: 0.78rem; padding: 0.5rem 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--edge); background: var(--panel); color: var(--ink); max-width: 240px; cursor: pointer; }
+
+  /* ── Summary band: grade hero + tiles ── */
+  .summary { display: grid; grid-template-columns: auto 1fr; gap: var(--sp-3); align-items: stretch; margin-bottom: var(--sp-2); }
+  @media (max-width: 720px) { .summary { grid-template-columns: 1fr; } }
+  .grade-hero { display: none; flex-direction: column; justify-content: center; align-items: center; min-width: 128px; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--edge); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); }
+  .grade-hero.show { display: flex; }
+  .grade-hero .g { font-family: var(--mono); font-weight: 700; font-size: 2.6rem; line-height: 1; }
+  .grade-hero .score { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-dim); margin-top: 0.35rem; font-variant-numeric: tabular-nums; }
+  .grade-hero .lbl { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); margin-top: 0.5rem; }
+  .gA { color: var(--proven); } .gB { color: var(--armed); } .gC { color: var(--warn); }
+  .gD { color: #ef8f4d; } .gF { color: var(--dead); }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-2); }
+  @media (max-width: 560px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  .tile { background: var(--panel); border: 1px solid var(--edge); border-radius: var(--radius); padding: 0.85rem 1rem; cursor: pointer; text-align: left; transition: border-color .15s, transform .1s; color: var(--ink); }
   .tile:hover, .tile[aria-pressed="true"] { border-color: currentColor; }
+  .tile[aria-pressed="true"] { box-shadow: inset 0 0 0 1px currentColor; }
+  .tile:active { transform: translateY(1px); }
   .tile .n { font-family: var(--mono); font-size: 1.7rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
-  .tile .k { font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); margin-top: 0.4rem; }
+  .tile .k { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim); margin-top: 0.45rem; display: flex; align-items: center; gap: 0.3rem; }
+  .tile .k::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: currentColor; }
   .tile.proven { color: var(--proven); } .tile.armed { color: var(--armed); }
   .tile.dead { color: var(--dead); } .tile.advisory { color: var(--advisory); }
-  .tile .n, .tile .k { color: var(--ink); } .tile.proven .n { color: var(--proven); } .tile.armed .n { color: var(--armed); } .tile.dead .n { color: var(--dead); } .tile.advisory .n { color: var(--advisory); }
+  .tile .n { color: var(--ink); }
 
-  .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; border: 1px solid var(--edge); margin-bottom: 2rem; }
+  .bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; border: 1px solid var(--edge); margin: var(--sp-2) 0 0.6rem; }
   .bar i { display: block; }
   .bar .s-dead { background: var(--dead); } .bar .s-advisory { background: var(--advisory); } .bar .s-armed { background: var(--armed); } .bar .s-proven { background: var(--proven); }
+  .stamp { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-dim); margin: 0 0 var(--sp-5); }
 
-  h2 { font-family: var(--mono); font-size: 0.9rem; font-weight: 600; letter-spacing: 0.02em; margin: 0 0 0.8rem; color: var(--ink-dim); }
+  h2 { font-family: var(--mono); font-size: 0.9rem; font-weight: 600; letter-spacing: 0.02em; margin: 0 0 0.7rem; color: var(--ink-dim); }
+  .layout { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--sp-4); align-items: start; }
+  @media (max-width: 880px) { .layout { grid-template-columns: 1fr; } }
 
-  .layout { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.4rem; align-items: start; }
-  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } .tiles { grid-template-columns: repeat(2, 1fr); } }
+  /* ── Toolbar ── */
+  .toolbar { display: flex; gap: var(--sp-1); margin: 0 0 var(--sp-2); }
+  .toolbar[hidden] { display: none; }
+  .toolbar #q { flex: 1; width: auto; }
+  .toolbar .select { max-width: none; }
 
-  .rules { border: 1px solid var(--edge); border-radius: 10px; overflow: hidden; }
+  /* ── Rows (rules / projects) ── */
+  .rules { border: 1px solid var(--edge); border-radius: var(--radius); overflow: hidden; background: var(--panel); }
   .rules .row { display: grid; grid-template-columns: auto 1fr auto; gap: 0.8rem; align-items: center; padding: 0.6rem 0.85rem; border-bottom: 1px solid color-mix(in srgb, var(--edge) 55%, transparent); cursor: pointer; }
   .rules .row:last-child { border-bottom: none; }
-  .rules .row:hover { background: var(--panel-2); }
-  .chip { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.18rem 0.45rem; border-radius: 5px; white-space: nowrap; }
-  .chip.proven { color: var(--proven); background: color-mix(in srgb, var(--proven) 15%, transparent); }
-  .chip.armed { color: var(--armed); background: color-mix(in srgb, var(--armed) 15%, transparent); }
-  .chip.dead { color: var(--dead); background: color-mix(in srgb, var(--dead) 15%, transparent); }
-  .chip.advisory { color: var(--advisory); background: color-mix(in srgb, var(--advisory) 15%, transparent); }
+  .rules .row:hover, .rules .row:focus-visible { background: var(--panel-2); }
+  .chip { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.07em; text-transform: uppercase; padding: 0.2rem 0.45rem; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 0.28rem; }
+  .chip::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: currentColor; flex: none; }
+  .chip.proven { color: var(--proven); background: color-mix(in srgb, var(--proven) 16%, transparent); }
+  .chip.armed { color: var(--armed); background: color-mix(in srgb, var(--armed) 16%, transparent); }
+  .chip.dead { color: var(--dead); background: color-mix(in srgb, var(--dead) 16%, transparent); }
+  .chip.advisory { color: var(--advisory); background: color-mix(in srgb, var(--advisory) 18%, transparent); }
   .rules .rule { font-size: 0.85rem; }
-  .rules .src { font-family: var(--mono); font-size: 0.62rem; color: var(--ink-faint); }
+  .rules .src { font-family: var(--mono); font-size: 0.64rem; color: var(--ink-faint); margin-top: 0.15rem; }
   .rules .kind { color: var(--armed); }
-  .rules .fires { font-family: var(--mono); font-size: 0.72rem; color: var(--proven); font-variant-numeric: tabular-nums; }
-  .rules .resolve { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.28rem 0.6rem; border-radius: 6px; border: 1px solid var(--armed); background: color-mix(in srgb, var(--armed) 14%, transparent); color: var(--armed); cursor: pointer; white-space: nowrap; }
-  .rules .resolve:hover:not(:disabled) { background: color-mix(in srgb, var(--armed) 26%, transparent); }
+  .rules .fires { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+  .rules .resolve { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.3rem 0.6rem; border-radius: 6px; border: 1px solid var(--armed); background: color-mix(in srgb, var(--armed) 15%, transparent); color: var(--armed); cursor: pointer; white-space: nowrap; }
+  .rules .resolve:hover:not(:disabled) { background: color-mix(in srgb, var(--armed) 28%, transparent); }
   .rules .resolve:disabled { opacity: 0.6; cursor: default; }
-  .empty { padding: 1.4rem; color: var(--ink-faint); font-family: var(--mono); font-size: 0.8rem; text-align: center; }
 
-  .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 1rem 1.1rem; position: sticky; top: 1rem; }
-  .panel label { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); display: block; margin-bottom: 0.4rem; }
-  textarea, input[type=text] { width: 100%; font-family: var(--mono); font-size: 0.82rem; background: var(--panel-2); border: 1px solid var(--edge); border-radius: 7px; color: var(--ink); padding: 0.55rem 0.65rem; resize: vertical; }
-  textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+  /* Row grade chip (all-projects view) */
+  .grade { font-family: var(--mono); font-weight: 700; font-size: 0.7rem; letter-spacing: 0.03em; padding: 0.16rem 0.5rem; border-radius: 6px; white-space: nowrap; }
+  .grade.gA { background: color-mix(in srgb, var(--proven) 16%, transparent); }
+  .grade.gB { background: color-mix(in srgb, var(--armed) 16%, transparent); }
+  .grade.gC { background: color-mix(in srgb, var(--warn) 18%, transparent); }
+  .grade.gD { background: color-mix(in srgb, #ef8f4d 18%, transparent); }
+  .grade.gF { background: color-mix(in srgb, var(--dead) 16%, transparent); }
+
+  /* ── States (loading / empty / error) ── */
+  .state { padding: 1.6rem 1.4rem; color: var(--ink-dim); font-family: var(--mono); font-size: 0.8rem; text-align: center; }
+  .state .hint { color: var(--ink-faint); font-size: 0.72rem; margin-top: 0.4rem; }
+  .state.error { color: var(--dead); }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); border-top-color: var(--accent); border-radius: 50%; vertical-align: -2px; margin-right: 0.5rem; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Workshop panel ── */
+  .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: var(--radius); padding: var(--sp-3) 1.1rem; position: sticky; top: 1rem; box-shadow: var(--shadow); }
+  .panel label { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-dim); display: block; margin-bottom: 0.4rem; }
+  textarea, input[type=text] { width: 100%; font-family: var(--mono); font-size: 0.82rem; background: var(--panel-2); border: 1px solid var(--edge); border-radius: var(--radius-sm); color: var(--ink); padding: 0.55rem 0.65rem; resize: vertical; }
+  textarea::placeholder, input::placeholder { color: var(--ink-faint); }
   .field { margin-bottom: 0.8rem; }
   .proof { margin-top: 0.9rem; font-size: 0.82rem; }
   .proof .head { font-family: var(--mono); font-size: 0.76rem; color: var(--ink-dim); margin-bottom: 0.5rem; }
   .proof .head b { color: var(--ink); }
   .proof .src-tag { color: var(--accent); }
-  .hits { max-height: 240px; overflow-y: auto; border: 1px solid var(--edge); border-radius: 7px; }
+  .hits { max-height: 240px; overflow-y: auto; border: 1px solid var(--edge); border-radius: var(--radius-sm); }
   .hit { display: grid; grid-template-columns: auto 1fr; gap: 0.6rem; padding: 0.4rem 0.6rem; border-bottom: 1px solid color-mix(in srgb, var(--edge) 45%, transparent); font-family: var(--mono); font-size: 0.72rem; }
   .hit:last-child { border-bottom: none; }
   .hit .loc { color: var(--ink-faint); white-space: nowrap; }
   .hit .ex { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .note { font-family: var(--mono); font-size: 0.76rem; color: var(--advisory); padding: 0.6rem; border: 1px dashed var(--edge); border-radius: 7px; margin-top: 0.8rem; }
-  pre.diff { margin: 0.6rem 0 0; padding: 0.7rem; overflow-x: auto; font-family: var(--mono); font-size: 0.72rem; background: var(--panel-2); border: 1px solid var(--edge); border-radius: 7px; white-space: pre; }
+  .note { font-family: var(--mono); font-size: 0.76rem; color: var(--ink-dim); padding: 0.6rem 0.7rem; border: 1px dashed var(--edge); border-radius: var(--radius-sm); margin-top: 0.7rem; }
+  .note.ok { color: var(--proven); border-color: color-mix(in srgb, var(--proven) 45%, var(--edge)); }
+  .note.bad { color: var(--dead); border-color: color-mix(in srgb, var(--dead) 45%, var(--edge)); }
+  pre.diff { margin: 0.6rem 0 0; padding: 0.7rem; overflow-x: auto; font-family: var(--mono); font-size: 0.72rem; background: var(--panel-2); border: 1px solid var(--edge); border-radius: var(--radius-sm); white-space: pre; }
   pre.diff .add { color: var(--proven); } pre.diff .del { color: var(--dead); }
-  .toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--accent); color: var(--ink); font-family: var(--mono); font-size: 0.78rem; padding: 0.55rem 1rem; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+
+  /* ── Toast ── */
+  .toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--accent); color: var(--ink); font-family: var(--mono); font-size: 0.78rem; padding: 0.55rem 1rem; border-radius: 8px; box-shadow: var(--shadow); opacity: 0; transition: opacity .2s; pointer-events: none; max-width: min(90vw, 520px); }
   .toast.show { opacity: 1; }
+  .toast.err { border-color: var(--dead); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+    html { scroll-behavior: auto; }
+  }
 </style>
 </head>
 <body>
+<a class="skip" href="#rules-title">Skip to results</a>
 <div class="wrap">
-  <header>
-    <div class="brand"><span class="dot"></span>guideline-checker · workshop</div>
-    <div class="actions">
-      <label class="sr-only" for="project">Project</label>
+  <header class="topbar">
+    <h1 class="brand"><span class="dot" aria-hidden="true"></span>guideline-checker <span class="sub">· workshop</span></h1>
+    <div class="actions" role="group" aria-label="Scan controls">
+      <label class="sr-only" for="project">Project to scan</label>
       <select class="select" id="project" title="Project to scan"></select>
-      <span class="muted" id="stamp">not scanned</span>
-      <button class="btn" id="theme" type="button" title="Toggle theme">◐</button>
+      <button class="btn icon" id="theme" type="button" aria-label="Toggle light or dark theme">◐</button>
       <button class="btn primary" id="scan" type="button">Scan</button>
     </div>
   </header>
 
-  <div class="tiles" id="tiles"></div>
-  <div class="bar" id="bar" role="img" aria-label="rule health distribution"></div>
+  <section class="summary" aria-labelledby="summary-h">
+    <h2 id="summary-h" class="sr-only">Compliance and rule health</h2>
+    <div class="grade-hero" id="grade-hero" title="Compliance grade for the current view" aria-live="polite"></div>
+    <div class="tiles" id="tiles" role="group" aria-label="Rule health states — activate to filter"></div>
+  </section>
+  <div class="bar" id="bar" role="img" aria-label="Rule health distribution"></div>
+  <p class="stamp" id="stamp" aria-live="polite">Not scanned yet.</p>
 
-  <div class="layout">
-    <section>
+  <main class="layout">
+    <section aria-labelledby="rules-title">
       <h2 id="rules-title">Rules</h2>
-      <div class="rules" id="rules"><div class="empty">Scan the repo to load rule health.</div></div>
+      <div class="toolbar" id="toolbar" hidden role="search">
+        <label class="sr-only" for="q">Filter rows</label>
+        <input type="text" id="q" placeholder="filter…" autocomplete="off">
+        <label class="sr-only" for="sort">Sort rows</label>
+        <select class="select" id="sort" title="Sort rows"></select>
+      </div>
+      <div class="rules" id="rules" aria-live="polite" aria-busy="false">
+        <div class="state">Scan the repository to load rule health.</div>
+      </div>
     </section>
 
-    <section>
-      <h2>Workshop — propose &amp; prove</h2>
+    <section aria-labelledby="workshop-title">
+      <h2 id="workshop-title">Workshop — propose &amp; prove</h2>
       <div class="panel">
         <div class="field">
           <label for="rule">Rule text</label>
@@ -124,12 +197,12 @@
         </div>
         <button class="btn primary" id="propose" type="button" style="width:100%">Propose &amp; replay</button>
         <button class="btn" id="interpret" type="button" style="width:100%;margin-top:.5rem" title="Derive detectors for this project's advisory prose (LLM, bounded)">Interpret advisory prose →</button>
-        <div id="result"></div>
+        <div id="result" aria-live="polite"></div>
       </div>
     </section>
-  </div>
+  </main>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 "use strict";
@@ -137,13 +210,38 @@ const STATES = ["dead", "advisory", "armed", "proven"];
 let health = [];
 let activeFilter = null;
 let lastProposal = null;
+let viewMode = "single";     // "single" (rules) | "all" (projects)
+let allProjects = [];        // cached fleet payload for client-side sort/filter
+
+const STATE_RANK = { dead: 0, suspect: 1, armed: 2, proven: 3, advisory: 4 };
+const SORTS = {
+  single: {
+    worst: { label: "health (worst first)", cmp: (a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || a.rule.localeCompare(b.rule) },
+    fires: { label: "fires (most first)", cmp: (a, b) => (b.fire_count || 0) - (a.fire_count || 0) },
+    name: { label: "rule (A–Z)", cmp: (a, b) => a.rule.localeCompare(b.rule) },
+    source: { label: "source (A–Z)", cmp: (a, b) => a.instruction.localeCompare(b.instruction) || a.rule.localeCompare(b.rule) },
+  },
+  all: {
+    worst: { label: "grade (worst first)", cmp: (a, b) => pScore(a) - pScore(b) || pName(a).localeCompare(pName(b)) },
+    best: { label: "grade (best first)", cmp: (a, b) => pScore(b) - pScore(a) || pName(a).localeCompare(pName(b)) },
+    name: { label: "name (A–Z)", cmp: (a, b) => pName(a).localeCompare(pName(b)) },
+    dead: { label: "dead rules (most)", cmp: (a, b) => ((b.summary || {}).dead || 0) - ((a.summary || {}).dead || 0) },
+    proven: { label: "proven rules (most)", cmp: (a, b) => ((b.summary || {}).proven || 0) - ((a.summary || {}).proven || 0) },
+  },
+};
+let sortKey = { single: "worst", all: "worst" };
+const pName = (p) => p.name || "";
+const pScore = (p) => (p.error ? -1 : ((p.compliance || {}).score == null ? 101 : p.compliance.score)); // errors first, n/a last
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const fmtTime = (t) => (t ? t.slice(0, 19).replace("T", " ") : "");
 
-// The server never embeds its key in this public page. When api_key auth is on,
-// the browser asks the user once and keeps the key in sessionStorage, sending it
-// as the X-Api-Key header — so an anonymous visitor of "/" never receives it.
+// ── Reusable view states (loading / empty / error) ──────────────────────────
+function showLoading(msg) { const el = $("rules"); el.setAttribute("aria-busy", "true"); el.innerHTML = `<div class="state"><span class="spinner" aria-hidden="true"></span>${esc(msg)}</div>`; }
+function showEmpty(msg, hint) { $("rules").setAttribute("aria-busy", "false"); $("rules").innerHTML = `<div class="state">${esc(msg)}${hint ? `<div class="hint">${esc(hint)}</div>` : ""}</div>`; }
+function showRowsError(msg) { $("rules").setAttribute("aria-busy", "false"); $("rules").innerHTML = `<div class="state error">⚠ ${esc(msg)}<div class="hint">Press <b>Scan</b> to retry.</div></div>`; }
+
 function authHeaders(extra) {
   const headers = Object.assign({}, extra || {});
   const key = sessionStorage.getItem("gc-api-key");
@@ -163,9 +261,9 @@ async function api(path, opts) {
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
   return res.json();
 }
-function toast(msg) {
-  const t = $("toast"); t.textContent = msg; t.classList.add("show");
-  setTimeout(() => t.classList.remove("show"), 1800);
+function toast(msg, isError) {
+  const t = $("toast"); t.textContent = msg; t.classList.toggle("err", !!isError); t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2200);
 }
 
 $("theme").addEventListener("click", () => {
@@ -173,24 +271,56 @@ $("theme").addEventListener("click", () => {
   root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
 });
 
-$("scan").addEventListener("click", () => { const p = $("project").value; p === "__all__" ? runScanAll() : runScan(); });
-$("project").addEventListener("change", () => { const p = $("project").value; p === "__all__" ? runScanAll() : runScan(p); });
+// ── Toolbar (filter + sort) ─────────────────────────────────────────────────
+function showToolbar(mode) {
+  if (mode !== viewMode) $("q").value = "";  // a rule filter is meaningless in the project view
+  viewMode = mode;
+  const sel = $("sort");
+  sel.innerHTML = Object.entries(SORTS[mode]).map(([k, o]) => `<option value="${k}"${k === sortKey[mode] ? " selected" : ""}>↕ ${o.label}</option>`).join("");
+  $("q").placeholder = mode === "all" ? "filter projects (name or grade)…" : "filter rules…";
+  $("toolbar").hidden = false;
+}
+
+// ── URL-addressable navigation (deep-link · reload · Back/Forward) ───────────
+$("scan").addEventListener("click", () => applyRoute(true));
+$("project").addEventListener("change", () => setRoute($("project").value));
+window.addEventListener("hashchange", () => applyRoute(false));
+
+function setRoute(value) {
+  const h = value === "__all__" ? "all" : "p=" + encodeURIComponent(value);
+  if (location.hash === "#" + h) { applyRoute(true); } else { location.hash = h; }
+}
+async function applyRoute(force) {
+  const raw = location.hash.slice(1);
+  const sel = $("project");
+  if (raw === "all") { sel.value = "__all__"; return runScanAll(force); }
+  if (raw.startsWith("p=")) {
+    const name = decodeURIComponent(raw.slice(2));
+    if ([...sel.options].some((o) => o.value === name)) { sel.value = name; return runScan(name); }
+  }
+  return force ? runScan() : pollHealth(null).catch(() => showRowsError("Could not load the scan."));
+}
+
 async function runScan(project) {
   $("scan").disabled = true; $("scan").textContent = "Scanning…";
-  // Force a fresh poll: clear the table so a switch to another project shows its scan.
-  $("rules").innerHTML = '<div class="empty">Scanning…</div>';
+  showLoading("Scanning the project…");
   try {
     const prev = (await api("/api/rules-health").catch(() => ({}))).timestamp || null;
     const body = project ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project }) } : {};
     await api("/api/scan", Object.assign({ method: "POST" }, body));
     await pollHealth(prev);
-  } catch (e) { toast(e.message); }
+  } catch (e) { showRowsError(e.message); toast(e.message, true); }
   finally { $("scan").disabled = false; $("scan").textContent = "Scan"; }
 }
 
-async function runScanAll() {
+async function runScanAll(force) {
+  // Reuse the cached fleet scan when returning to this view, so navigation is instant.
+  if (!force) {
+    const cached = await api("/api/health-all").catch(() => ({}));
+    if (!cached.running && cached.projects && cached.projects.length) { renderAll(cached); return; }
+  }
   $("scan").disabled = true; $("scan").textContent = "Scanning fleet…";
-  $("rules").innerHTML = '<div class="empty">Scanning every project… (first run is slow)</div>';
+  showLoading("Scanning every project… (first run is slow)");
   try {
     await api("/api/scan-all", { method: "POST" });
     for (let i = 0; i < 240; i++) {
@@ -198,26 +328,107 @@ async function runScanAll() {
       if (!d.running && d.projects && d.projects.length) { renderAll(d); return; }
       await new Promise((r) => setTimeout(r, 1000));
     }
-  } catch (e) { toast(e.message); }
+    showRowsError("The fleet scan did not finish in time.");
+  } catch (e) { showRowsError(e.message); toast(e.message, true); }
   finally { $("scan").disabled = false; $("scan").textContent = "Scan"; }
 }
 
+// ── Compliance grade hero ────────────────────────────────────────────────────
+function setGrade(c) {
+  const el = $("grade-hero");
+  if (!c || !c.grade || c.grade === "n/a") { el.className = "grade-hero"; el.innerHTML = ""; el.removeAttribute("title"); return; }
+  el.className = `grade-hero show g${c.grade}`;
+  el.innerHTML = `<div class="g">${c.grade}</div>${c.score != null ? `<div class="score">${c.score}/100</div>` : ""}<div class="lbl">compliance</div>`;
+  el.title = `Compliance grade ${c.grade}${c.score != null ? ` (${c.score}/100)` : ""} — ${c.errors || 0} error(s), ${c.warnings || 0} warning(s)`;
+}
+
+// ── Health tiles + distribution bar ──────────────────────────────────────────
+function renderTiles(counts, clickable) {
+  const total = STATES.reduce((n, k) => n + (counts[k] || 0), 0) || 1;
+  $("tiles").innerHTML = STATES.map((k) => {
+    const n = counts[k] || 0;
+    const attrs = clickable ? ` type="button" data-state="${k}" aria-pressed="${activeFilter === k}"` : ` type="button" disabled aria-hidden="true"`;
+    return `<button class="tile ${k}"${attrs}><div class="n">${n}</div><div class="k">${k}</div></button>`;
+  }).join("");
+  $("bar").innerHTML = STATES.map((k) => `<i class="s-${k}" style="width:${((counts[k] || 0) / total) * 100}%"></i>`).join("");
+  $("bar").setAttribute("aria-label", `Rule health: ${STATES.map((k) => `${counts[k] || 0} ${k}`).join(", ")}`);
+  if (clickable) {
+    document.querySelectorAll("#tiles .tile").forEach((el) =>
+      el.addEventListener("click", () => { activeFilter = activeFilter === el.dataset.state ? null : el.dataset.state; renderRules(); syncTiles(); }));
+  }
+}
+function syncTiles() {
+  document.querySelectorAll("#tiles .tile").forEach((el) =>
+    el.setAttribute("aria-pressed", String(activeFilter === el.dataset.state)));
+}
+
+// ── Single-project view ──────────────────────────────────────────────────────
+function render(d) {
+  health = d.rules || [];
+  setGrade(d.compliance);
+  const stamp = d.timestamp ? "Scanned " + fmtTime(d.timestamp) : "Scanned";
+  $("stamp").textContent = d.resolvable ? `${stamp} · ${d.resolvable} resolvable` : stamp;
+  renderTiles(d.summary || {}, true);
+  showToolbar("single");
+  renderRules();
+}
+
+function renderRules() {
+  $("rules").setAttribute("aria-busy", "false");
+  const term = $("q").value.trim().toLowerCase();
+  let rows = activeFilter ? health.filter((r) => r.state === activeFilter) : health.slice();
+  if (term) rows = rows.filter((r) => r.rule.toLowerCase().includes(term) || r.instruction.toLowerCase().includes(term) || (r.provenance || "").toLowerCase().includes(term));
+  rows.sort(SORTS.single[sortKey.single].cmp);
+  const label = activeFilter ? `Rules · ${activeFilter}` : "Rules";
+  $("rules-title").textContent = `${label} (${rows.length}${rows.length !== health.length ? "/" + health.length : ""})`;
+  if (!health.length) { showEmpty("No rules found for this project.", "The engine derives rules from CLAUDE.md, AGENTS.md, .github/instructions and guidelines/."); return; }
+  if (!rows.length) { showEmpty("No rules match this filter."); return; }
+  $("rules").innerHTML = rows.slice(0, 300).map((r) =>
+    `<div class="row" data-rule="${esc(r.rule)}" role="button" tabindex="0" aria-label="${esc(r.state)}: ${esc(r.rule)} — click to load into the workshop">
+       <span class="chip ${r.state}">${r.state}</span>
+       <div><div class="rule">${esc(r.rule)}</div><div class="src">${esc(r.instruction)}${r.kind && r.kind !== "advisory" ? ` · <span class="kind">${esc(r.kind)}</span>` : ""}${r.provenance ? ` · from “${esc(r.provenance)}”` : ""}</div></div>
+       ${r.resolvable ? `<button class="resolve" data-rule="${esc(r.rule)}" title="Derive, prove and arm a detector">Resolve</button>` : `<span class="fires">${r.fire_count ? "×" + r.fire_count : ""}</span>`}
+     </div>`).join("");
+  document.querySelectorAll("#rules .row").forEach((el) => {
+    const open = () => { $("rule").value = el.dataset.rule; $("rule").focus(); };
+    el.addEventListener("click", open);
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+  });
+  document.querySelectorAll("#rules .resolve").forEach((btn) =>
+    btn.addEventListener("click", (e) => { e.stopPropagation(); resolveRule(btn.dataset.rule, btn); }));
+}
+
+// ── All-projects (fleet) view ────────────────────────────────────────────────
 function renderAll(d) {
-  const c = d.combined || {};
-  const total = STATES.reduce((n, k) => n + (c[k] || 0), 0) || 1;
-  $("stamp").textContent = d.timestamp ? "fleet scanned " + d.timestamp.slice(0, 19).replace("T", " ") : "fleet";
-  $("tiles").innerHTML = STATES.map((k) =>
-    `<div class="tile ${k}"><div class="n">${c[k] || 0}</div><div class="k">${k}</div></div>`).join("");
-  $("bar").innerHTML = STATES.map((k) => `<i class="s-${k}" style="width:${((c[k] || 0) / total) * 100}%"></i>`).join("");
-  const projects = (d.projects || []).slice().sort((a, b) =>
-    (b.summary ? (b.summary.proven || 0) : -1) - (a.summary ? (a.summary.proven || 0) : -1));
-  $("rules-title").textContent = `Projects (${projects.length})`;
+  allProjects = d.projects || [];
+  setGrade(d.compliance);
+  $("stamp").textContent = d.timestamp ? "Fleet scanned " + fmtTime(d.timestamp) : "Fleet";
+  renderTiles(d.combined || {}, false);
+  showToolbar("all");
+  renderAllRows();
+}
+
+function renderAllRows() {
+  $("rules").setAttribute("aria-busy", "false");
+  const term = $("q").value.trim().toLowerCase();
+  let projects = allProjects.slice();
+  if (term) projects = projects.filter((p) => (p.name || "").toLowerCase().includes(term) || ((p.compliance || {}).grade || "").toLowerCase() === term);
+  projects.sort(SORTS.all[sortKey.all].cmp);
+  $("rules-title").textContent = `Projects (${projects.length}${projects.length !== allProjects.length ? "/" + allProjects.length : ""})`;
+  if (!projects.length) { showEmpty("No projects match this filter."); return; }
   $("rules").innerHTML = projects.map((p) => {
     if (p.error) return `<div class="row"><span class="chip dead">error</span><div><div class="rule">${esc(p.name)}</div><div class="src">${esc(p.error)}</div></div></div>`;
     const s = p.summary || {};
+    const g = p.compliance || {};
+    const gradeChip = g.grade && g.grade !== "n/a" ? `<span class="grade g${g.grade}">${g.grade}${g.score != null ? " · " + g.score : ""}</span>` : `<span class="chip advisory">n/a</span>`;
     const badges = STATES.filter((k) => s[k]).map((k) => `<span class="chip ${k}">${k} ${s[k]}</span>`).join(" ");
-    return `<div class="row"><div><div class="rule">${esc(p.name)}</div><div class="src">${badges}${p.resolvable ? ` · <b>${p.resolvable}</b> resolvable` : ""}</div></div></div>`;
+    return `<div class="row" data-project="${esc(p.name)}" role="button" tabindex="0" aria-label="Open ${esc(p.name)}, grade ${esc((g.grade || "n/a"))}">${gradeChip}<div><div class="rule">${esc(p.name)}</div><div class="src">${badges}${p.resolvable ? ` · <b>${p.resolvable}</b> resolvable` : ""}</div></div><span class="fires" aria-hidden="true">→</span></div>`;
   }).join("");
+  document.querySelectorAll("#rules .row[data-project]").forEach((el) => {
+    const open = () => setRoute(el.dataset.project);
+    el.addEventListener("click", open);
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+  });
 }
 
 async function loadProjects() {
@@ -228,7 +439,6 @@ async function loadProjects() {
     const opts = d.projects
       .map((p) => `<option value="${esc(p.name)}"${p.path === d.active ? " selected" : ""}>${esc(p.name)}</option>`)
       .join("");
-    // "All projects" aggregates health across every discovered repo (fleet cockpit).
     sel.innerHTML = `<option value="__all__">◇ All projects (${d.projects.length})</option>` + opts;
   } catch { $("project").style.display = "none"; }
 }
@@ -236,79 +446,77 @@ async function loadProjects() {
 async function pollHealth(prev) {
   for (let i = 0; i < 60; i++) {
     const d = await api("/api/rules-health");
-    // Wait for a *fresh* scan (new timestamp) so a project switch never shows stale health.
     if (d.timestamp && d.timestamp !== (prev ?? null) && d.total_rules > 0) { render(d); return; }
     await new Promise((r) => setTimeout(r, 500));
   }
 }
 
-function render(d) {
-  health = d.rules || [];
-  const s = d.summary || {};
-  const stamp = d.timestamp ? "scanned " + d.timestamp.slice(0, 19).replace("T", " ") : "scanned";
-  $("stamp").textContent = d.resolvable ? `${stamp} · ${d.resolvable} resolvable` : stamp;
-  const total = d.total_rules || 1;
-  $("tiles").innerHTML = STATES.map((k) =>
-    `<div class="tile ${k}" data-state="${k}" role="button" tabindex="0" aria-pressed="${activeFilter === k}">
-       <div class="n">${s[k] || 0}</div><div class="k">${k}</div></div>`).join("");
-  $("bar").innerHTML = STATES.map((k) =>
-    `<i class="s-${k}" style="width:${((s[k] || 0) / total) * 100}%"></i>`).join("");
-  document.querySelectorAll("#tiles .tile").forEach((el) => {
-    const set = () => { activeFilter = activeFilter === el.dataset.state ? null : el.dataset.state; renderRules(); syncTiles(); };
-    el.addEventListener("click", set);
-    el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); set(); } });
-  });
-  renderRules();
+// ── Verbose one-click resolution: narrate derive → prove → arm ───────────────
+function resolveStep(rule, lines) {
+  $("result").innerHTML = `<div class="proof"><div class="head">Resolving “${esc(rule)}”</div>${lines.join("")}</div>`;
 }
-function syncTiles() {
-  document.querySelectorAll("#tiles .tile").forEach((el) =>
-    el.setAttribute("aria-pressed", String(activeFilter === el.dataset.state)));
+function wireRePropose(rule, btn) {
+  const el = $("re-propose");
+  if (el) el.addEventListener("click", () => resolveRule(rule, btn));
 }
-
-function renderRules() {
-  const rows = activeFilter ? health.filter((r) => r.state === activeFilter) : health;
-  $("rules-title").textContent = activeFilter ? `Rules · ${activeFilter} (${rows.length})` : `Rules (${health.length})`;
-  if (!rows.length) { $("rules").innerHTML = `<div class="empty">No rules in this bucket.</div>`; return; }
-  $("rules").innerHTML = rows.slice(0, 300).map((r) =>
-    `<div class="row" data-rule="${esc(r.rule)}">
-       <span class="chip ${r.state}">${r.state}</span>
-       <div><div class="rule">${esc(r.rule)}</div><div class="src">${esc(r.instruction)}${r.kind && r.kind !== "advisory" ? ` · <span class="kind">${esc(r.kind)}</span>` : ""}${r.provenance ? ` · from “${esc(r.provenance)}”` : ""}</div></div>
-       ${r.resolvable ? `<button class="resolve" data-rule="${esc(r.rule)}" title="Derive, prove and arm a detector">Resolve</button>` : `<span class="fires">${r.fire_count ? "×" + r.fire_count : ""}</span>`}
-     </div>`).join("");
-  document.querySelectorAll("#rules .row").forEach((el) =>
-    el.addEventListener("click", () => { $("rule").value = el.dataset.rule; $("rule").focus(); }));
-  document.querySelectorAll("#rules .resolve").forEach((btn) =>
-    btn.addEventListener("click", (e) => { e.stopPropagation(); resolveRule(btn.dataset.rule, btn); }));
-}
-
 async function resolveRule(rule, btn) {
   btn.disabled = true; btn.textContent = "Resolving…";
+  $("rule").value = rule;
+  resolveStep(rule, [`<div class="note"><span class="spinner" aria-hidden="true"></span>① Deriving a detector (free heuristic → LLM if needed)…</div>`]);
   try {
-    // Dry-run first: derive + prove + preview the write, never commit blindly.
     const d = await api("/api/rules/resolve", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rule, dry_run: true }),
+      body: JSON.stringify({ rule, dry_run: true }),   // preview: derive + prove, write nothing
     });
-    if (!d.resolved) { toast(d.reason || "No detector could be derived"); btn.textContent = "Resolve"; btn.disabled = false; return; }
-    const hits = d.proof ? `${d.proof.match_count} hit(s)` : "";
-    if (!d.armed) { toast(`Proposed (${hits}) but not persistable: ${d.note || "no YAML target"}`); btn.textContent = "Resolve"; btn.disabled = false; return; }
-    if (!confirm(`Arm this rule?\n\nDetector: ${(d.proposal.forbid || []).join(", ")}\nProof: ${hits}\n\nWrites to ${d.file}`)) {
+    if (!d.resolved) {
+      // The LLM is non-deterministic — offer an inline re-propose (another attempt).
+      resolveStep(rule, [
+        `<div class="note bad">✗ No detector could be derived — ${esc(d.reason || "the rule is not mechanically detectable")}.</div>`,
+        `<button class="btn primary" id="re-propose" type="button" style="width:100%">↻ Re-propose</button>`,
+      ]);
+      wireRePropose(rule, btn);
       btn.textContent = "Resolve"; btn.disabled = false; return;
     }
-    await api("/api/rules/resolve", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rule, dry_run: false }),
+    const patterns = [...(d.proposal.forbid || []), ...(d.proposal.forbid_regex || []).map((r) => r + " (regex)"), ...(d.proposal.file_regex || []).map((r) => r + " (file)")];
+    const hitRows = (d.proof.hits || []).slice(0, 40).map((h) =>
+      `<div class="hit"><span class="loc">${esc(h.file)}:${h.line}</span><span class="ex">${esc(h.excerpt)}</span></div>`).join("");
+    const base = [
+      `<div class="note">① Proposed by <b>${esc(d.proposal.source)}</b>: ${esc(JSON.stringify(patterns))}${d.proposal.rationale ? `<br><span class="src">${esc(d.proposal.rationale)}</span>` : ""}</div>`,
+      `<div class="head" style="margin-top:.6rem">② Proven in sandbox → <b>${d.proof.match_count}</b> hit(s) across ${d.proof.files_scanned} files</div>`,
+      `<div class="hits">${hitRows || '<div class="state">no matches</div>'}</div>`,
+    ];
+    if (!d.armed) {
+      resolveStep(rule, [...base,
+        `<div class="note">③ ${esc(d.note || "Markdown-sourced rule")} — proposed &amp; proven only, nothing to persist.</div>`,
+        `<button class="btn" id="re-propose" type="button" style="width:100%">↻ Re-propose (try another detector)</button>`,
+      ]);
+      wireRePropose(rule, btn);
+      btn.textContent = "Resolve"; btn.disabled = false; return;
+    }
+    resolveStep(rule, [...base, `<div class="note">③ Ready to arm → writes the detector into <b>${esc(d.file)}</b>.</div><button class="btn primary" id="arm-confirm" type="button" style="width:100%">Arm this rule</button>`]);
+    $("arm-confirm").addEventListener("click", async () => {
+      $("arm-confirm").disabled = true; $("arm-confirm").textContent = "Arming…";
+      try {
+        await api("/api/rules/resolve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rule, dry_run: false }) });
+        resolveStep(rule, [...base, `<div class="note ok">✓ Armed — detector written into <b>${esc(d.file)}</b>. Rescanning…</div>`]);
+        btn.textContent = "Armed ✓";
+        runScan($("project").value && $("project").value !== "__all__" ? $("project").value : undefined);
+      } catch (e) { toast(e.message, true); $("arm-confirm").disabled = false; $("arm-confirm").textContent = "Arm this rule"; }
     });
-    btn.textContent = "Armed ✓";
-    runScan($("project").value && $("project").value !== "__all__" ? $("project").value : undefined);
-  } catch (e) { toast(e.message); btn.textContent = "Resolve"; btn.disabled = false; }
+  } catch (e) {
+    resolveStep(rule, [`<div class="note bad">✗ ${esc(e.message)}</div>`, `<button class="btn primary" id="re-propose" type="button" style="width:100%">↻ Re-propose</button>`]);
+    wireRePropose(rule, btn);
+    btn.textContent = "Resolve"; btn.disabled = false;
+  }
 }
 
+// ── Workshop: propose & replay a detector for an arbitrary rule ──────────────
 $("propose").addEventListener("click", propose);
 async function propose() {
   const rule = $("rule").value.trim();
-  if (!rule) { toast("Enter a rule first"); return; }
+  if (!rule) { toast("Enter a rule first"); $("rule").focus(); return; }
   $("propose").disabled = true; $("propose").textContent = "Replaying…";
+  $("result").innerHTML = `<div class="note"><span class="spinner" aria-hidden="true"></span>Deriving &amp; proving a detector…</div>`;
   try {
     const d = await api("/api/propose", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -359,18 +567,21 @@ function renderResult(d) {
   const p = d.proposal, proof = d.proof;
   const hits = (proof.hits || []).slice(0, 40).map((h) =>
     `<div class="hit"><span class="loc">${esc(h.file)}:${h.line}</span><span class="ex">${esc(h.excerpt)}</span></div>`).join("");
+  const patterns = [...(p.forbid || []), ...(p.forbid_regex || []).map((r) => r + " (regex)"), ...(p.file_regex || []).map((r) => r + " (file)")];
   box.innerHTML =
     `<div class="proof">
-       <div class="head">Proposed by <span class="src-tag">${esc(p.source)}</span> · forbid ${esc(JSON.stringify(p.forbid))}
+       <div class="head">Proposed by <span class="src-tag">${esc(p.source)}</span> · ${esc(JSON.stringify(patterns))}
          → <b>${proof.match_count}</b> hit(s) across ${proof.files_scanned} files</div>
-       <div class="hits">${hits || '<div class="empty">no matches</div>'}</div>
-       <p class="muted" style="margin:.7rem 0 .3rem">Review the hits for false positives before arming.</p>
+       <div class="hits">${hits || '<div class="state">no matches</div>'}</div>
+       <p class="note">Review the hits for false positives before arming.</p>
      </div>`;
 }
 
-// Init: populate the project selector and show the startup scan if it has finished.
-loadProjects();
-pollHealth(null).catch(() => {});
+// ── Toolbar wiring + init ────────────────────────────────────────────────────
+$("q").addEventListener("input", () => (viewMode === "all" ? renderAllRows() : renderRules()));
+$("sort").addEventListener("change", () => { sortKey[viewMode] = $("sort").value; viewMode === "all" ? renderAllRows() : renderRules(); });
+
+loadProjects().then(() => applyRoute(false));
 </script>
 </body>
 </html>
