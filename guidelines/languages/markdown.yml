@@ -1,0 +1,14 @@
+apply_to_glob: '**/*.md'
+language_target: markdown
+rules:
+- category: correctness
+  detect:
+    cross_reference:
+      cite: '`make ([a-z][a-z0-9-]*)`'
+      define_as: '^{name}\s*:'
+      define_in: Makefile
+  id: md-documented-make-target-exists
+  rationale: A command in the docs is an instruction the reader will run, and a missing
+    target only surfaces when it fails in their terminal
+  rule: Every make target cited in the documentation exists in the Makefile
+  severity: warning
