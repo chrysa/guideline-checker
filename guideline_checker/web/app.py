@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from guideline_checker.checker import RuleResult, run_checks
+from guideline_checker.interpret import interpret_rules
 from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources
 from guideline_checker.persist import apply_detector, find_rule_id_for_text
 from guideline_checker.proposer import (
@@ -72,6 +73,11 @@ class _ScanState:
     all_summaries: list[dict[str, Any]] = field(default_factory=list)
     all_timestamp: str | None = None
     all_running: bool = False
+    # Interpret-once (ADR D-0016): the kinded, proven ruleset derived from the
+    # active project's advisory prose, computed on demand by _do_interpret.
+    derived: list[dict[str, Any]] = field(default_factory=list)
+    interpret_running: bool = False
+    interpret_timestamp: str | None = None
 
 
 _state: _ScanState = _ScanState()
@@ -208,6 +214,39 @@ def _do_scan_all() -> None:
         _state.all_timestamp = datetime.now(UTC).isoformat()
     finally:
         _state.all_running = False
+
+
+def _do_interpret() -> None:
+    """Interpret the active project's advisory prose into a proven, kinded ruleset.
+
+    ADR D-0016 interpret-once: read the host prose the last scan surfaced as
+    ``advisory`` (unenforced), propose a detector for each (heuristic → LLM),
+    classify its kind, and sandbox-prove it. Writes nothing — the result is the
+    per-repo derived ruleset offered for review, each rule kept only if a
+    detector could be derived.
+    """
+    _state.interpret_running = True
+    try:
+        root = _active_root()
+        advisory = [r["rule"] for r in _state.health if r.get("state") == "advisory"]
+        derived = interpret_rules(
+            advisory,
+            propose=lambda rule: _propose(rule, "**/*"),
+            replay=lambda rule, det: replay(rule, det, root, "**/*").match_count,
+        )
+        _state.derived = [
+            {
+                "rule": d.rule,
+                "kind": d.kind,
+                "match_count": d.match_count,
+                "source": d.source,
+                "patterns": list(d.detector.forbid) + [r + " (regex)" for r in d.detector.forbid_regex],
+            }
+            for d in derived
+        ]
+        _state.interpret_timestamp = datetime.now(UTC).isoformat()
+    finally:
+        _state.interpret_running = False
 
 
 # ── App lifecycle ──────────────────────────────────────────────────────────────
@@ -355,6 +394,27 @@ def get_health_all() -> JSONResponse:
             "running": _state.all_running,
             "projects": _state.all_summaries,
             "combined": combined,
+        }
+    )
+
+
+@app.post("/api/interpret", response_model=dict[str, str], dependencies=[Depends(require_auth)])
+def trigger_interpret(background_tasks: BackgroundTasks) -> dict[str, str]:
+    """Interpret the active project's advisory prose into a derived, proven ruleset."""
+    if _state.interpret_running:
+        return {"status": "already_running"}
+    background_tasks.add_task(_do_interpret)
+    return {"status": "started"}
+
+
+@app.get("/api/interpret", response_model=None, dependencies=[Depends(require_auth)])
+def get_interpret() -> JSONResponse:
+    """Return the last interpret-once result: the kinded, proven derived ruleset."""
+    return JSONResponse(
+        {
+            "timestamp": _state.interpret_timestamp,
+            "running": _state.interpret_running,
+            "derived": _state.derived,
         }
     )
 
