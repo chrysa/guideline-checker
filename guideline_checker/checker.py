@@ -625,6 +625,38 @@ def _file_regex_violations(
     return violations
 
 
+def _require_regex_violations(
+    file_path: Path,
+    lines: list[str],
+    rule: str,
+    detector: RuleDetector,
+) -> list[Violation]:
+    """Flag a file that is *missing* a required pattern — the absence is the defect.
+
+    Every other mechanism fires on something present, so a rule like "an HTML page
+    must declare a viewport" or "the Makefile must define the mandatory targets"
+    was inexpressible: `file_regex` says nothing when it finds nothing.
+
+    A missing pattern has no line to point at, so the violation is anchored at line 1
+    and carries the pattern as its content — a bare empty string would collapse the
+    baseline fingerprint of two different missing requirements into one.
+    """
+    if not detector.require_regex:
+        return []
+    content = "\n".join(lines)
+    return [
+        Violation(
+            file=file_path,
+            line_number=1,
+            line_content=f"missing: {pattern}"[:120],
+            rule=rule,
+            severity="warning",
+        )
+        for pattern in detector.require_regex
+        if not _compile_regex(pattern).search(content)
+    ]
+
+
 def _ast_violations(
     file_path: Path,
     lines: list[str],
@@ -701,6 +733,7 @@ def _declared_violations(
     violations: list[Violation] = []
     violations.extend(_per_line_violations(file_path, lines, rule, detector))
     violations.extend(_file_regex_violations(file_path, lines, rule, detector))
+    violations.extend(_require_regex_violations(file_path, lines, rule, detector))
     violations.extend(_ast_violations(file_path, lines, rule, detector))
     violations.extend(_scan_violations(file_path, lines, rule, detector, root))
     return violations
