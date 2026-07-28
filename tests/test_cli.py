@@ -420,6 +420,44 @@ class TestBaselineCli:
         )
         assert code == 1
 
+    def test_missing_baseline_explains_itself_instead_of_crashing(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A configured baseline that is absent used to surface a raw traceback.
+
+        It happens for real: the path is declared in ``pyproject.toml`` and committed,
+        then a build context or a shallow copy leaves the JSON behind.
+        """
+        root = _make_project(tmp_path, violation=True)
+        absent = tmp_path / "never-written.json"
+
+        code = main(
+            [
+                "check",
+                "--root",
+                str(root),
+                "--output",
+                str(tmp_path / "r.html"),
+                "--baseline",
+                str(absent),
+            ]
+        )
+
+        assert code == 1
+        message = capsys.readouterr().err
+        assert "Baseline file not found" in message
+        assert "--write-baseline" in message  # says how to produce it
+
+    def test_baseline_from_config_is_checked_too(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """The path most often comes from config, not the command line — cover that route."""
+        root = _make_project(tmp_path, violation=True)
+        (root / "pyproject.toml").write_text('[tool.guideline-checker]\nbaseline = "absent.json"\n', encoding="utf-8")
+
+        code = main(["check", "--root", str(root), "--output", str(tmp_path / "r.html")])
+
+        assert code == 1
+        assert "Baseline file not found" in capsys.readouterr().err
+
 
 class TestConfigCli:
     """End-to-end coverage of [tool.guideline-checker] resolution (L2.3)."""

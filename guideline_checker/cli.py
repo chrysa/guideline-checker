@@ -579,6 +579,8 @@ def _cmd_check(args: argparse.Namespace) -> int:
     if args.write_baseline is not None:
         return _write_baseline_and_exit(args, results, root)
     if args.baseline is not None:
+        if not args.baseline.exists():
+            return _report_missing_baseline(args.baseline)
         results = _apply_baseline(args, results, root)
 
     return _report_and_gate(args, results, root)
@@ -656,6 +658,24 @@ def _env_or_config_max_size(values: dict[str, object]) -> int | None:
         return int(env)
     raw = values.get("max_file_size")
     return raw if isinstance(raw, int) else None
+
+
+def _report_missing_baseline(path: Path) -> int:
+    """Explain a configured-but-absent baseline instead of letting the read blow up.
+
+    Silently carrying on is worse than failing here: the run would suppress nothing
+    and then gate on every pre-existing violation, which reads like the tool got
+    stricter overnight. So say what is missing and how to produce it.
+    """
+    print(
+        f"[guideline-checker] Baseline file not found: {path}\n"
+        "  Create it with: guideline-checker check --write-baseline "
+        f"{path.name}\n"
+        "  Or drop the 'baseline' key from [tool.guideline-checker] to gate on "
+        "every violation.",
+        file=sys.stderr,
+    )
+    return 1
 
 
 def _apply_baseline(args: argparse.Namespace, results: list[RuleResult], root: Path) -> list[RuleResult]:
