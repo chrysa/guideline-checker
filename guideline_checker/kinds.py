@@ -34,6 +34,7 @@ class CheckKind(StrEnum):
 
     FORBIDDEN_PATTERN = "forbidden-pattern"  # a substring/regex forbidden on a source line
     FILE_CONTENT = "file-content"  # a whole-file content requirement or prohibition
+    CROSS_REFERENCE = "cross-reference"  # a citation in one file resolved against another
     AST_STRUCTURE = "ast-structure"  # a structural fact checked on the parse tree
     CONTENT_SCAN = "content-scan"  # a named content scanner (e.g. entropy secrets)
     NUMERIC_THRESHOLD = "numeric-threshold"  # a measured metric compared to a threshold
@@ -47,6 +48,7 @@ class CheckKind(StrEnum):
 KIND_MEASURES: dict[CheckKind, str] = {
     CheckKind.FORBIDDEN_PATTERN: "a forbidden substring or regex appears on a source line",
     CheckKind.FILE_CONTENT: "a whole-file regex matches (or fails to match) a file's content",
+    CheckKind.CROSS_REFERENCE: "a name cited in one file has a matching definition in another",
     CheckKind.AST_STRUCTURE: "a structural fact holds on a file's parse tree",
     CheckKind.CONTENT_SCAN: "a named content scanner flags a line (e.g. high-entropy secret)",
     CheckKind.NUMERIC_THRESHOLD: "a measured metric (length, complexity, coverage) crosses a threshold",
@@ -72,6 +74,8 @@ def kind_of_detector(detector: RuleDetector | None) -> CheckKind | None:
     """
     if detector is None:
         return None
+    if detector.cross_reference is not None:
+        return CheckKind.CROSS_REFERENCE
     if detector.ast_checks:
         return CheckKind.AST_STRUCTURE
     if detector.scan_checks:
