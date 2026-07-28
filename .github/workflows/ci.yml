@@ -28,9 +28,15 @@ on:
     push:
         branches:
             - main
+            # chrysa branch conventions (CLAUDE.md) — full and short prefixes, so
+            # a PR branch triggers CI on push regardless of which form it uses.
+            - "feature/**"
             - "feat/**"
+            - "bugfix/**"
             - "fix/**"
+            - "hotfix/**"
             - "chore/**"
+            - "release/**"
             - "ci/**"
     workflow_dispatch:
 
