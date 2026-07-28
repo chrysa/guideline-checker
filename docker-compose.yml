@@ -46,5 +46,6 @@ services:
     environment:
     - PYTHONDONTWRITEBYTECODE=1
     - PYTHONUNBUFFERED=1
+    user: ${UID:-1000}:${GID:-1000}
     volumes:
     - ./coverage.xml:/app/coverage.xml
