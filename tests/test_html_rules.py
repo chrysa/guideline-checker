@@ -82,14 +82,41 @@ def test_a_decorative_image_declares_an_empty_alt_rather_than_omitting_it(
     assert not any("alt attribute" in rule for rule in _rules_fired(project))
 
 
-def test_every_html_rule_regex_compiles() -> None:
-    """A PCRE-flavoured class loads fine and then never matches — the dead-rule trap."""
+def test_a_page_without_a_viewport_is_flagged(project: Path) -> None:
+    (project / "page.html").write_text("<html><head><title>x</title></head><body></body></html>\n", encoding="utf-8")
+    assert any("viewport" in rule for rule in _rules_fired(project))
+
+
+def test_a_fragment_with_no_head_is_exempt_from_the_viewport(project: Path) -> None:
+    """A partial is not a page.
+
+    Requiring a viewport of every .html would flag every template fragment — the
+    systematic false-positive class that once made this tool unusable. The rule
+    only fires on a file that carries a head.
+    """
+    (project / "row.html").write_text('<div class="row"><span>hello</span></div>\n', encoding="utf-8")
+    assert not any("viewport" in rule for rule in _rules_fired(project))
+
+
+@pytest.mark.parametrize("referential", ["html.yml", "makefile.yml"])
+def test_every_shipped_regex_compiles(referential: str) -> None:
+    """A PCRE-flavoured class loads fine and then never matches — the dead-rule trap.
+
+    Both regex-bearing keys are covered: the guard originally read only
+    ``forbid_regex``, so the first ``require_regex`` rule slipped straight past the
+    check written to catch exactly this.
+    """
     import re
 
     import yaml
 
-    document = yaml.safe_load((REFERENTIAL / "languages" / "html.yml").read_text(encoding="utf-8"))
-    patterns = [pattern for rule in document["rules"] for pattern in rule.get("detect", {}).get("forbid_regex", [])]
+    document = yaml.safe_load((REFERENTIAL / "languages" / referential).read_text(encoding="utf-8"))
+    patterns = [
+        pattern
+        for rule in document["rules"]
+        for key in ("forbid_regex", "require_regex")
+        for pattern in rule.get("detect", {}).get(key, [])
+    ]
     assert patterns
     for pattern in patterns:
         re.compile(pattern)
