@@ -28,19 +28,40 @@ def test_heuristic_mappable_dead_rule_is_resolvable() -> None:
     assert _is_resolvable(_health("No print() calls in production", HealthState.DEAD)) is True
 
 
-def test_semantic_rule_not_resolvable_without_llm(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.delenv("GC_CLAUDE", raising=False)
+def test_semantic_dead_rule_not_resolvable_without_backend(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # GC_CLAUDE=0 opts out of the Claude CLI auto-detect; no Ollama either.
+    monkeypatch.setenv("GC_CLAUDE", "0")
     monkeypatch.delenv("GC_OLLAMA", raising=False)
     entry = _health("Structure prompts with XML tags for adherence", HealthState.DEAD)
     assert _is_resolvable(entry) is False
 
 
-def test_proven_and_armed_rules_are_never_resolvable() -> None:
+def test_proven_armed_and_advisory_rules_are_never_resolvable() -> None:
+    # Only dead YAML rules are one-click resolvable (advisory is markdown — nothing to write to).
     assert _is_resolvable(_health("No print() calls", HealthState.PROVEN)) is False
     assert _is_resolvable(_health("No print() calls", HealthState.ARMED)) is False
+    assert _is_resolvable(_health("No print() calls", HealthState.ADVISORY)) is False
 
 
 def test_serialize_health_exposes_resolvable_flag() -> None:
     payload = _serialize_health([_health("No print() calls in production", HealthState.DEAD)])
     assert payload[0]["resolvable"] is True
     assert payload[0]["state"] == "dead"
+
+
+def test_compliance_note_grades_by_violations() -> None:
+    from guideline_checker.web.app import _compliance_note
+
+    assert _compliance_note(0, 0, 0, 100)["grade"] == "A"
+    assert _compliance_note(0, 0, 0, 100)["score"] == 100
+    # Errors dominate and pull the grade down hard.
+    assert _compliance_note(9, 91, 8, 541)["grade"] == "F"
+    # A couple of warnings only: still a strong grade.
+    assert _compliance_note(0, 3, 0, 100)["grade"] == "A"
+
+
+def test_compliance_note_na_when_no_rules() -> None:
+    from guideline_checker.web.app import _compliance_note
+
+    note = _compliance_note(0, 0, 0, 0)
+    assert note["grade"] == "n/a" and note["score"] is None
