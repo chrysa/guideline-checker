@@ -20,6 +20,11 @@ RUN pip install --no-cache-dir --upgrade pip \
 # ── Stage 2: test — run the full test suite ───────────────────────────────────
 FROM deps AS test
 
+# The lifecycle checks inspect real git repositories, so the test image needs git.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
