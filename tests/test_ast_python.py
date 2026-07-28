@@ -128,7 +128,13 @@ def test_unknown_name_ignored_at_runtime() -> None:
 
 def test_unknown_checks_helper() -> None:
     assert unknown_checks(["pydantic-v1", "nope"]) == ["nope"]
-    assert set(VALID_AST_CHECKS) == {"pydantic-v1", "sync-fastapi-route", "mutable-default-arg"}
+    assert set(VALID_AST_CHECKS) == {
+        "pydantic-v1",
+        "sync-fastapi-route",
+        "mutable-default-arg",
+        "silent-exception",
+        "assert-as-validation",
+    }
 
 
 # ─── YAML wiring + end-to-end ─────────────────────────────────────────────────
@@ -188,3 +194,46 @@ def test_shipped_python_rules_use_ast(tmp_path: Path) -> None:
     ast_by_rule = {r: d.ast_checks for i in instructions for r, d in i.rule_detectors.items()}
     assert ast_by_rule.get("Use Pydantic v2 models exclusively; v1 syntax is forbidden") == ("pydantic-v1",)
     assert ast_by_rule.get("Define FastAPI route handlers as async def") == ("sync-fastapi-route",)
+
+
+# ─── silent-exception ─────────────────────────────────────────────────────────
+
+
+def test_silent_exception_flags_a_blanket_catch_that_does_nothing() -> None:
+    src = "def run():\n    try:\n        go()\n    except Exception:\n        pass\n"
+    found = run_ast_checks(["silent-exception"], src)
+    assert [lineno for lineno, _ in found] == [4]
+
+
+def test_silent_exception_flags_a_bare_except() -> None:
+    src = "def run():\n    try:\n        go()\n    except:\n        pass\n"
+    assert run_ast_checks(["silent-exception"], src)
+
+
+def test_silent_exception_leaves_a_narrow_handler_alone() -> None:
+    """Catching precisely and acting on it is correct — no false alarm."""
+    src = "def run():\n    try:\n        go()\n    except ValueError:\n        return None\n"
+    assert run_ast_checks(["silent-exception"], src) == []
+
+
+def test_silent_exception_leaves_a_blanket_catch_that_acts_alone() -> None:
+    """What makes it a defect is the silence, not the breadth."""
+    src = "def run():\n    try:\n        go()\n    except Exception:\n        logger.exception('failed')\n"
+    assert run_ast_checks(["silent-exception"], src) == []
+
+
+# ─── assert-as-validation ─────────────────────────────────────────────────────
+
+
+def test_assert_as_validation_flags_a_runtime_guard() -> None:
+    found = run_ast_checks(["assert-as-validation"], "def check(v):\n    assert v > 0\n")
+    assert [lineno for lineno, _ in found] == [2]
+
+
+def test_assert_as_validation_explains_why_it_matters() -> None:
+    _lineno, message = run_ast_checks(["assert-as-validation"], "assert x\n")[0]
+    assert "-O" in message
+
+
+def test_assert_as_validation_is_silent_without_asserts() -> None:
+    assert run_ast_checks(["assert-as-validation"], "def check(v):\n    return v > 0\n") == []
