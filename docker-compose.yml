@@ -44,6 +44,12 @@ services:
       dockerfile: Dockerfile
       target: test
     environment:
+    # coverage writes its SQLite database beside the working directory, and /app is
+    # root-owned in the image. Since the service runs as the host UID, that write is
+    # denied and pytest dies with "unable to open database file" — after the tests
+    # have already passed. Point the database at a world-writable path; the XML report
+    # still lands on the bind mount below, which the host owns.
+    - COVERAGE_FILE=/tmp/.coverage
     - PYTHONDONTWRITEBYTECODE=1
     - PYTHONUNBUFFERED=1
     user: ${UID:-1000}:${GID:-1000}
