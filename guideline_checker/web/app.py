@@ -444,7 +444,7 @@ def get_health_all() -> JSONResponse:
 
 
 @app.post("/api/interpret", response_model=dict[str, str], dependencies=[Depends(require_auth)])
-def trigger_interpret(background_tasks: BackgroundTasks) -> dict[str, str]:
+async def trigger_interpret(background_tasks: BackgroundTasks) -> dict[str, str]:
     """Interpret the active project's advisory prose into a derived, proven ruleset."""
     if _state.interpret_running:
         return {"status": "already_running"}
@@ -453,7 +453,7 @@ def trigger_interpret(background_tasks: BackgroundTasks) -> dict[str, str]:
 
 
 @app.get("/api/interpret", response_model=None, dependencies=[Depends(require_auth)])
-def get_interpret() -> JSONResponse:
+async def get_interpret() -> JSONResponse:
     """Return the last interpret-once result: the kinded, proven derived ruleset."""
     return JSONResponse(
         {
