@@ -89,11 +89,7 @@ def test_every_html_rule_regex_compiles() -> None:
     import yaml
 
     document = yaml.safe_load((REFERENTIAL / "languages" / "html.yml").read_text(encoding="utf-8"))
-    patterns = [
-        pattern
-        for rule in document["rules"]
-        for pattern in rule.get("detect", {}).get("forbid_regex", [])
-    ]
+    patterns = [pattern for rule in document["rules"] for pattern in rule.get("detect", {}).get("forbid_regex", [])]
     assert patterns
     for pattern in patterns:
         re.compile(pattern)
