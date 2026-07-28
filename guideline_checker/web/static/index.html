@@ -100,6 +100,7 @@
   .chip.advisory { color: var(--advisory); background: color-mix(in srgb, var(--advisory) 18%, transparent); }
   .rules .rule { font-size: 0.85rem; }
   .rules .src { font-family: var(--mono); font-size: 0.64rem; color: var(--ink-faint); margin-top: 0.15rem; }
+  .rules .kind { color: var(--armed); }
   .rules .fires { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
   .rules .resolve { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.3rem 0.6rem; border-radius: 6px; border: 1px solid var(--armed); background: color-mix(in srgb, var(--armed) 15%, transparent); color: var(--armed); cursor: pointer; white-space: nowrap; }
   .rules .resolve:hover:not(:disabled) { background: color-mix(in srgb, var(--armed) 28%, transparent); }
@@ -195,6 +196,7 @@
           <textarea id="rule" rows="3" placeholder="e.g. Never unpickle untrusted data"></textarea>
         </div>
         <button class="btn primary" id="propose" type="button" style="width:100%">Propose &amp; replay</button>
+        <button class="btn" id="interpret" type="button" style="width:100%;margin-top:.5rem" title="Derive detectors for this project's advisory prose (LLM, bounded)">Interpret advisory prose →</button>
         <div id="result" aria-live="polite"></div>
       </div>
     </section>
@@ -384,7 +386,7 @@ function renderRules() {
   $("rules").innerHTML = rows.slice(0, 300).map((r) =>
     `<div class="row" data-rule="${esc(r.rule)}" role="button" tabindex="0" aria-label="${esc(r.state)}: ${esc(r.rule)} — click to load into the workshop">
        <span class="chip ${r.state}">${r.state}</span>
-       <div><div class="rule">${esc(r.rule)}</div><div class="src">${esc(r.instruction)}${r.provenance ? ` · from “${esc(r.provenance)}”` : ""}</div></div>
+       <div><div class="rule">${esc(r.rule)}</div><div class="src">${esc(r.instruction)}${r.kind && r.kind !== "advisory" ? ` · <span class="kind">${esc(r.kind)}</span>` : ""}${r.provenance ? ` · from “${esc(r.provenance)}”` : ""}</div></div>
        ${r.resolvable ? `<button class="resolve" data-rule="${esc(r.rule)}" title="Derive, prove and arm a detector">Resolve</button>` : `<span class="fires">${r.fire_count ? "×" + r.fire_count : ""}</span>`}
      </div>`).join("");
   document.querySelectorAll("#rules .row").forEach((el) => {
@@ -524,6 +526,36 @@ async function propose() {
     renderResult(d);
   } catch (e) { $("result").innerHTML = `<div class="note bad">✗ ${esc(e.message)}</div>`; toast(e.message, true); }
   finally { $("propose").disabled = false; $("propose").textContent = "Propose & replay"; }
+}
+
+// Interpret-once: derive detectors for the project's advisory prose (LLM, bounded),
+// each proven in the sandbox — the D-0016 "read prose once → kinded ruleset" step.
+$("interpret").addEventListener("click", interpret);
+async function interpret() {
+  const btn = $("interpret");
+  btn.disabled = true; btn.textContent = "Interpreting…";
+  $("result").innerHTML = `<div class="note"><span class="spinner" aria-hidden="true"></span>Reading advisory prose and deriving detectors (LLM, bounded)…</div>`;
+  try {
+    await api("/api/interpret", { method: "POST" });
+    let d = { running: true };
+    for (let i = 0; i < 300 && d.running; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      d = await api("/api/interpret");
+    }
+    renderDerived(d.derived || []);
+  } catch (e) { $("result").innerHTML = `<div class="note bad">✗ ${esc(e.message)}</div>`; toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = "Interpret advisory prose →"; }
+}
+function renderDerived(derived) {
+  if (!derived.length) { $("result").innerHTML = `<div class="note">No detectors could be derived from the advisory prose (it is semantic, or no LLM backend is available).</div>`; return; }
+  const rows = derived.map((d) =>
+    `<div class="hit"><span class="loc"><span class="kind">${esc(d.kind)}</span> ·${d.match_count} hit(s)</span><span class="ex">${esc(d.rule)}</span></div>`).join("");
+  $("result").innerHTML =
+    `<div class="proof">
+       <div class="head">Interpreted <b>${derived.length}</b> advisory rule(s) into proven detectors</div>
+       <div class="hits">${rows}</div>
+       <p class="note">Derived from host prose (ADR D-0016). Click a rule in the list to arm it via the workshop.</p>
+     </div>`;
 }
 
 function renderResult(d) {
