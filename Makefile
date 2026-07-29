@@ -70,11 +70,19 @@ test: ## Run tests
 test-cov: ## Run tests with coverage report
 	@$(PYTHON) -m pytest tests -v --cov=$(PACKAGE_DIR) --cov-report=xml --cov-report=term-missing --cov-fail-under=85
 
-e2e: ## Run Playwright E2E tests (requires server on port 8080)
-	@$(PYTHON) -m pytest tests/e2e/ -v --browser chromium
+# The E2E suite starts its own server, so no port needs to be up first.
+# PYTEST_DISABLE_PLUGIN_AUTOLOAD keeps the run hermetic: E2E must execute on the
+# host to drive a browser, and any pytest plugin installed there — including a
+# broken one — would otherwise load and kill collection. The plugins the suite
+# actually needs are named explicitly.
+E2E_PYTEST = PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 $(PYTHON) -m pytest tests/e2e/ -v \
+	--browser chromium -p pytest_playwright.pytest_playwright -p pytest_cov --no-cov
+
+e2e: ## Run Playwright E2E tests (starts its own server)
+	@$(E2E_PYTEST)
 
 e2e-headed: ## Run E2E tests in headed (visible) browser
-	@$(PYTHON) -m pytest tests/e2e/ -v --browser chromium --headed
+	@$(E2E_PYTEST) --headed
 
 install-e2e: ## Install E2E dependencies (playwright + browsers)
 	@$(PIP) install -e ".[e2e]"
