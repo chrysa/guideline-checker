@@ -82,9 +82,9 @@ class QualityGate:
 
         self.gates: list[tuple[str, str, str, str, CommandSpec]] = [
             ("Tests", "tests", "passed_tests", "≥", CommandSpec((("make", "test"),))),
-            ("Coverage", "coverage", "coverage_percentage", "≥", CommandSpec((("make", "test-coverage"),))),
+            ("Coverage", "coverage", "coverage_percentage", "≥", CommandSpec((("make", "test-cov"),))),
             ("Lint", "lint", "warning_count", "=", CommandSpec((("make", "lint"),))),
-            ("Types", "types", "error_count", "≤", CommandSpec((("make", "type-check"),))),
+            ("Types", "types", "error_count", "≤", CommandSpec((("make", "typecheck"),))),
             ("Build", "build", "build_status", "=", CommandSpec((("make", "build"),))),
             (
                 "Secrets",
@@ -137,17 +137,37 @@ class QualityGate:
         return returncode, combined
 
     def _parse_passed_tests(self, output: str) -> int:
-        patterns = [
-            r"(\d+)\s+passed",
-            r"passed\s*=\s*(\d+)",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, output, flags=re.IGNORECASE)
-            if match:
-                return int(match.group(1))
+        """Read the test count from pytest's summary line.
+
+        Taking the *first* match anywhere reads a test name: under ``-v`` a line
+        like ``test_returns_none_on_404 PASSED`` satisfies ``(\\d+)\\s+passed``, so
+        the gate recorded 404 for a suite of 785. With a ``>=`` threshold that
+        baseline would have let the real count halve without complaint.
+
+        The summary is the last such line, so the last match is the count.
+        """
+        for pattern in (r"(\d+)\s+passed", r"passed\s*=\s*(\d+)"):
+            matches = re.findall(pattern, output, flags=re.IGNORECASE)
+            if matches:
+                return int(matches[-1])
         return 0
 
     def _parse_coverage(self, output: str) -> float:
+        """Read the coverage percentage from a line that actually reports coverage.
+
+        Matching any line containing "total" caught pytest's own progress marker:
+        ``test_synthesis_multiple_repos_totals PASSED [ 93%]`` reported 93% for a
+        run that covered 88.88%. Anchor on the two shapes coverage really emits,
+        and only then fall back to the loose scan.
+        """
+        anchored = (
+            r"total\s+coverage[:\s]+(\d+(?:\.\d+)?)%",  # pytest-cov's --cov-fail-under line
+            r"^TOTAL\b.*?(\d+(?:\.\d+)?)%",  # the term-missing table's TOTAL row
+        )
+        for pattern in anchored:
+            match = re.search(pattern, output, flags=re.IGNORECASE | re.MULTILINE)
+            if match:
+                return float(match.group(1))
         for line in output.splitlines():
             if any(token in line.lower() for token in ["total", "coverage", "covered"]):
                 for value in re.findall(r"(\d+(?:\.\d+)?)%", line):
