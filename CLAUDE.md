@@ -126,14 +126,19 @@ make pre-commit
 docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest
 
 # 6. Quality gate (no-regression check)
-make quality-gate-verify
+make quality-gate-verify   # SKIPs until a baseline is recorded — it verifies nothing today
 ```
 
 ### Regression gate (before every PR)
 ```bash
-make lint && make test-cov && make quality-gate-verify
+make ci
+# Runs lint + format-check + typecheck + docker-test.
 # Coverage must stay >= 85%. Lint warnings must be 0.
 ```
+
+`make test` and `make test-cov` run pytest on the host. The authoritative path is
+`make docker-test`, which is what CI and the pre-push hook run — a host interpreter
+carrying a broken global pytest plugin fails collection before any test runs.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
