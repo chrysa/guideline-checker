@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 import pytest
+from pytest_mock import MockerFixture
 
 from guideline_checker.cli import build_parser, main
 
@@ -241,8 +242,7 @@ def test_main_web_warns_on_open_public_bind(
 
 
 class TestSynthesizeOrigin:
-    def test_origin_source_writes_report_and_returns_zero(self, tmp_path: Path) -> None:
-        from unittest.mock import patch
+    def test_origin_source_writes_report_and_returns_zero(self, tmp_path: Path, mocker: MockerFixture) -> None:
 
         from guideline_checker.gh_client import GhClient as RealClient
         from guideline_checker.gh_client import GhResult
@@ -266,28 +266,29 @@ class TestSynthesizeOrigin:
 
         from guideline_checker.cli import main
 
-        with patch("guideline_checker.cli.GhClient") as gh_cls:
-            gh_cls.return_value = RealClient(runner=_origin_runner)
-            code = main(
-                [
-                    "synthesize",
-                    "--source",
-                    "origin",
-                    "--manifest",
-                    str(manifest),
-                    "--shared-standards",
-                    str(shared),
-                    "--workspace",
-                    str(tmp_path),
-                    "--output",
-                    str(out),
-                ]
-            )
+        gh_cls = mocker.patch("guideline_checker.cli.GhClient")
+        gh_cls.return_value = RealClient(runner=_origin_runner)
+        code = main(
+            [
+                "synthesize",
+                "--source",
+                "origin",
+                "--manifest",
+                str(manifest),
+                "--shared-standards",
+                str(shared),
+                "--workspace",
+                str(tmp_path),
+                "--output",
+                str(out),
+            ]
+        )
         assert code == 0
         assert out.exists()
 
-    def test_origin_fix_dry_run_lists_prs(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        from unittest.mock import patch
+    def test_origin_fix_dry_run_lists_prs(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: MockerFixture
+    ) -> None:
 
         from guideline_checker.gh_client import GhClient as RealClient
         from guideline_checker.gh_client import GhResult
@@ -310,25 +311,25 @@ class TestSynthesizeOrigin:
 
         from guideline_checker.cli import main
 
-        with patch("guideline_checker.cli.GhClient") as gh_cls:
-            gh_cls.return_value = RealClient(runner=_runner)
-            code = main(
-                [
-                    "synthesize",
-                    "--source",
-                    "origin",
-                    "--manifest",
-                    str(manifest),
-                    "--shared-standards",
-                    str(shared),
-                    "--workspace",
-                    str(tmp_path),
-                    "--output",
-                    str(tmp_path / "s.html"),
-                    "--fix",
-                    "--dry-run",
-                ]
-            )
+        gh_cls = mocker.patch("guideline_checker.cli.GhClient")
+        gh_cls.return_value = RealClient(runner=_runner)
+        code = main(
+            [
+                "synthesize",
+                "--source",
+                "origin",
+                "--manifest",
+                str(manifest),
+                "--shared-standards",
+                str(shared),
+                "--workspace",
+                str(tmp_path),
+                "--output",
+                str(tmp_path / "s.html"),
+                "--fix",
+                "--dry-run",
+            ]
+        )
         assert code == 0
         assert "would open a distribution-fix PR" in capsys.readouterr().out
 
