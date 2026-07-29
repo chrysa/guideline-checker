@@ -71,8 +71,9 @@ repos:
   - id: claude-skill-frontmatter
   - id: claude-agent-frontmatter
   - id: claude-mcp-config
+  - id: python-no-unittest-import
   repo: https://github.com/chrysa/pre-commit-tools
-  rev: v0.1.1-98
+  rev: v0.1.1-99
 - hooks:
   - id: gitleaks
   repo: https://github.com/gitleaks/gitleaks
