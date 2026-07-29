@@ -52,6 +52,9 @@ web = [
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
+    # Mandated by the standard in place of unittest.mock, and absent until now —
+    # which is precisely why the suite still reached for unittest.mock.
+    "pytest-mock>=3.14",
     "ruff>=0.9",
     "mypy>=1.10",
     "types-PyYAML>=6",

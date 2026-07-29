@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from unittest.mock import patch
 
 import pytest
 from httpx2 import ASGITransport, AsyncClient
+from pytest_mock import MockerFixture
 
 from guideline_checker.web.auth import (
     AuthMode,
@@ -123,7 +123,7 @@ def test_check_local_rejects_wrong_credentials(monkeypatch: pytest.MonkeyPatch) 
     assert exc_info.value.status_code == 401
 
 
-def test_check_local_rejects_missing_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_check_local_rejects_missing_credentials(monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture) -> None:
     from fastapi import HTTPException
 
     monkeypatch.setenv("LOCAL_USERNAME", "admin")
@@ -137,7 +137,7 @@ def test_check_local_rejects_missing_credentials(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.fixture()
-async def auth_client(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[AsyncClient]:
+async def auth_client(monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture) -> AsyncIterator[AsyncClient]:
     """TestClient with auth mocked at web app level."""
 
     monkeypatch.setenv("AUTH_ENABLED", "true")
@@ -153,12 +153,12 @@ async def auth_client(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[AsyncCli
     _state.error = None
 
     transport = ASGITransport(app=app, raise_app_exceptions=True)
-    with patch("guideline_checker.web.app._do_scan"):
-        async with (
-            app.router.lifespan_context(app),
-            AsyncClient(transport=transport, base_url="http://testserver") as c,
-        ):
-            yield c
+    mocker.patch("guideline_checker.web.app._do_scan")
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=transport, base_url="http://testserver") as c,
+    ):
+        yield c
 
 
 async def test_api_results_requires_auth_key(auth_client: AsyncClient) -> None:
@@ -173,10 +173,10 @@ async def test_api_results_accepts_valid_key(auth_client: AsyncClient) -> None:
     assert response.status_code == 200
 
 
-async def test_api_scan_requires_auth_key(auth_client: AsyncClient) -> None:
+async def test_api_scan_requires_auth_key(auth_client: AsyncClient, mocker: MockerFixture) -> None:
     """Without API key, /api/scan should be forbidden."""
-    with patch("guideline_checker.web.app._do_scan"):
-        response = await auth_client.post("/api/scan")
+    mocker.patch("guideline_checker.web.app._do_scan")
+    response = await auth_client.post("/api/scan")
     assert response.status_code == 403
 
 
@@ -198,7 +198,7 @@ async def test_dashboard_no_auth_required(auth_client: AsyncClient) -> None:
     assert response.status_code == 200
 
 
-async def test_dashboard_never_embeds_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_dashboard_never_embeds_api_key(monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture) -> None:
     """Regression: the dashboard must NEVER embed the server-side API key.
 
     The dashboard is served on the public ``/`` route, so leaking the key into
@@ -217,12 +217,12 @@ async def test_dashboard_never_embeds_api_key(monkeypatch: pytest.MonkeyPatch) -
     web_app._state.error = None
 
     transport = ASGITransport(app=web_app.app, raise_app_exceptions=True)
-    with patch("guideline_checker.web.app._do_scan"):
-        async with (
-            web_app.app.router.lifespan_context(web_app.app),
-            AsyncClient(transport=transport, base_url="http://testserver") as c,
-        ):
-            response = await c.get("/")
+    mocker.patch("guideline_checker.web.app._do_scan")
+    async with (
+        web_app.app.router.lifespan_context(web_app.app),
+        AsyncClient(transport=transport, base_url="http://testserver") as c,
+    ):
+        response = await c.get("/")
 
     assert response.status_code == 200
     assert canary not in response.text
@@ -232,7 +232,7 @@ async def test_dashboard_never_embeds_api_key(monkeypatch: pytest.MonkeyPatch) -
     assert "sessionStorage" in response.text
 
 
-async def test_disabled_mode_allows_all(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_disabled_mode_allows_all(monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture) -> None:
     """With AUTH_ENABLED=false, all API endpoints should be accessible."""
     monkeypatch.setenv("AUTH_ENABLED", "false")
     monkeypatch.delenv("API_KEY", raising=False)
@@ -246,12 +246,12 @@ async def test_disabled_mode_allows_all(monkeypatch: pytest.MonkeyPatch) -> None
     _state.error = None
 
     transport = ASGITransport(app=app, raise_app_exceptions=True)
-    with patch("guideline_checker.web.app._do_scan"):
-        async with (
-            app.router.lifespan_context(app),
-            AsyncClient(transport=transport, base_url="http://testserver") as c,
-        ):
-            response = await c.get("/api/results")
-            assert response.status_code == 200
-            response = await c.get("/api/constraints")
-            assert response.status_code == 200
+    mocker.patch("guideline_checker.web.app._do_scan")
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=transport, base_url="http://testserver") as c,
+    ):
+        response = await c.get("/api/results")
+        assert response.status_code == 200
+        response = await c.get("/api/constraints")
+        assert response.status_code == 200
