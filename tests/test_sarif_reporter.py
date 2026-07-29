@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pytest_mock import MockerFixture
+
 from guideline_checker.checker import RuleResult, Violation
 from guideline_checker.loader import InstructionFile
 from guideline_checker.reporters.sarif import SarifReporter, _sanitize_rule_id
@@ -128,13 +130,12 @@ def test_sanitize_rule_id_allows_dots_slashes() -> None:
     assert "/" in result
 
 
-def test_sarif_get_version_fallback_on_import_error(tmp_path: Path) -> None:
+def test_sarif_get_version_fallback_on_import_error(tmp_path: Path, mocker: MockerFixture) -> None:
     """_get_version should return '0.0.0' if __version__ cannot be imported."""
     import sys
-    from unittest.mock import patch
 
     reporter = SarifReporter()
     # Simulate ImportError when importing guideline_checker.__version__
-    with patch.dict(sys.modules, {"guideline_checker": None}):  # type: ignore[dict-item]
-        version = reporter._get_version()
+    mocker.patch.dict(sys.modules, {"guideline_checker": None})  # type: ignore[dict-item]
+    version = reporter._get_version()
     assert version == "0.0.0"
