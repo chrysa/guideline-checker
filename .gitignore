@@ -221,6 +221,9 @@ sys
 # Local-only run artifacts
 .playwright-mcp/
 .quality-gate-last-report.json
+# Records raw command output, including a full detect-secrets scan (~120 KB).
+# A metrics baseline could be committed; this artefact, as shaped, cannot.
+.quality-gate-baseline.json
 
 # chrysa canonical .gitignore — source of truth
 # Source: chrysa/shared-standards/templates/gitignore.canonical

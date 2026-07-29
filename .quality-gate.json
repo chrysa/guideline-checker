@@ -1,9 +1,9 @@
 {
   "commands": {
     "build": "make build",
-    "coverage": "make test-cov",
+    "coverage": "make docker-test",
     "lint": "make lint",
-    "tests": "make test",
+    "tests": "make docker-test",
     "types": "make typecheck"
   },
   "description": "Quality gate configuration for Python project",
