@@ -972,11 +972,24 @@ def _exception_checks(rule_lower: str) -> list[PatternCheck]:
     return []
 
 
+@functools.lru_cache(maxsize=512)
+def _mentions(rule_lower: str, phrase: str) -> bool:
+    """True when ``phrase`` appears in ``rule_lower`` as whole words.
+
+    A plain substring test makes short phrases bleed into longer words: prose such
+    as "no executable runtime" contains "no exec", which used to arm an ``exec(``
+    detector and flag every JavaScript ``RegExp.exec()`` call. Anchoring on word
+    boundaries keeps the phrase table honest — the rule must actually name the
+    construct it forbids.
+    """
+    return re.search(rf"\b{re.escape(phrase)}\b", rule_lower) is not None
+
+
 def _dangerous_builtin_checks(rule_lower: str) -> list[PatternCheck]:
     checks: list[PatternCheck] = []
-    if "no eval" in rule_lower:
+    if _mentions(rule_lower, "no eval"):
         checks.append(PatternCheck("eval(", "error"))
-    if "no exec" in rule_lower:
+    if _mentions(rule_lower, "no exec"):
         checks.append(PatternCheck("exec(", "error"))
     return checks
 
