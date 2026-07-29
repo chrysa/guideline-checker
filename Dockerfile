@@ -37,6 +37,8 @@ RUN pip install --no-cache-dir -e ".[dev]"
 COPY tests/ ./tests/
 # The shipped referential — tests assert against it (test_guidelines, test_declarative_detectors).
 COPY guidelines/ ./guidelines/
+# The quality-gate script is repo machinery with its own tests (test_quality_gate).
+COPY scripts/ ./scripts/
 
 # The compose service runs as the host UID, which is unknown at build time and owns
 # nothing here. Several CLI tests invoke `check` without --output, so the report
