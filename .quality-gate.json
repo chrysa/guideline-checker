@@ -22,6 +22,14 @@
       "type": "count",
       "value": 0
     },
+    "security_secrets": {
+      "operator": "≤",
+      "type": "count"
+    },
+    "security_vulns": {
+      "operator": "≤",
+      "type": "count"
+    },
     "tests": {
       "operator": "≥",
       "type": "count"
