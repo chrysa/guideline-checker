@@ -34,61 +34,61 @@ help: ## Display this help message
 # ─── Installation ────────────────────────────────────────────────────────────
 
 install: ## Install package dependencies
-	$(PIP) install -e "."
+	@$(PIP) install -e "."
 
 install-dev: ## Install package + dev dependencies
-	$(PIP) install -e ".[dev]"
-	$(PIP) install ruff mypy pytest pytest-cov
+	@$(PIP) install -e ".[dev]"
+	@$(PIP) install ruff mypy pytest pytest-cov
 
 install-pre-commit: ## Install and configure git pre-commit hooks
-	$(PIP) install --quiet pre-commit
-	pre-commit install
-	pre-commit autoupdate --bleeding-edge
+	@$(PIP) install --quiet pre-commit
+	@pre-commit install
+	@pre-commit autoupdate --bleeding-edge
 
 # ─── Quality ─────────────────────────────────────────────────────────────────
 
 lint: ## Run ruff linting
-	ruff check $(PACKAGE_DIR)
+	@ruff check $(PACKAGE_DIR)
 
 format: ## Run ruff formatter
-	ruff format $(PACKAGE_DIR)
+	@ruff format $(PACKAGE_DIR)
 
 format-check: ## Check ruff formatting (no changes)
-	ruff format --check $(PACKAGE_DIR)
+	@ruff format --check $(PACKAGE_DIR)
 
 typecheck: ## Run mypy type checking
-	mypy $(PACKAGE_DIR)
+	@mypy $(PACKAGE_DIR)
 
 pre-commit: ## Run pre-commit on all files
-	pre-commit run --all-files
+	@pre-commit run --all-files
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
 test: ## Run tests
-	$(PYTHON) -m pytest tests -v
+	@$(PYTHON) -m pytest tests -v
 
 test-cov: ## Run tests with coverage report
-	$(PYTHON) -m pytest tests -v --cov=$(PACKAGE_DIR) --cov-report=xml --cov-report=term-missing --cov-fail-under=85
+	@$(PYTHON) -m pytest tests -v --cov=$(PACKAGE_DIR) --cov-report=xml --cov-report=term-missing --cov-fail-under=85
 
 e2e: ## Run Playwright E2E tests (requires server on port 8080)
-	$(PYTHON) -m pytest tests/e2e/ -v --browser chromium
+	@$(PYTHON) -m pytest tests/e2e/ -v --browser chromium
 
 e2e-headed: ## Run E2E tests in headed (visible) browser
-	$(PYTHON) -m pytest tests/e2e/ -v --browser chromium --headed
+	@$(PYTHON) -m pytest tests/e2e/ -v --browser chromium --headed
 
 install-e2e: ## Install E2E dependencies (playwright + browsers)
-	$(PIP) install -e ".[e2e]"
-	playwright install chromium --with-deps
+	@$(PIP) install -e ".[e2e]"
+	@playwright install chromium --with-deps
 # ─── Docker ───────────────────────────────────────────────────────────────────
 
 docker-build: ## Build all Docker stages
-	docker compose build
+	@docker compose build
 
 docker-up: ## Start services with Docker Compose
-	docker compose up -d
+	@docker compose up -d
 
 docker-down: ## Stop services
-	docker compose down
+	@docker compose down
 
 docker-test: ## Run tests inside Docker container
 	@# The test service bind-mounts ./coverage.xml into the container so pytest-cov can
@@ -108,32 +108,32 @@ docker-test: ## Run tests inside Docker container
 	@docker compose run --rm -T --build test
 
 docker-lint: ## Run lint + type-check inside Docker container
-	docker compose run --rm -T lint
+	@docker compose run --rm -T lint
 
 docker-clean: ## Remove Docker images and containers for this project
-	docker compose down --rmi local --volumes --remove-orphans
+	@docker compose down --rmi local --volumes --remove-orphans
 
 web-local: ## Run the web dashboard natively (no Docker, port 8080)
-	$(PYTHON) -m guideline_checker.cli web
+	@$(PYTHON) -m guideline_checker.cli web
 
 web-up: ## Start the web dashboard (containerised, port 8080)
-	docker compose up -d frontend
+	@docker compose up -d frontend
 
 web-down: ## Stop the web dashboard
-	docker compose stop frontend
+	@docker compose stop frontend
 
 web-logs: ## Tail dashboard logs
-	docker compose logs -f frontend
+	@docker compose logs -f frontend
 
 web-build: ## Build the web Docker image
-	docker compose build frontend
+	@docker compose build frontend
 
 # ─── Cleanup ─────────────────────────────────────────────────────────────────
 
 clean: ## Clean build artifacts
-	find . -type f -name "*.pyc" -delete
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	rm -rf .pytest_cache .mypy_cache .ruff_cache dist build *.egg-info
+	@find . -type f -name "*.pyc" -delete
+	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@rm -rf .pytest_cache .mypy_cache .ruff_cache dist build *.egg-info
 
 # ── Quality Gates ──────────────────────────────────────────────────────────────
 
@@ -157,4 +157,4 @@ build: ## Build the Docker images (alias → docker-build)
 	@$(MAKE) docker-build
 
 # ─── CI gate ─────────────────────────────────────
-ci: lint typecheck test ## Run the full local gate (lint + typecheck + test)
+ci: lint format-check typecheck docker-test ## Run the full local gate (lint + format + typecheck + tests)
