@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pytest_mock import MockerFixture
 
 from guideline_checker.checker import (
     IGNORE_FILES,
@@ -291,9 +292,8 @@ class TestRuleEngineV02:
         results = run_checks(root=root, instructions_dir=inst)
         assert len(results[0].violations) == 1
 
-    def test_check_file_oserror_returns_empty(self, tmp_path: Path) -> None:
+    def test_check_file_oserror_returns_empty(self, tmp_path: Path, mocker: MockerFixture) -> None:
         """_check_file should return [] when a file cannot be read (OSError)."""
-        from unittest.mock import patch
 
         from guideline_checker.checker import _check_file
         from guideline_checker.loader import InstructionFile
@@ -308,8 +308,8 @@ class TestRuleEngineV02:
         fake_file = tmp_path / "unreadable.py"
         fake_file.touch()
         # Patch at class level — instance-level patching is read-only in Python 3.14+
-        with patch.object(Path, "read_text", side_effect=OSError("permission denied")):
-            violations = _check_file(fake_file, instr)
+        mocker.patch.object(Path, "read_text", side_effect=OSError("permission denied"))
+        violations = _check_file(fake_file, instr)
         assert violations == []
 
     def test_debug_output_console_log_in_python_context(self, tmp_path: Path) -> None:

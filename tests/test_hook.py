@@ -5,10 +5,11 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import patch
+
+from pytest_mock import MockerFixture
 
 
-def test_hook_calls_main_and_exits(tmp_path: Path) -> None:
+def test_hook_calls_main_and_exits(tmp_path: Path, mocker: MockerFixture) -> None:
     """Verify the hook entry point delegates to cli.main and calls sys.exit."""
     inst_dir = tmp_path / ".github" / "instructions"
     inst_dir.mkdir(parents=True)
@@ -17,11 +18,14 @@ def test_hook_calls_main_and_exits(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    with patch("sys.exit"), patch("sys.argv", ["guideline-checker", "check", "--root", str(tmp_path)]):
-        from guideline_checker.cli import main as cli_main
+    mocker.patch("sys.exit")
+    mocker.patch("sys.argv", ["guideline-checker", "check", "--root", str(tmp_path)])
 
-        exit_code = cli_main(["check", "--root", str(tmp_path)])
-        assert exit_code in (0, 1)
+    from guideline_checker.cli import main as cli_main
+
+    exit_code = cli_main(["check", "--root", str(tmp_path)])
+
+    assert exit_code in (0, 1)
 
 
 def test_hook_entry_point_importable() -> None:

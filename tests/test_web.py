@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx2 import ASGITransport, AsyncClient
+from pytest_mock import MockerFixture
 
 from guideline_checker.web.app import _state, app
 
@@ -14,7 +14,7 @@ pytestmark = pytest.mark.anyio
 
 
 @pytest.fixture()
-async def client() -> AsyncIterator[AsyncClient]:
+async def client(mocker: MockerFixture) -> AsyncIterator[AsyncClient]:
     """Return a TestClient with the startup scan mocked out."""
     _state.results = []
     _state.constraints = []
@@ -23,12 +23,12 @@ async def client() -> AsyncIterator[AsyncClient]:
     _state.error = None
 
     transport = ASGITransport(app=app, raise_app_exceptions=True)
-    with patch("guideline_checker.web.app._do_scan"):
-        async with (
-            app.router.lifespan_context(app),
-            AsyncClient(transport=transport, base_url="http://testserver") as c,
-        ):
-            yield c
+    mocker.patch("guideline_checker.web.app._do_scan")
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=transport, base_url="http://testserver") as c,
+    ):
+        yield c
 
 
 # ── /health ────────────────────────────────────────────────────────────────────
@@ -132,9 +132,9 @@ async def test_api_results_shows_error(client: AsyncClient) -> None:
 # ── /api/scan ──────────────────────────────────────────────────────────────────
 
 
-async def test_api_scan_starts_when_idle(client: AsyncClient) -> None:
-    with patch("guideline_checker.web.app._do_scan"):
-        response = await client.post("/api/scan")
+async def test_api_scan_starts_when_idle(client: AsyncClient, mocker: MockerFixture) -> None:
+    mocker.patch("guideline_checker.web.app._do_scan")
+    response = await client.post("/api/scan")
     assert response.status_code == 200
     assert response.json() == {"status": "started"}
 
@@ -161,13 +161,15 @@ async def test_api_projects_lists_workspace(client: AsyncClient, monkeypatch: py
     assert [p["name"] for p in response.json()["projects"]] == ["alpha", "beta"]
 
 
-async def test_api_scan_switches_to_a_known_project(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_api_scan_switches_to_a_known_project(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
+) -> None:
     from guideline_checker.workspace import Project
 
     monkeypatch.setattr("guideline_checker.web.app.discover_projects", lambda _ws: [Project("alpha", "/w/alpha")])
     _state.active_project = None
-    with patch("guideline_checker.web.app._do_scan"):
-        response = await client.post("/api/scan", json={"project": "alpha"})
+    mocker.patch("guideline_checker.web.app._do_scan")
+    response = await client.post("/api/scan", json={"project": "alpha"})
     assert response.status_code == 200
     assert _state.active_project == "/w/alpha"
 
@@ -187,13 +189,13 @@ def test_serialize_results_empty() -> None:
     assert _serialize_results([]) == []
 
 
-def test_serialize_results_maps_fields() -> None:
+def test_serialize_results_maps_fields(mocker: MockerFixture) -> None:
     from pathlib import Path
 
     from guideline_checker.checker import RuleResult, Violation
     from guideline_checker.web.app import _serialize_results
 
-    instr = MagicMock()
+    instr = mocker.MagicMock()
     instr.path = Path("python.instructions.md")
     instr.apply_to = "**/*.py"
 
@@ -222,7 +224,7 @@ def test_serialize_results_maps_fields() -> None:
 # ── _do_scan ───────────────────────────────────────────────────────────────────
 
 
-def test_do_scan_happy_path() -> None:
+def test_do_scan_happy_path(mocker: MockerFixture) -> None:
     """_do_scan updates _state.results and clears running flag."""
     from guideline_checker.web.app import _do_scan
 
@@ -232,17 +234,16 @@ def test_do_scan_happy_path() -> None:
     _state.running = False
     _state.error = None
 
-    fake_rr = MagicMock()
+    fake_rr = mocker.MagicMock()
     fake_rr.instruction.path.name = "test.instructions.md"
     fake_rr.instruction.apply_to = "**/*.py"
     fake_rr.files_checked = 2
     fake_rr.violations = []
 
-    with (
-        patch("guideline_checker.web.app.run_checks", return_value=[fake_rr]),
-        patch("guideline_checker.web.app.load_all_sources", return_value=[]),
-    ):
-        _do_scan()
+    mocker.patch("guideline_checker.web.app.run_checks", return_value=[fake_rr])
+    mocker.patch("guideline_checker.web.app.load_all_sources", return_value=[])
+
+    _do_scan()
 
     assert _state.running is False
     assert _state.error is None
@@ -251,17 +252,16 @@ def test_do_scan_happy_path() -> None:
     assert _state.results[0]["instruction"] == "test.instructions.md"
 
 
-def test_do_scan_sets_running_false_on_completion() -> None:
+def test_do_scan_sets_running_false_on_completion(mocker: MockerFixture) -> None:
     """_do_scan always resets running to False even on success."""
     from guideline_checker.web.app import _do_scan
 
     _state.running = False
 
-    with (
-        patch("guideline_checker.web.app.run_checks", return_value=[]),
-        patch("guideline_checker.web.app.load_all_sources", return_value=[]),
-    ):
-        _do_scan()
+    mocker.patch("guideline_checker.web.app.run_checks", return_value=[])
+    mocker.patch("guideline_checker.web.app.load_all_sources", return_value=[])
+
+    _do_scan()
 
     assert _state.running is False
 

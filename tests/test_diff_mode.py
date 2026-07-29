@@ -5,9 +5,9 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
+from pytest_mock import MockerFixture
 
 from guideline_checker.checker import run_checks
 from guideline_checker.cli import _get_diff_files, main
@@ -30,56 +30,56 @@ def _make_project(tmp_path: Path) -> tuple[Path, Path]:
 
 class TestGetDiffFiles:
     @pytest.fixture(autouse=True)
-    def _git_on_path(self) -> Iterator[None]:
+    def _git_on_path(self, mocker: MockerFixture) -> Iterator[None]:
         """Pretend git is installed so tests do not depend on the host/container PATH.
 
         ``_get_diff_files`` guards on ``shutil.which("git")`` (subprocess hardening);
         without this the guard short-circuits to None in git-less images.
         """
-        with patch("shutil.which", return_value="/usr/bin/git"):
-            yield
+        mocker.patch("shutil.which", return_value="/usr/bin/git")
+        yield
 
-    def test_returns_paths_from_git_output(self, tmp_path: Path) -> None:
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="src/app.py\nsrc/util.py\n")
-            result = _get_diff_files(tmp_path)
+    def test_returns_paths_from_git_output(self, tmp_path: Path, mocker: MockerFixture) -> None:
+        mock_run = mocker.patch("subprocess.run")
+        mock_run.return_value = mocker.MagicMock(returncode=0, stdout="src/app.py\nsrc/util.py\n")
+        result = _get_diff_files(tmp_path)
         assert result is not None
         assert len(result) == 2
         assert result[0] == tmp_path / "src" / "app.py"
 
-    def test_returns_none_when_git_not_found(self, tmp_path: Path) -> None:
-        with patch("subprocess.run", side_effect=FileNotFoundError):
-            result = _get_diff_files(tmp_path)
+    def test_returns_none_when_git_not_found(self, tmp_path: Path, mocker: MockerFixture) -> None:
+        mocker.patch("subprocess.run", side_effect=FileNotFoundError)
+        result = _get_diff_files(tmp_path)
         assert result is None
 
-    def test_returns_none_on_timeout(self, tmp_path: Path) -> None:
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="git", timeout=10)):
-            result = _get_diff_files(tmp_path)
+    def test_returns_none_on_timeout(self, tmp_path: Path, mocker: MockerFixture) -> None:
+        mocker.patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="git", timeout=10))
+        result = _get_diff_files(tmp_path)
         assert result is None
 
-    def test_falls_back_to_cached_on_nonzero_head(self, tmp_path: Path) -> None:
+    def test_falls_back_to_cached_on_nonzero_head(self, tmp_path: Path, mocker: MockerFixture) -> None:
         responses = [
-            MagicMock(returncode=128, stdout=""),  # git diff --name-only HEAD fails (no HEAD)
-            MagicMock(returncode=0, stdout="new_file.py\n"),  # git diff --name-only --cached
+            mocker.MagicMock(returncode=128, stdout=""),  # git diff --name-only HEAD fails (no HEAD)
+            mocker.MagicMock(returncode=0, stdout="new_file.py\n"),  # git diff --name-only --cached
         ]
-        with patch("subprocess.run", side_effect=responses):
-            result = _get_diff_files(tmp_path)
+        mocker.patch("subprocess.run", side_effect=responses)
+        result = _get_diff_files(tmp_path)
         assert result is not None
         assert len(result) == 1
 
-    def test_returns_none_when_both_git_calls_fail(self, tmp_path: Path) -> None:
+    def test_returns_none_when_both_git_calls_fail(self, tmp_path: Path, mocker: MockerFixture) -> None:
         responses = [
-            MagicMock(returncode=128, stdout=""),
-            MagicMock(returncode=128, stdout=""),
+            mocker.MagicMock(returncode=128, stdout=""),
+            mocker.MagicMock(returncode=128, stdout=""),
         ]
-        with patch("subprocess.run", side_effect=responses):
-            result = _get_diff_files(tmp_path)
+        mocker.patch("subprocess.run", side_effect=responses)
+        result = _get_diff_files(tmp_path)
         assert result is None
 
-    def test_returns_empty_list_when_no_diff(self, tmp_path: Path) -> None:
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="")
-            result = _get_diff_files(tmp_path)
+    def test_returns_empty_list_when_no_diff(self, tmp_path: Path, mocker: MockerFixture) -> None:
+        mock_run = mocker.patch("subprocess.run")
+        mock_run.return_value = mocker.MagicMock(returncode=0, stdout="")
+        result = _get_diff_files(tmp_path)
         assert result == []
 
 
@@ -102,24 +102,24 @@ class TestRunChecksWithDiffFiles:
 
 
 class TestCliDiffFlag:
-    def test_diff_flag_no_modified_files_exits_zero(self, tmp_path: Path) -> None:
+    def test_diff_flag_no_modified_files_exits_zero(self, tmp_path: Path, mocker: MockerFixture) -> None:
         root, _ = _make_project(tmp_path)
-        with patch("guideline_checker.cli._get_diff_files", return_value=[]):
-            code = main(["check", "--root", str(root), "--diff"])
+        mocker.patch("guideline_checker.cli._get_diff_files", return_value=[])
+        code = main(["check", "--root", str(root), "--diff"])
         assert code == 0
 
-    def test_diff_flag_with_violations_exits_nonzero(self, tmp_path: Path) -> None:
+    def test_diff_flag_with_violations_exits_nonzero(self, tmp_path: Path, mocker: MockerFixture) -> None:
         root, _ = _make_project(tmp_path)
-        with patch("guideline_checker.cli._get_diff_files", return_value=[root / "dirty.py"]):
-            code = main(["check", "--root", str(root), "--diff", "--fail-on", "warning"])
+        mocker.patch("guideline_checker.cli._get_diff_files", return_value=[root / "dirty.py"])
+        code = main(["check", "--root", str(root), "--diff", "--fail-on", "warning"])
         assert code == 1
 
     def test_diff_flag_git_unavailable_falls_back_to_all(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: MockerFixture
     ) -> None:
         root, _ = _make_project(tmp_path)
-        with patch("guideline_checker.cli._get_diff_files", return_value=None):
-            code = main(["check", "--root", str(root), "--diff", "--fail-on", "never"])
+        mocker.patch("guideline_checker.cli._get_diff_files", return_value=None)
+        code = main(["check", "--root", str(root), "--diff", "--fail-on", "never"])
         captured = capsys.readouterr()
         assert "not available" in captured.err or "git not available" in captured.err
         assert code == 0

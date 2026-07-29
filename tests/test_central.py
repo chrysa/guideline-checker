@@ -7,10 +7,10 @@ import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx2 import ASGITransport, AsyncClient
+from pytest_mock import MockerFixture
 
 from guideline_checker.cli import _default_repo_name, _slug_repo, main
 from guideline_checker.web.central import central_app
@@ -225,9 +225,9 @@ def test_slug_repo(raw: str, expected: str) -> None:
     assert _slug_repo(raw) == expected
 
 
-def test_default_repo_name_falls_back_to_cwd() -> None:
-    with patch("guideline_checker.cli._git_output", return_value=None):
-        assert _default_repo_name() == Path.cwd().name
+def test_default_repo_name_falls_back_to_cwd(mocker: MockerFixture) -> None:
+    mocker.patch("guideline_checker.cli._git_output", return_value=None)
+    assert _default_repo_name() == Path.cwd().name
 
 
 # ── push command ─────────────────────────────────────────────────────────────────
@@ -238,7 +238,7 @@ def _write_report(path: Path) -> Path:
     return path
 
 
-def test_push_happy_path(tmp_path: Path) -> None:
+def test_push_happy_path(tmp_path: Path, mocker: MockerFixture) -> None:
     report = _write_report(tmp_path / "guideline-report.json")
     captured: dict[str, Any] = {}
 
@@ -246,8 +246,8 @@ def test_push_happy_path(tmp_path: Path) -> None:
         captured["url"] = request.full_url
         captured["body"] = json.loads(request.data)
         captured["key"] = request.headers.get("X-api-key")
-        cm = MagicMock()
-        cm.__enter__.return_value = MagicMock(status=200)
+        cm = mocker.MagicMock()
+        cm.__enter__.return_value = mocker.MagicMock(status=200)
         return cm
 
     argv = [
@@ -261,8 +261,8 @@ def test_push_happy_path(tmp_path: Path) -> None:
         "--api-key",
         "k",
     ]
-    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
-        rc = main(argv)
+    mocker.patch("urllib.request.urlopen", side_effect=fake_urlopen)
+    rc = main(argv)
 
     assert rc == 0
     assert captured["url"] == "https://central.example.com/api/ingest"
