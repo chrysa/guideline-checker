@@ -59,15 +59,13 @@ def test_a_documented_target_that_exists_is_left_alone(project: Path) -> None:
 
 
 def test_prose_is_not_mistaken_for_a_command(project: Path) -> None:
-    """"make sure", "make it clear" — why the citation is scoped to backticks.
+    """ "make sure", "make it clear" — why the citation is scoped to backticks.
 
     An unscoped ``make (\\w+)`` matched "it", "the", "sure" and "wrapper" on this
     repo's own docs. A rule that cries wolf on English is worse than no rule.
     """
     (project / "Makefile").write_text("lint:\n\t@ruff check .\n", encoding="utf-8")
-    (project / "README.md").write_text(
-        "Make sure to make it clear, and make the change small.\n", encoding="utf-8"
-    )
+    (project / "README.md").write_text("Make sure to make it clear, and make the change small.\n", encoding="utf-8")
 
     assert _findings(project) == []
 
