@@ -224,6 +224,26 @@ class TestRuleEngineV02:
         results = run_checks(root=root, instructions_dir=inst)
         assert any("exec(" in v.line_content for r in results for v in r.violations)
 
+    def test_no_exec_phrase_ignores_executable_word(self, tmp_path: Path) -> None:
+        # "no executable runtime" (a container-runtime rule) must NOT be read
+        # as "no exec()" and flag JS RegExp.exec() calls. Regression: the
+        # canonical "exempt:config - no executable runtime" bullet flagged
+        # every `.exec(` in the fleet.
+        code = "const m = /^C(\\d+)/.exec(layer)\n"
+        rule = "exempt:config - no executable runtime (config). Nothing to run."
+        root, inst = _make_project(tmp_path, "app.ts", code, rule)
+        results = run_checks(root=root, instructions_dir=inst)
+        assert all(len(r.violations) == 0 for r in results)
+
+    def test_no_eval_phrase_ignores_evaluation_word(self, tmp_path: Path) -> None:
+        # "no evaluation ..." contains the substring "no eval" but is not a
+        # "no eval()" rule; it must not flag eval(-shaped calls.
+        code = "const score = model.evaluate(input)\n"
+        rule = "no evaluation of untrusted strings at runtime"
+        root, inst = _make_project(tmp_path, "app.ts", code, rule)
+        results = run_checks(root=root, instructions_dir=inst)
+        assert all(len(r.violations) == 0 for r in results)
+
     def test_detects_wildcard_import(self, tmp_path: Path) -> None:
         root, inst = _make_project(tmp_path, "app.py", "from os import *\n", "No wildcard imports")
         results = run_checks(root=root, instructions_dir=inst)
