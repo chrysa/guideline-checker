@@ -174,3 +174,39 @@ def test_the_baseline_is_written_in_the_committed_canonical_form(gate: QualityGa
     raw = gate.baseline_path.read_text(encoding="utf-8")
     assert raw.endswith("\n")
     assert raw == json.dumps(json.loads(raw), indent=2, sort_keys=True) + "\n"
+
+
+# ─── a tool that is not installed must not read as a clean scan ───────────────
+
+
+def test_an_absent_tool_is_not_swallowed_into_a_pass(gate: QualityGate) -> None:
+    """CI ran the secrets gate with no detect-secrets and reported PASS at 0.
+
+    ``swallow_exit`` exists because these tools exit non-zero merely for finding
+    something. It was also swallowing 127, so a scan that never happened yielded a
+    metric of 0 and sailed under a ``<=`` threshold.
+    """
+    spec = CommandSpec((("definitely-not-installed-xyz",),), swallow_exit=True)
+
+    exit_code, output = gate._run(spec)
+
+    assert exit_code == 127
+    assert "Command not found" in output
+
+
+def test_a_tool_that_merely_found_something_is_still_swallowed(gate: QualityGate) -> None:
+    """The behaviour swallow_exit was written for has to survive the fix."""
+    spec = CommandSpec((("false",),), swallow_exit=True)  # exits 1, but exists
+
+    exit_code, _output = gate._run(spec)
+
+    assert exit_code == 0
+
+
+def test_a_fallback_chain_still_reaches_its_second_alternative(gate: QualityGate) -> None:
+    """pip-audit || npm audit: a missing first tool must not abort the chain."""
+    spec = CommandSpec((("definitely-not-installed-xyz",), ("true",)), swallow_exit=True)
+
+    exit_code, _output = gate._run(spec)
+
+    assert exit_code == 0

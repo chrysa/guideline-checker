@@ -6,7 +6,7 @@
       "gate": "Build",
       "metric": 0,
       "metric_name": "build_status",
-      "timestamp": "2026-07-29T22:29:42.212189"
+      "timestamp": "2026-07-30T09:56:20.844226"
     },
     "Coverage": {
       "command": "make docker-test",
@@ -14,7 +14,7 @@
       "gate": "Coverage",
       "metric": 88.88,
       "metric_name": "coverage_percentage",
-      "timestamp": "2026-07-29T22:29:27.946810"
+      "timestamp": "2026-07-30T09:56:14.982470"
     },
     "Lint": {
       "command": "make lint",
@@ -22,7 +22,7 @@
       "gate": "Lint",
       "metric": 0,
       "metric_name": "warning_count",
-      "timestamp": "2026-07-29T22:29:28.268191"
+      "timestamp": "2026-07-30T09:56:15.288313"
     },
     "Secrets": {
       "command": "detect-secrets scan --all-files || true",
@@ -30,15 +30,15 @@
       "gate": "Secrets",
       "metric": 110,
       "metric_name": "secret_count",
-      "timestamp": "2026-07-29T22:29:52.630264"
+      "timestamp": "2026-07-30T09:56:29.700011"
     },
     "Tests": {
       "command": "make docker-test",
       "exit_code": 0,
       "gate": "Tests",
-      "metric": 802,
+      "metric": 805,
       "metric_name": "passed_tests",
-      "timestamp": "2026-07-29T22:27:20.782831"
+      "timestamp": "2026-07-30T09:54:02.828688"
     },
     "Types": {
       "command": "make typecheck",
@@ -46,7 +46,7 @@
       "gate": "Types",
       "metric": 0,
       "metric_name": "error_count",
-      "timestamp": "2026-07-29T22:29:34.210846"
+      "timestamp": "2026-07-30T09:56:18.467672"
     },
     "VulnDeps": {
       "command": "pip-audit || npm audit --audit-level=high || true",
@@ -54,9 +54,9 @@
       "gate": "VulnDeps",
       "metric": 7,
       "metric_name": "vuln_count",
-      "timestamp": "2026-07-29T22:30:25.092255"
+      "timestamp": "2026-07-30T09:56:57.431315"
     }
   },
-  "recorded_at": "2026-07-29T22:25:25.159026",
+  "recorded_at": "2026-07-30T09:51:51.847779",
   "valid": true
 }
