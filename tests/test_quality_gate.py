@@ -15,7 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from quality_gate import QualityGate
+from quality_gate import CommandSpec, QualityGate
 
 
 @pytest.fixture
@@ -88,3 +88,89 @@ def test_the_term_missing_total_row_is_read(gate: QualityGate) -> None:
 def test_absent_coverage_is_reported_as_missing_not_zero(gate: QualityGate) -> None:
     """-1.0 distinguishes "not measured" from "measured at 0%"."""
     assert gate._parse_coverage("nothing here\n") == -1.0
+
+
+# ─── the baseline artefact ────────────────────────────────────────────────────
+
+
+def test_the_baseline_record_drops_the_captured_output(gate: QualityGate) -> None:
+    """The baseline is committed, diffed and read; a transcript belongs elsewhere.
+
+    Keeping ``output`` made the file 344 KB, of which roughly 120 KB was a full
+    detect-secrets dump. Only ``metric`` is ever read back.
+    """
+    result = {
+        "gate": "Tests",
+        "command": "make docker-test",
+        "exit_code": 0,
+        "metric_name": "passed_tests",
+        "metric": 791,
+        "timestamp": "2026-07-29T12:00:00",
+        "output": "x" * 120_000,
+    }
+
+    record = gate._for_baseline(result)
+
+    assert "output" not in record
+    assert record["metric"] == 791  # what verify compares against survives
+
+
+def test_the_baseline_record_keeps_its_provenance(gate: QualityGate) -> None:
+    """Which command produced the number, and when, is worth a few bytes."""
+    record = gate._for_baseline(
+        {"gate": "Lint", "command": "make lint", "exit_code": 0, "metric": 0, "timestamp": "t", "output": "noise"}
+    )
+
+    assert record["command"] == "make lint"
+    assert record["timestamp"] == "t"
+
+
+# ─── the comparison that makes a baseline mean something ──────────────────────
+
+
+@pytest.mark.parametrize(
+    ("current", "target", "operator", "expected"),
+    [
+        (790, 793, "\u2265", False),  # three tests vanished — the regression to catch
+        (793, 793, "\u2265", True),
+        (794, 793, "\u2265", True),  # growth is not a regression
+        (88.0, 88.88, "\u2265", False),  # coverage slipped
+        (1, 0, "=", False),  # a lint warning appeared
+        (8, 7, "\u2264", False),  # one more vulnerability
+        (6, 7, "\u2264", True),
+    ],
+)
+def test_a_metric_moving_the_wrong_way_fails_the_gate(
+    gate: QualityGate, current: float, target: float, operator: str, expected: bool
+) -> None:
+    """Recording a baseline is pointless unless the comparison bites.
+
+    Every case here is a real regression the gate had to have caught while it was
+    returning SKIP for want of a baseline.
+    """
+    assert gate._compare(current, target, operator) is expected
+
+
+def test_an_unknown_operator_fails_closed(gate: QualityGate) -> None:
+    """A typo in the threshold config must not silently pass everything."""
+    assert gate._compare(0, 0, "~=") is False
+
+
+def test_the_baseline_is_written_in_the_committed_canonical_form(gate: QualityGate, tmp_path: Path) -> None:
+    """Sorted and newline-terminated, or the json-sorter hook rewrites it every run.
+
+    The baseline is tracked, so a script that emits a different byte sequence than
+    the hook's canonical form leaves a diff behind after each recording.
+    """
+    import json
+
+    gate.baseline_path = tmp_path / "baseline.json"
+    gate.last_report_path = tmp_path / "report.json"
+    gate.config = {"commands": {"lint": "true"}, "thresholds": {}}
+    gate.gates = [("Lint", "lint", "warning_count", "=", CommandSpec((("true",),)))]
+
+    gate.baseline()
+
+    raw = gate.baseline_path.read_text(encoding="utf-8")
+    assert raw.endswith("\n")
+    assert raw == json.dumps(json.loads(raw), indent=2, sort_keys=True) + "\n"
