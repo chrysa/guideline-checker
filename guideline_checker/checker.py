@@ -986,10 +986,14 @@ def _mentions(rule_lower: str, phrase: str) -> bool:
 
 
 def _dangerous_builtin_checks(rule_lower: str) -> list[PatternCheck]:
+    # Word-bounded: a rule like "no executable runtime" or "no evaluation of X"
+    # must NOT be read as "no exec()" / "no eval()". A plain substring test
+    # matched "no exec" inside "no executable" and flagged every JS
+    # ``RegExp.prototype.exec()`` call across the fleet.
     checks: list[PatternCheck] = []
-    if _mentions(rule_lower, "no eval"):
+    if re.search(r"\bno eval\b", rule_lower):
         checks.append(PatternCheck("eval(", "error"))
-    if _mentions(rule_lower, "no exec"):
+    if re.search(r"\bno exec\b", rule_lower):
         checks.append(PatternCheck("exec(", "error"))
     return checks
 
