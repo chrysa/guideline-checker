@@ -257,6 +257,18 @@ class QualityGate:
             "output": output,
         }
 
+    @staticmethod
+    def _for_baseline(result: dict[str, Any]) -> dict[str, Any]:
+        """Strip the captured command output from a gate result.
+
+        The baseline is meant to be read, diffed and committed. Keeping ``output``
+        made it 344 KB, of which ~120 KB was a full detect-secrets dump plus entire
+        pytest logs — a transcript, not a record. Only ``metric`` and ``valid`` are
+        ever read back by :meth:`verify`; the untrimmed result still goes to the
+        last-report file, which is gitignored.
+        """
+        return {key: value for key, value in result.items() if key != "output"}
+
     def _write_report(self, report: dict[str, Any]) -> None:
         with open(self.last_report_path, "w", encoding="utf-8") as handle:
             json.dump(report, handle, indent=2)
@@ -272,7 +284,7 @@ class QualityGate:
         all_ok = True
         for gate_name, key, metric_name, _default_op, default_cmd in self.gates:
             result = self._run_gate(gate_name, key, metric_name, default_cmd)
-            baseline_data["gates"][gate_name] = result
+            baseline_data["gates"][gate_name] = self._for_baseline(result)
             if result["exit_code"] != 0:
                 all_ok = False
                 baseline_data["valid"] = False
@@ -282,7 +294,11 @@ class QualityGate:
             )
 
         with open(self.baseline_path, "w", encoding="utf-8") as handle:
-            json.dump(baseline_data, handle, indent=2)
+            # Sorted, and newline-terminated: the file is committed, so the shared
+            # json-sorter hook would otherwise rewrite it and leave a diff behind
+            # every single time the baseline is recorded.
+            json.dump(baseline_data, handle, indent=2, sort_keys=True)
+            handle.write("\n")
 
         report = {
             "mode": "baseline",
