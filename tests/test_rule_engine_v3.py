@@ -222,3 +222,22 @@ class TestBuildChecksAggregation:
     def test_build_checks_empty_for_unknown_rule(self) -> None:
         checks = _build_checks("use proper naming conventions")
         assert len(checks) == 0
+
+
+class TestPhraseWordBoundaries:
+    """Short phrases must not bleed into longer words (`no exec` vs `no executable`)."""
+
+    def test_no_executable_runtime_does_not_arm_exec_detector(self) -> None:
+        prose = "exempt:config — no executable runtime (config, knowledge base). nothing to run."
+        assert _build_checks(prose) == ()
+
+    def test_no_evaluation_does_not_arm_eval_detector(self) -> None:
+        assert _build_checks("no evaluation of user input happens here") == ()
+
+    def test_real_exec_rule_still_arms_the_detector(self) -> None:
+        patterns = [check.pattern for check in _build_checks("no exec calls in application code")]
+        assert "exec(" in patterns
+
+    def test_real_eval_rule_still_arms_the_detector(self) -> None:
+        patterns = [check.pattern for check in _build_checks("no eval on runtime data")]
+        assert "eval(" in patterns
