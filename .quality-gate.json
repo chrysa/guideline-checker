@@ -15,7 +15,8 @@
     },
     "coverage": {
       "operator": "≥",
-      "type": "percentage"
+      "type": "percentage",
+      "value": 85
     },
     "lint": {
       "operator": "=",

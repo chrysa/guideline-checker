@@ -21,6 +21,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+# shutil.which found nothing — the shell's own "command not found" status.
+_EXIT_NOT_FOUND = 127
+
 
 @dataclass(frozen=True)
 class CommandSpec:
@@ -132,7 +135,12 @@ class QualityGate:
             returncode = result.returncode
             if returncode == 0:
                 break
-        if spec.swallow_exit:
+        if spec.swallow_exit and returncode != _EXIT_NOT_FOUND:
+            # swallow_exit mirrors a trailing `|| true`: these tools exit non-zero
+            # merely because they found something, and the gate judges the parsed
+            # metric instead. It must NOT swallow 127. A tool that is not installed
+            # yields a metric of 0, and "0 secrets" from a scan that never ran is
+            # exactly the kind of green this project exists to refuse.
             return 0, combined
         return returncode, combined
 
