@@ -3,6 +3,22 @@
     "build": "make build",
     "coverage": "make docker-test",
     "lint": "make lint",
+    "security_vulns": [
+      {
+        "cmd": [
+          "pip-audit"
+        ],
+        "requires": "pyproject.toml"
+      },
+      {
+        "cmd": [
+          "npm",
+          "audit",
+          "--audit-level=high"
+        ],
+        "requires": "package.json"
+      }
+    ],
     "tests": "make docker-test",
     "types": "make typecheck"
   },
@@ -14,7 +30,7 @@
       "value": 0
     },
     "coverage": {
-      "operator": "≥",
+      "operator": "\u2265",
       "type": "percentage",
       "value": 85
     },
@@ -24,19 +40,19 @@
       "value": 0
     },
     "security_secrets": {
-      "operator": "≤",
+      "operator": "\u2264",
       "type": "count"
     },
     "security_vulns": {
-      "operator": "≤",
+      "operator": "\u2264",
       "type": "count"
     },
     "tests": {
-      "operator": "≥",
+      "operator": "\u2265",
       "type": "count"
     },
     "types": {
-      "operator": "≤",
+      "operator": "\u2264",
       "type": "count"
     }
   }
