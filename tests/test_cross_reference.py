@@ -122,7 +122,9 @@ def test_definition_resolves_across_a_list_of_files(tmp_path: Path) -> None:
     (tmp_path / "tokens.css").write_text(":root{--ink:#000}\n", encoding="utf-8")
     (tmp_path / "theme.css").write_text(":root{--paper:#fff}\n", encoding="utf-8")
     # --ink in tokens, --paper in theme: both resolve. --ghost in neither: flagged.
-    (tmp_path / "ui.css").write_text("a{color:var(--ink)}\nb{background:var(--paper)}\nc{color:var(--ghost)}\n", encoding="utf-8")
+    (tmp_path / "ui.css").write_text(
+        "a{color:var(--ink)}\nb{background:var(--paper)}\nc{color:var(--ghost)}\n", encoding="utf-8"
+    )
 
     found = _violations(tmp_path, ".css")
 
