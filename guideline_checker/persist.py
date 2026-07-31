@@ -10,13 +10,29 @@ on the target file are preserved across the YAML round-trip.
 from __future__ import annotations
 
 import difflib
+import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
 from guideline_checker.loader import RuleDetector
+
+if TYPE_CHECKING:
+    from guideline_checker.interpret import DerivedRule
+
+# Interpret-once writes its output here: a per-repo derived cache (ADR D-0016),
+# regenerable from host prose, versioned in the host repo — not shipped content.
+_DERIVED_PATH = ("guidelines", "derived", "derived.yml")
+_DERIVED_HEADER = (
+    "# Derived cache — interpret-once output (ADR D-0016). Each rule was proposed\n"
+    "# from this repo's own prose, proven in the sandbox, and classified into a kind.\n"
+    "# Regenerable from the workshop; do not hand-edit — re-run interpret to refresh.\n"
+)
+# kind → an existing category in categories.yml (the derived cache reuses the
+# shared category vocabulary; the loader rejects an unknown one).
+_KIND_CATEGORY = {"content-scan": "security", "ast-structure": "correctness"}
 
 _PATTERN_FIELDS = (
     ("forbid", "forbid"),
@@ -82,6 +98,57 @@ def apply_detector(
         target.write_text(after, encoding="utf-8")
 
     return ApplyResult(rule_id=rule_id, file=target, diff=diff, written=not dry_run)
+
+
+def _derived_id(rule: str, taken: set[str]) -> str:
+    """A stable, unique, slug id for a derived rule (``derived-<slug>``)."""
+    slug = re.sub(r"[^a-z0-9]+", "-", rule.lower()).strip("-")[:48] or "rule"
+    base = f"derived-{slug}"
+    candidate, n = base, 1
+    while candidate in taken:
+        n += 1
+        candidate = f"{base}-{n}"
+    taken.add(candidate)
+    return candidate
+
+
+def write_derived_ruleset(root: Path, derived: list[DerivedRule], *, dry_run: bool = True) -> ApplyResult:
+    """Write an interpret-once ruleset into the per-repo derived cache (ADR D-0016).
+
+    Each :class:`~guideline_checker.interpret.DerivedRule` becomes a transverse
+    YAML rule under ``guidelines/derived/derived.yml`` — id, kind-mapped category,
+    the proven detector, and the host sentence as both ``rule`` and ``provenance``.
+    The file is rewritten wholesale (it is a regenerable cache, not hand-authored),
+    so a re-run replaces stale derivations. ``dry_run`` returns the diff only.
+    """
+    target = root.joinpath(*_DERIVED_PATH)
+    taken: set[str] = set()
+    rules = [
+        {
+            "id": _derived_id(d.rule, taken),
+            "category": _KIND_CATEGORY.get(d.kind, "correctness"),
+            "severity": "warning",
+            "rule": d.rule,
+            "provenance": d.rule,
+            "detect": detector_to_detect(d.detector),
+        }
+        for d in derived
+    ]
+    doc: dict[str, Any] = {"language_target": "*", "apply_to_glob": "**/*", "rules": rules}
+    after = _DERIVED_HEADER + yaml.safe_dump(doc, sort_keys=True, allow_unicode=True)
+    before = target.read_text(encoding="utf-8") if target.exists() else ""
+    diff = "".join(
+        difflib.unified_diff(
+            before.splitlines(keepends=True),
+            after.splitlines(keepends=True),
+            fromfile=str(target),
+            tofile=str(target),
+        )
+    )
+    if not dry_run:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(after, encoding="utf-8")
+    return ApplyResult(rule_id=f"{len(rules)} derived rule(s)", file=target, diff=diff, written=not dry_run)
 
 
 def detector_to_detect(detector: RuleDetector) -> dict[str, Any]:

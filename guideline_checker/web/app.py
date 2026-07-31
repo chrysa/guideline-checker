@@ -21,9 +21,9 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from guideline_checker.checker import RuleResult, run_checks
-from guideline_checker.interpret import interpret_rules
+from guideline_checker.interpret import DerivedRule, interpret_rules
 from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources
-from guideline_checker.persist import apply_detector, find_rule_id_for_text
+from guideline_checker.persist import apply_detector, find_rule_id_for_text, write_derived_ruleset
 from guideline_checker.proposer import (
     ClaudeProposer,
     HeuristicProposer,
@@ -81,6 +81,7 @@ class _ScanState:
     # Interpret-once (ADR D-0016): the kinded, proven ruleset derived from the
     # active project's advisory prose, computed on demand by _do_interpret.
     derived: list[dict[str, Any]] = field(default_factory=list)
+    derived_rules: list[DerivedRule] = field(default_factory=list)  # objects, for persist
     interpret_running: bool = False
     interpret_timestamp: str | None = None
 
@@ -271,6 +272,7 @@ def _do_interpret() -> None:
             propose=lambda rule: _propose(rule, "**/*"),
             replay=lambda rule, det: replay(rule, det, root, "**/*").match_count,
         )
+        _state.derived_rules = derived  # kept for persist; the dicts below are for the API
         _state.derived = [
             {
                 "rule": d.rule,
@@ -461,6 +463,28 @@ async def get_interpret() -> JSONResponse:
             "running": _state.interpret_running,
             "derived": _state.derived,
         }
+    )
+
+
+class _PersistRequest(BaseModel):
+    """Write the last interpret-once ruleset into the per-repo derived cache."""
+
+    dry_run: bool = True  # preview the diff; set false to write guidelines/derived/derived.yml
+
+
+@app.post("/api/interpret/persist", response_model=None, dependencies=[Depends(require_auth)])
+def persist_derived(req: _PersistRequest) -> JSONResponse:
+    """Cache the derived ruleset (ADR D-0016): write it to guidelines/derived/derived.yml.
+
+    Turns the last interpret-once result into the per-repo derived cache CI applies
+    cold — the LLM has already proposed and the sandbox already proved; this only
+    writes. ``dry_run`` (default) returns the diff and touches nothing.
+    """
+    if not _state.derived_rules:
+        return JSONResponse({"written": False, "count": 0, "note": "Nothing to persist — run interpret first."})
+    result = write_derived_ruleset(_active_root(), _state.derived_rules, dry_run=req.dry_run)
+    return JSONResponse(
+        {"file": str(result.file), "count": len(_state.derived_rules), "diff": result.diff, "written": result.written}
     )
 
 
