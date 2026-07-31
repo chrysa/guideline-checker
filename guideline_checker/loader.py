@@ -50,6 +50,23 @@ class CrossReference:
 
 
 @dataclass(frozen=True)
+class NumericThreshold:
+    """A metric to measure and the bound it must not cross.
+
+    The engine owns the *measuring* (see :mod:`guideline_checker.metrics`); this
+    carries the host's chosen metric name and bound, and nothing else. Keeping the
+    number here — read from ``guidelines/*.yml`` — rather than in engine code is
+    ADR D-0016's line: mechanisms in the tool, values in the host.
+
+    ``max_value`` is spelled out because the YAML key is ``max``, which shadows a
+    builtin. This validator is the only place the two names meet.
+    """
+
+    metric: str
+    max_value: int
+
+
+@dataclass(frozen=True)
 class RuleDetector:
     """A declarative detector a structured rule carries inline.
 
@@ -67,6 +84,7 @@ class RuleDetector:
     scan_checks: tuple[str, ...] = ()  # named content scanners (see scanners.VALID_SCANS)
     cross_reference: CrossReference | None = None  # a citation here, its definition elsewhere
     stale_after_days: int | None = None  # a matching file older than this is stale (file-freshness kind)
+    numeric_threshold: NumericThreshold | None = None  # a measured metric vs a bound (numeric-threshold kind)
     exclude: tuple[str, ...] = ()  # paths this detector must not judge (see checker._is_excluded)
     match_in_comments: bool = False  # applies to forbid / forbid_regex
 

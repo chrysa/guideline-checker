@@ -76,6 +76,7 @@ _PRESENCE_PROSE = re.compile(r"\b(must (?:exist|be present|have)|require[sd]?|ma
 _DETECTOR_KINDS: tuple[tuple[Callable[[RuleDetector], bool], CheckKind], ...] = (
     (lambda d: d.stale_after_days is not None, CheckKind.FILE_FRESHNESS),
     (lambda d: d.cross_reference is not None, CheckKind.CROSS_REFERENCE),
+    (lambda d: d.numeric_threshold is not None, CheckKind.NUMERIC_THRESHOLD),
     (lambda d: bool(d.ast_checks), CheckKind.AST_STRUCTURE),
     (lambda d: bool(d.scan_checks), CheckKind.CONTENT_SCAN),
     (lambda d: bool(d.file_regex or d.require_regex), CheckKind.FILE_CONTENT),
