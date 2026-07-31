@@ -680,6 +680,7 @@ def _cross_reference_violations(
     definitions = _definition_text(file_path, lines, reference.define_in, root)
     if definitions is None:
         return []  # nothing to check against: a missing target file is a different defect
+    where = ", ".join(reference.define_in)
     violations: list[Violation] = []
     for lineno, line in enumerate(lines, start=1):
         for match in _compile_regex(reference.cite).finditer(line):
@@ -691,7 +692,7 @@ def _cross_reference_violations(
                 Violation(
                     file=file_path,
                     line_number=lineno,
-                    line_content=f"{name} — not defined in {reference.define_in}"[:120],
+                    line_content=f"{name} — not defined in {where}"[:120],
                     rule=rule,
                     severity="warning",
                 ),
@@ -699,16 +700,25 @@ def _cross_reference_violations(
     return violations
 
 
-def _definition_text(file_path: Path, lines: list[str], define_in: str, root: Path | None) -> str | None:
-    """Read the file a citation must resolve against, or ``None`` if unavailable."""
-    if define_in == _SELF_REFERENCE:
-        return "\n".join(lines)
+def _definition_text(file_path: Path, lines: list[str], define_in: tuple[str, ...], root: Path | None) -> str | None:
+    """Concatenate every resolvable definition source, or ``None`` if none resolve.
+
+    A citation resolves when **any** listed file carries the definition, so the
+    sources are joined into one haystack. ``"@self"`` contributes the citing file
+    itself. Returning ``None`` only when *nothing* resolves keeps a wholly-missing
+    target a separate defect, not a false "undefined" for every mention.
+    """
     base = root if root is not None else file_path.parent
-    target = base / define_in
-    try:
-        return target.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
+    texts: list[str] = []
+    for entry in define_in:
+        if entry == _SELF_REFERENCE:
+            texts.append("\n".join(lines))
+            continue
+        try:
+            texts.append((base / entry).read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue  # this source is unavailable; another in the set may still resolve
+    return "\n".join(texts) if texts else None
 
 
 def _ast_violations(

@@ -36,12 +36,16 @@ class CrossReference:
 
     ``cite`` captures a name where the claim is made; ``define_as`` is the shape
     that name must take in ``define_in`` (``{name}`` is substituted with the
-    captured text, escaped). ``define_in`` is a path relative to the scanned root,
-    or ``"@self"`` to look the definition up in the citing file itself.
+    captured text, escaped). ``define_in`` is one or more paths relative to the
+    scanned root (a single string in YAML becomes a one-element tuple), or the
+    sentinel ``"@self"`` to look the definition up in the citing file itself. A
+    citation resolves when **any** of the listed files carries the definition —
+    the CSS-variable case, where a custom property may be declared in any of
+    several stylesheets.
     """
 
     cite: str
-    define_in: str
+    define_in: tuple[str, ...]
     define_as: str
 
 
