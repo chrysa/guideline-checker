@@ -9,6 +9,19 @@ rules:
 - category: correctness
   detect:
     ast:
+    - assert-as-validation
+    exclude:
+    - tests
+    - '**/test_*.py'
+    - '**/conftest.py'
+  id: py-no-assert-as-validation
+  rationale: Python strips assert under -O, so a guard written that way disappears
+    in production while the code around it still assumes it ran
+  rule: Do not use assert to guard runtime behaviour outside tests
+  severity: warning
+- category: correctness
+  detect:
+    ast:
     - silent-exception
   id: py-no-silent-exception
   rationale: A discarded failure lets the program carry on with wrong state, and leaves
