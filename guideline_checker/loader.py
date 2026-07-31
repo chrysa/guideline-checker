@@ -62,6 +62,7 @@ class RuleDetector:
     ast_checks: tuple[str, ...] = ()  # named Python AST checks (see ast_python.VALID_AST_CHECKS)
     scan_checks: tuple[str, ...] = ()  # named content scanners (see scanners.VALID_SCANS)
     cross_reference: CrossReference | None = None  # a citation here, its definition elsewhere
+    exclude: tuple[str, ...] = ()  # paths this detector must not judge (see checker._is_excluded)
     match_in_comments: bool = False  # applies to forbid / forbid_regex
 
 
