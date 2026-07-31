@@ -13,6 +13,22 @@ _DESCRIPTION_RE = re.compile(r"^description:\s*[\"']?(.+?)[\"']?\s*$", re.MULTIL
 _NUMBERED_RE = re.compile(r"^\d+\.\s+")
 _TABLE_SEP_RE = re.compile(r"^[-:]+$")
 _CONSTRAINT_KEYWORDS = frozenset(("must", "never", "always", "forbidden", "required", "non-negotiable", "mandatory"))
+# A definition entry: a short code-or-bold *term*, a dash, then its meaning
+# ("- `exempt:config` — no executable runtime"). Two or more in one list is a
+# glossary — the bullets define the allowed *values* of a field, they impose
+# nothing. ADR D-0016: a value read as a mechanism is a constraint no code change
+# can satisfy, which is issue #255. The length cap is what separates a term from a
+# sentence that merely happens to open with inline code.
+_DEFINITION_TERM_MAX = 40
+# The separator is spelled with escapes, not literals: an em/en dash is visually
+# indistinguishable from a hyphen in source, and ruff RUF001 flags the ambiguity.
+_DEFINITION_DASHES = "\\u2014\\u2013-"  # em dash, en dash, hyphen
+_DEFINITION_RE = re.compile(
+    rf"^(?:`[^`]{{1,{_DEFINITION_TERM_MAX}}}`|\*\*[^*]{{1,{_DEFINITION_TERM_MAX}}}\*\*)"
+    rf"\s*[{_DEFINITION_DASHES}]\s+\S"
+)
+# Below this, a run of definition-shaped bullets reads as an ordinary rule list.
+_GLOSSARY_MIN_ENTRIES = 2
 
 
 class SourceType(StrEnum):
@@ -304,6 +320,40 @@ def _rule_text_from_line(stripped: str) -> str | None:
     return None
 
 
+def _is_glossary(block: list[str]) -> bool:
+    """True for a run of bullets that defines the allowed values of a field.
+
+    An imperative anywhere in the block disqualifies it: a list that both defines
+    and demands is still read, because dropping it would lose a real constraint.
+    """
+    if len(block) < _GLOSSARY_MIN_ENTRIES:
+        return False
+    if any(kw in text.lower() for text in block for kw in _CONSTRAINT_KEYWORDS):
+        return False
+    return sum(1 for text in block if _DEFINITION_RE.match(text)) >= _GLOSSARY_MIN_ENTRIES
+
+
+def _list_blocks(content: str) -> list[list[str]]:
+    """Split content into maximal runs of consecutive list items.
+
+    A glossary is a *list*, not a line, so the definition test needs the whole run
+    to judge: one dash-bullet among prose is an ordinary rule.
+    """
+    blocks: list[list[str]] = []
+    current: list[str] = []
+    for line in content.splitlines():
+        rule_text = _rule_text_from_line(line.strip())
+        if rule_text:
+            current.append(rule_text)
+            continue
+        if current:
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
+    return blocks
+
+
 def _extract_rules(content: str) -> list[str]:
     """Extract rule statements from markdown content.
 
@@ -313,17 +363,21 @@ def _extract_rules(content: str) -> list[str]:
     - Numbered list items (``1. text``)
     - Table rows that contain at least one constraint keyword
       (must / never / always / forbidden / required / non-negotiable / mandatory)
+
+    Skips **definition lists** — a run of two or more ``term — meaning`` entries
+    carrying no imperative. Those define a field's allowed values; reading one as a
+    constraint produces a finding no code change can satisfy (see :func:`_is_glossary`).
     """
     rules: list[str] = []
     seen: set[str] = set()
 
-    for line in content.splitlines():
-        rule_text = _rule_text_from_line(line.strip())
-        if not rule_text:
+    for block in _list_blocks(content):
+        if _is_glossary(block):
             continue
-        clean = _strip_markdown(rule_text)
-        if len(clean) > 10 and clean not in seen:
-            seen.add(clean)
-            rules.append(clean)
+        for rule_text in block:
+            clean = _strip_markdown(rule_text)
+            if len(clean) > 10 and clean not in seen:
+                seen.add(clean)
+                rules.append(clean)
 
     return rules
