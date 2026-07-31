@@ -74,6 +74,8 @@ _DETECT_AST_KEY = "ast"
 _DETECT_SCAN_KEY = "scan"
 # A citation here, its definition elsewhere (see loader.CrossReference).
 _DETECT_CROSSREF_KEY = "cross_reference"
+# Paths a single rule must not judge, even though its file-level glob covers them.
+_DETECT_EXCLUDE_KEY = "exclude"
 _CROSSREF_FIELDS = ("cite", "define_in", "define_as")
 # File-freshness threshold in days (file-freshness kind, ADR D-0020).
 _DETECT_FRESHNESS_KEY = "stale_after_days"
@@ -553,6 +555,7 @@ def _merge_detectors(base: RuleDetector | None, child: RuleDetector | None) -> R
         scan_checks=_union(base.scan_checks, child.scan_checks),
         cross_reference=child.cross_reference or base.cross_reference,
         stale_after_days=child.stale_after_days if child.stale_after_days is not None else base.stale_after_days,
+        exclude=_union(base.exclude, child.exclude),
         match_in_comments=base.match_in_comments or child.match_in_comments,
     )
 
@@ -603,6 +606,7 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
         _DETECT_SCAN_KEY,
         _DETECT_CROSSREF_KEY,
         _DETECT_FRESHNESS_KEY,
+        _DETECT_EXCLUDE_KEY,
         "match_in_comments",
     }
     unknown = set(block) - allowed
@@ -659,6 +663,7 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
         file_regex=patterns["file_regex"],
         require_regex=patterns["require_regex"],
         cross_reference=cross_reference,
+        exclude=_coerce_pattern_list(path, raw["id"], _DETECT_EXCLUDE_KEY, block.get(_DETECT_EXCLUDE_KEY, [])),
         ast_checks=ast_checks,
         scan_checks=scan_checks,
         stale_after_days=stale_after_days,

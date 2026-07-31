@@ -815,6 +815,11 @@ def _declared_violations(
 ) -> list[Violation]:
     """Run a rule's declarative detector. Severity is left as ``"warning"`` and
     overridden by the rule's own severity in :func:`_check_file`."""
+    if detector.exclude and root is not None and _is_excluded(file_path, root, list(detector.exclude)):
+        # A single rule opting out of paths its file-level glob still covers.
+        # `assert` is a defect in a guard and the point of a test, and one glob
+        # cannot say both.
+        return []
     violations: list[Violation] = []
     violations.extend(_per_line_violations(file_path, lines, rule, detector))
     violations.extend(_file_regex_violations(file_path, lines, rule, detector))
