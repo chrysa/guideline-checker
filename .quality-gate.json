@@ -30,7 +30,7 @@
       "value": 0
     },
     "coverage": {
-      "operator": "\u2265",
+      "operator": "≥",
       "type": "percentage",
       "value": 85
     },
@@ -40,19 +40,19 @@
       "value": 0
     },
     "security_secrets": {
-      "operator": "\u2264",
+      "operator": "≤",
       "type": "count"
     },
     "security_vulns": {
-      "operator": "\u2264",
+      "operator": "≤",
       "type": "count"
     },
     "tests": {
-      "operator": "\u2265",
+      "operator": "≥",
       "type": "count"
     },
     "types": {
-      "operator": "\u2264",
+      "operator": "≤",
       "type": "count"
     }
   }
