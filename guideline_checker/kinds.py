@@ -39,6 +39,7 @@ class CheckKind(StrEnum):
     CONTENT_SCAN = "content-scan"  # a named content scanner (e.g. entropy secrets)
     NUMERIC_THRESHOLD = "numeric-threshold"  # a measured metric compared to a threshold
     FILE_PRESENCE = "file-presence"  # a path that must (or must not) exist
+    FILE_FRESHNESS = "file-freshness"  # a file older than a max age is stale
     ADVISORY = "advisory"  # no mechanical kind — prose surfaced, never enforced
 
 
@@ -53,6 +54,7 @@ KIND_MEASURES: dict[CheckKind, str] = {
     CheckKind.CONTENT_SCAN: "a named content scanner flags a line (e.g. high-entropy secret)",
     CheckKind.NUMERIC_THRESHOLD: "a measured metric (length, complexity, coverage) crosses a threshold",
     CheckKind.FILE_PRESENCE: "a required path exists, or a forbidden path is absent",
+    CheckKind.FILE_FRESHNESS: "a matching file's last-modified age exceeds a maximum",
     CheckKind.ADVISORY: "no mechanical measurement — the rule is surfaced but never enforced",
 }
 
@@ -74,6 +76,8 @@ def kind_of_detector(detector: RuleDetector | None) -> CheckKind | None:
     """
     if detector is None:
         return None
+    if detector.stale_after_days is not None:
+        return CheckKind.FILE_FRESHNESS
     if detector.cross_reference is not None:
         return CheckKind.CROSS_REFERENCE
     if detector.ast_checks:
