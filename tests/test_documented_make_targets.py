@@ -86,4 +86,4 @@ def test_the_shipped_rule_keeps_its_detector() -> None:
     reference = detectors[RULE].cross_reference
 
     assert reference is not None
-    assert reference.define_in == "Makefile"
+    assert reference.define_in == ("Makefile",)

@@ -693,10 +693,15 @@ def _build_cross_reference(path: Path, raw: dict[str, object], block: dict[str, 
         return None
     if not isinstance(value, dict):
         raise GuidelineError(f"{path}: rule {raw['id']!r} 'detect.cross_reference' must be a mapping.")
-    missing = [field for field in _CROSSREF_FIELDS if not isinstance(value.get(field), str) or not value[field]]
+    # ``define_in`` is validated on its own (str or list of str); the other two are plain strings.
+    scalar_fields = [f for f in _CROSSREF_FIELDS if f != "define_in"]
+    missing = [field for field in scalar_fields if not isinstance(value.get(field), str) or not value[field]]
+    define_in = _coerce_define_in(path, raw["id"], value.get("define_in"))
+    if not define_in:
+        missing.append("define_in")
     if missing:
         raise GuidelineError(
-            f"{path}: rule {raw['id']!r} 'detect.cross_reference' is missing {missing} "
+            f"{path}: rule {raw['id']!r} 'detect.cross_reference' is missing {sorted(missing)} "
             f"(required: {list(_CROSSREF_FIELDS)}).",
         )
     unknown = sorted(set(value) - set(_CROSSREF_FIELDS))
@@ -704,7 +709,25 @@ def _build_cross_reference(path: Path, raw: dict[str, object], block: dict[str, 
         raise GuidelineError(
             f"{path}: rule {raw['id']!r} 'detect.cross_reference' has unknown key(s) {unknown}.",
         )
-    return CrossReference(cite=str(value["cite"]), define_in=str(value["define_in"]), define_as=str(value["define_as"]))
+    return CrossReference(cite=str(value["cite"]), define_in=define_in, define_as=str(value["define_as"]))
+
+
+def _coerce_define_in(path: Path, rule_id: object, value: object) -> tuple[str, ...]:
+    """Normalise ``define_in`` (a single path or a list of paths) to a tuple.
+
+    A scalar string becomes a one-element tuple; a list of non-empty strings is
+    kept in order. Anything else (empty, wrong type, empty element) yields an
+    empty tuple so the caller reports it as a missing field.
+    """
+    if isinstance(value, str):
+        return (value,) if value else ()
+    if isinstance(value, list) and value and all(isinstance(v, str) and v for v in value):
+        return tuple(value)
+    if value is not None and not isinstance(value, (str, list)):
+        raise GuidelineError(
+            f"{path}: rule {rule_id!r} 'detect.cross_reference.define_in' must be a string or a list of strings.",
+        )
+    return ()
 
 
 def _coerce_pattern_list(path: Path, rule_id: object, key: str, value: object) -> tuple[str, ...]:

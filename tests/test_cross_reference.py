@@ -99,6 +99,94 @@ def test_a_captured_name_is_escaped_before_lookup(tmp_path: Path) -> None:
     assert len(_violations(tmp_path, ".md")) == 1
 
 
+# ─── define_in as a set of files (#288) ───────────────────────────────────────
+
+
+def test_definition_resolves_across_a_list_of_files(tmp_path: Path) -> None:
+    """A CSS custom property may be declared in any of several stylesheets.
+
+    The citation resolves when **any** listed file carries the definition, so a
+    property declared in ``theme.css`` and used in another file is not flagged.
+    """
+    _referential(
+        tmp_path,
+        "  - id: css-var-declared\n    category: correctness\n    severity: warning\n"
+        '    rule: "Declare every custom property you use"\n'
+        "    detect:\n      cross_reference:\n"
+        "        cite: 'var\\(--([\\w-]+)\\)'\n"
+        "        define_in:\n          - tokens.css\n          - theme.css\n"
+        "        define_as: '--{name}\\s*:'\n",
+        glob="**/*.css",
+        name="css.yml",
+    )
+    (tmp_path / "tokens.css").write_text(":root{--ink:#000}\n", encoding="utf-8")
+    (tmp_path / "theme.css").write_text(":root{--paper:#fff}\n", encoding="utf-8")
+    # --ink in tokens, --paper in theme: both resolve. --ghost in neither: flagged.
+    (tmp_path / "ui.css").write_text(
+        "a{color:var(--ink)}\nb{background:var(--paper)}\nc{color:var(--ghost)}\n", encoding="utf-8"
+    )
+
+    found = _violations(tmp_path, ".css")
+
+    assert len(found) == 1
+    assert "ghost" in found[0]
+
+
+def test_missing_message_names_every_source(tmp_path: Path) -> None:
+    _referential(
+        tmp_path,
+        "  - id: css-var-declared\n    category: correctness\n    severity: warning\n"
+        '    rule: "Declare every custom property you use"\n'
+        "    detect:\n      cross_reference:\n"
+        "        cite: 'var\\(--([\\w-]+)\\)'\n"
+        "        define_in:\n          - tokens.css\n          - theme.css\n"
+        "        define_as: '--{name}\\s*:'\n",
+        glob="**/*.css",
+        name="css.yml",
+    )
+    (tmp_path / "tokens.css").write_text(":root{--ink:#000}\n", encoding="utf-8")
+    (tmp_path / "theme.css").write_text(":root{--paper:#fff}\n", encoding="utf-8")
+    (tmp_path / "ui.css").write_text("a{color:var(--ghost)}\n", encoding="utf-8")
+
+    found = _violations(tmp_path, ".css")
+
+    assert found and "tokens.css, theme.css" in found[0]
+
+
+def test_a_string_define_in_still_works(tmp_path: Path) -> None:
+    """Backward compatibility: a scalar ``define_in`` normalises to a one-file set."""
+    _referential(
+        tmp_path,
+        "  - id: md-target\n    category: correctness\n    severity: warning\n"
+        '    rule: "Documented targets exist"\n'
+        "    detect:\n      cross_reference:\n"
+        "        cite: '`make ([a-z-]+)`'\n        define_in: Makefile\n        define_as: '^{name}:'\n",
+        glob="**/*.md",
+        name="md.yml",
+    )
+    (tmp_path / "Makefile").write_text("lint:\n\truff check\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("Run `make lint` and `make ghost`.\n", encoding="utf-8")
+
+    found = _violations(tmp_path, ".md")
+
+    assert len(found) == 1
+    assert "ghost" in found[0]
+
+
+def test_a_non_string_define_in_element_is_rejected(tmp_path: Path) -> None:
+    _referential(
+        tmp_path,
+        "  - id: bad\n    category: correctness\n    severity: warning\n"
+        '    rule: "Bad"\n'
+        "    detect:\n      cross_reference:\n"
+        "        cite: 'x'\n        define_in:\n          - 42\n        define_as: '^{name}:'\n",
+        glob="**/*.md",
+        name="md.yml",
+    )
+    with pytest.raises(GuidelineError):
+        load_yaml_guidelines(tmp_path)
+
+
 # ─── validation + classification ──────────────────────────────────────────────
 
 
@@ -124,5 +212,5 @@ def test_an_incomplete_cross_reference_is_rejected(tmp_path: Path, block: str) -
 
 
 def test_the_mechanism_has_its_own_kind() -> None:
-    detector = RuleDetector(cross_reference=CrossReference(cite="a", define_in="b", define_as="c"))
+    detector = RuleDetector(cross_reference=CrossReference(cite="a", define_in=("b",), define_as="c"))
     assert kind_of_detector(detector) is CheckKind.CROSS_REFERENCE
