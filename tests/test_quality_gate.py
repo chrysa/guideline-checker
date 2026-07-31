@@ -210,3 +210,93 @@ def test_a_fallback_chain_still_reaches_its_second_alternative(gate: QualityGate
     exit_code, _output = gate._run(spec)
 
     assert exit_code == 0
+
+
+# ─── an alternative must apply before it is allowed to answer ─────────────────
+
+
+def test_npm_audit_is_skipped_where_there_is_no_package_json(
+    gate: QualityGate, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CI lie, reproduced: npm exists, so the chain reached it and found zero.
+
+    A Python repository has no package.json. Running npm audit there answers a
+    question about Python dependencies by asking npm, and reports 0.
+    """
+    monkeypatch.chdir(tmp_path)  # no manifest of any kind
+    spec = CommandSpec.parse(
+        [
+            {"cmd": ["pip-audit"], "requires": "pyproject.toml"},
+            {"cmd": ["npm", "audit"], "requires": "package.json"},
+        ],
+        swallow_exit=True,
+    )
+
+    exit_code, output = gate._run(spec)
+
+    assert exit_code != 0  # nothing applied, so nothing may be claimed
+    assert "package.json not present" in output
+
+
+def test_the_applicable_alternative_still_runs(
+    gate: QualityGate, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A guard gates its own alternative, it does not disable the chain."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
+    spec = CommandSpec.parse(
+        [
+            {"cmd": ["pip-audit"], "requires": "pyproject.toml"},
+            {"cmd": ["true"], "requires": "package.json"},
+        ]
+    )
+
+    exit_code, _output = gate._run(spec)
+
+    assert exit_code == 0
+
+
+def test_a_later_skip_does_not_erase_a_result_already_produced(
+    gate: QualityGate, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """pip-audit ran and found something; npm was then skipped as inapplicable.
+
+    The skip used to overwrite the exit code of the alternative that had done the
+    work, turning a real finding into "nothing applied".
+    """
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    spec = CommandSpec.parse(
+        [
+            {"cmd": ["false"], "requires": "pyproject.toml"},  # ran, exited 1
+            {"cmd": ["npm", "audit"], "requires": "package.json"},  # skipped
+        ]
+    )
+
+    exit_code, _output = gate._run(spec)
+
+    assert exit_code == 1  # the real result, not 126
+
+
+def test_overriding_the_command_keeps_the_gate_semantics(gate: QualityGate) -> None:
+    """swallow_exit belongs to the gate, not to the command spelling.
+
+    Moving security_vulns into config dropped it once, and pip-audit finding a
+    known CVE then failed the gate instead of reporting the count.
+    """
+    gate.config = {"commands": {"security_vulns": [["false"]]}}
+    default = CommandSpec((("pip-audit",),), swallow_exit=True)
+
+    result = gate._run_gate("VulnDeps", "security_vulns", "vuln_count", default)
+
+    assert result["exit_code"] == 0  # the override still swallows, as the gate intends
+
+
+def test_an_unguarded_alternative_still_applies_everywhere(gate: QualityGate) -> None:
+    """Plain list form keeps its meaning — no manifest declared, always applicable."""
+    spec = CommandSpec.parse([["true"], ["false"]])
+
+    exit_code, _output = gate._run(spec)
+
+    assert exit_code == 0
+    assert spec.guard_for(0) is None

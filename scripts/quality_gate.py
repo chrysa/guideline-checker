@@ -23,6 +23,8 @@ from typing import Any
 
 # shutil.which found nothing — the shell's own "command not found" status.
 _EXIT_NOT_FOUND = 127
+# No alternative applied: every one was guarded by a manifest this repo lacks.
+_EXIT_NOT_APPLICABLE = 126
 
 
 @dataclass(frozen=True)
@@ -38,28 +40,49 @@ class CommandSpec:
 
     alternatives: tuple[tuple[str, ...], ...]
     swallow_exit: bool = False
+    # Per-alternative manifest guard, aligned by index. ``None`` means always
+    # applicable. An alternative whose manifest is absent is skipped rather than
+    # run: npm audit in a repo with no package.json finds nothing and reports it
+    # as zero vulnerabilities, which answers a Python question by asking npm.
+    requires: tuple[str | None, ...] = ()
 
     @classmethod
-    def parse(cls, raw: object) -> CommandSpec:
+    def parse(cls, raw: object, *, swallow_exit: bool = False) -> CommandSpec:
         """Build a spec from a config override.
 
         Accepted forms:
         - ``"make lint"`` → one argv vector (split with shlex, never a shell).
         - ``["make", "lint"]`` → one argv vector.
         - ``[["pip-audit"], ["npm", "audit"]]`` → an ordered fallback chain.
+        - ``[{"cmd": ["npm", "audit"], "requires": "package.json"}]`` → the same,
+          each alternative guarded by a manifest that must exist for it to apply.
         """
         if isinstance(raw, str):
-            return cls((tuple(shlex.split(raw)),))
+            return cls((tuple(shlex.split(raw)),), swallow_exit=swallow_exit)
         if isinstance(raw, list):
             if raw and all(isinstance(item, str) for item in raw):
-                return cls((tuple(raw),))
+                return cls((tuple(raw),), swallow_exit=swallow_exit)
             chain: list[tuple[str, ...]] = []
+            guards: list[str | None] = []
             for alt in raw:
+                if isinstance(alt, dict):
+                    argv = alt.get("cmd")
+                    if not isinstance(argv, (list, tuple)):
+                        raise ValueError(f"Alternative needs a 'cmd' list: {alt!r}")
+                    chain.append(tuple(str(part) for part in argv))
+                    guard = alt.get("requires")
+                    guards.append(str(guard) if guard is not None else None)
+                    continue
                 if not isinstance(alt, (list, tuple)):
                     raise ValueError(f"Unsupported command specification: {raw!r}")
                 chain.append(tuple(str(part) for part in alt))
-            return cls(tuple(chain))
+                guards.append(None)
+            return cls(tuple(chain), swallow_exit=swallow_exit, requires=tuple(guards))
         raise ValueError(f"Unsupported command specification: {raw!r}")
+
+    def guard_for(self, index: int) -> str | None:
+        """The manifest guarding alternative ``index``, if it declares one."""
+        return self.requires[index] if index < len(self.requires) else None
 
     def display(self) -> str:
         rendered = " || ".join(shlex.join(alt) for alt in self.alternatives)
@@ -111,8 +134,17 @@ class QualityGate:
     def _run(self, spec: CommandSpec) -> tuple[int, str]:
         combined = ""
         returncode = 0
-        for argv in spec.alternatives:
+        ran_any = False
+        for index, argv in enumerate(spec.alternatives):
             if not argv:
+                continue
+            guard = spec.guard_for(index)
+            if guard is not None and not Path(guard).exists():
+                combined += f"Skipped {argv[0]}: {guard} not present\n"
+                if not ran_any:
+                    # Only while nothing has run: a later skip must not overwrite
+                    # the exit code of an alternative that did the work.
+                    returncode = _EXIT_NOT_APPLICABLE
                 continue
             executable = shutil.which(argv[0])
             if executable is None:
@@ -133,8 +165,13 @@ class QualityGate:
                 return 127, combined + f"Execution error: {exc}"
             combined += (result.stdout or "") + (result.stderr or "")
             returncode = result.returncode
+            ran_any = True
             if returncode == 0:
                 break
+        if not ran_any and spec.alternatives:
+            # Nothing applicable ever executed. Reporting the parsed metric here
+            # would mean "0 findings" from a check that never happened.
+            return returncode or _EXIT_NOT_APPLICABLE, combined
         if spec.swallow_exit and returncode != _EXIT_NOT_FOUND:
             # swallow_exit mirrors a trailing `|| true`: these tools exit non-zero
             # merely because they found something, and the gate judges the parsed
@@ -251,7 +288,10 @@ class QualityGate:
 
     def _run_gate(self, gate_name: str, key: str, metric_name: str, default_spec: CommandSpec) -> dict[str, Any]:
         raw = self.config.get("commands", {}).get(key)
-        spec = CommandSpec.parse(raw) if raw is not None else default_spec
+        # Inherit the default's swallow_exit: overriding *which* command runs must
+        # not silently change whether its exit code gates. Moving security_vulns
+        # into config dropped it once, and pip-audit finding a CVE failed the gate.
+        spec = CommandSpec.parse(raw, swallow_exit=default_spec.swallow_exit) if raw is not None else default_spec
         print(f"RUN_GATE|{gate_name}|{spec.display()}")
         exit_code, output = self._run(spec)
         metric = self._parse_metric(gate_name, exit_code, output)
