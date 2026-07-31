@@ -73,8 +73,12 @@ repos:
   - id: claude-mcp-config
   - id: python-no-unittest-import
   - id: claude-assets-present
+  - id: python-untyped-raise
+    exclude: ^tests?/
+  - id: python-mutable-default
+  - id: python-dispatch-ladder
   repo: https://github.com/chrysa/pre-commit-tools
-  rev: v0.1.1-100
+  rev: v0.2.0-247
 - hooks:
   - id: gitleaks
   repo: https://github.com/gitleaks/gitleaks
@@ -104,16 +108,14 @@ repos:
     pass_filenames: false
     stages:
     - pre-push
-  # Best-effort at push time: the gate degrades gracefully when Docker or the token is
-  # absent, and an analysis error never rejects the push — SonarCloud enforcement is CI's
-  # job. Blocking a push on a remote service's authorisation is a defect, not a gate.
-  - entry: bash -c 'command -v docker >/dev/null 2>&1 || { echo "skipping sonar — docker
-      absent (runs in CI)"; exit 0; }; [ -n "${SONAR_TOKEN:-}" ] || { echo "skipping sonar
-      — SONAR_TOKEN unset (runs in CI)"; exit 0; }; docker run --rm --env SONAR_TOKEN -v
-      "$(pwd):/usr/src" sonarsource/sonar-scanner-cli:11 -Dsonar.host.url=https://sonarcloud.io
-      -Dsonar.organization=chrysa -Dsonar.projectKey=chrysa_guideline-checker
-      -Dsonar.python.coverage.reportPaths=reports/coverage.xml -Dsonar.python.xunit.reportPath=reports/junit.xml
-      || echo "sonar analysis did not complete — not blocking the push (enforced in CI)"'
+  - entry: "bash -c 'command -v docker >/dev/null 2>&1 || { echo \"skipping sonar\
+      \ \u2014 docker absent (runs in CI)\"; exit 0; }; [ -n \"${SONAR_TOKEN:-}\"\
+      \ ] || { echo \"skipping sonar \u2014 SONAR_TOKEN unset (runs in CI)\"; exit\
+      \ 0; }; docker run --rm --env SONAR_TOKEN -v \"$(pwd):/usr/src\" sonarsource/sonar-scanner-cli:11\
+      \ -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=chrysa -Dsonar.projectKey=chrysa_guideline-checker\
+      \ -Dsonar.python.coverage.reportPaths=reports/coverage.xml -Dsonar.python.xunit.reportPath=reports/junit.xml\
+      \ || echo \"sonar analysis did not complete \u2014 not blocking the push (enforced\
+      \ in CI)\"'"
     id: sonar-scanner
     language: system
     name: sonar cloud analysis (best-effort)
