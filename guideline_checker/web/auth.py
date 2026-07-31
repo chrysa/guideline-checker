@@ -45,6 +45,10 @@ from fastapi.security import (
 # ── Auth mode ──────────────────────────────────────────────────────────────────
 
 
+class MissingAuthDependencyError(RuntimeError):
+    """An optional auth-backend dependency (LDAP, OIDC) is not installed."""
+
+
 class AuthMode(StrEnum):
     """Supported authentication modes."""
 
@@ -113,7 +117,7 @@ def _check_ldap(creds: HTTPBasicCredentials | None) -> None:
     try:
         from ldap3 import ALL, SIMPLE, Connection, Server
     except ImportError as exc:
-        raise RuntimeError("ldap3 is required for LDAP auth. Install with: pip install ldap3") from exc
+        raise MissingAuthDependencyError("ldap3 is required for LDAP auth. Install with: pip install ldap3") from exc
 
     if creds is None:
         raise HTTPException(
@@ -160,7 +164,7 @@ def _check_oidc(bearer: HTTPAuthorizationCredentials | None) -> None:
         import jwt as pyjwt
         from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey as _RSAPublicKey
     except ImportError as exc:
-        raise RuntimeError("PyJWT is required for OIDC auth. Install with: pip install PyJWT") from exc
+        raise MissingAuthDependencyError("PyJWT is required for OIDC auth. Install with: pip install PyJWT") from exc
 
     if bearer is None:
         raise HTTPException(
