@@ -379,6 +379,45 @@ rules:
 
 Both fields are required: a metric with no bound measures without judging, a bound with no metric judges nothing. An unknown metric fails the load rather than arming a rule that silently checks nothing. `max` is a bound, not a target — reaching it is compliance, only crossing it is a violation. Function metrics need a parse, so a file that does not parse yields nothing; `file_lines` needs none and always measures.
 
+#### JSON result contract
+
+`check --json report.json` writes a **versioned contract** ([ADR D-0022](DECISIONS.md)), meant to be consumed by another system — Standards Hub above all — without reaching into the engine. Pin `schema_version`, not the tool's git tag:
+
+```json
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-08-01T09:12:44.180273+00:00",
+  "project_root": "/srv/repos/my-service",
+  "summary": { "files_checked": 214, "total_violations": 3, "errors": 1, "warnings": 2, "info": 0 },
+  "rules": [
+    {
+      "instruction_file": "python.yml",
+      "description": "Python coding standards",
+      "apply_to": "**/*.py",
+      "files_checked": 214,
+      "violations": [
+        {
+          "severity": "warning",
+          "file": "app/services/report.py",
+          "line": 88,
+          "content": "function 'build_summary' measured 71 (max: 50)",
+          "rule": "A function stays under the fleet function-length bound",
+          "kind": "numeric-threshold",
+          "fingerprint": "8f1c2b90ad4e7731"
+        }
+      ]
+    }
+  ]
+}
+```
+
+- **`schema_version`** — this payload's own version, independent of the tool's release. An additive field bumps the minor; a removal or a changed field meaning bumps the major. SARIF output keeps its own `2.1.0`, which belongs to the SARIF spec.
+- **`kind`** — the mechanism the rule was measured by ([the taxonomy](#declarative-detectors-detect)). Never blank.
+- **`fingerprint`** — the same content hash the baseline uses, so a consumer can tell a new finding from debt the project already accepts, without re-deriving the hash.
+- There is deliberately **no `rule_id`**: a rule is identified by its statement text throughout the engine, and markdown-sourced rules carry no id. An empty field that looks pinnable is worse than an absent one.
+
+A report is a file on disk, produced offline — no consumer, and no consumer outage, can gate a local run or a CI pipeline.
+
 #### Inheritance and rule packs (`extends:` / `include:`)
 
 A rule can inherit from another with `extends: <base-id>` — scalar fields fall through from the base, `detect:` patterns are unioned, and the child overrides what it declares. Bases may live in **any** file, so shared bases are reusable across the referential ([ADR D-0008](DECISIONS.md)):

@@ -792,3 +792,59 @@ mode #310 documents, and offline determinism (D-0016) is not negotiable;
 (b) keep the numbers in `metrics.py` behind named constants — shorter, and
 precisely the drift D-0016 forbids: the engine would then carry a value and every
 host would inherit chrysa's bound whether or not it is theirs.
+
+## D-0022 — The JSON result contract carries its own version
+
+**Date**: 2026-08-01
+**Status**: accepted
+
+Standards Hub is to expose the compliance results this tool produces without
+integrating its engine or reaching into its internals. The JSON report carried no
+version, so the only thing a consumer could pin was the tool's git tag — coupling
+the Hub to every unrelated release, and giving it no way to tell an added field
+from a changed meaning. It also carried no way to answer the first question a
+dashboard asks of a finding: *is this already accepted debt?*
+
+**Decision.** The payload is a contract with a version of its own.
+`schema_version` leads the envelope, versioned independently of the tool: an
+additive field bumps the minor, a removal or a changed field meaning bumps the
+major. Every existing key is kept — this landed additive, so no current consumer
+broke. Each violation gains two fields:
+
+- `kind` — the mechanism it was measured by (D-0020), derived from the rule's
+  declarative detector or, for a phrase-detected markdown rule, from its prose.
+  Never blank: a field a consumer cannot rely on is a field they will ignore.
+- `fingerprint` — the *same* content hash `baseline.fingerprint` computes, so a
+  consumer joins a result to the project's accepted debt instead of re-deriving
+  the hash and drifting from it.
+
+SARIF keeps its own `2.1.0`: that version belongs to the SARIF specification, not
+to us, and conflating the two would make our contract unversionable.
+
+The report deliberately carries **no** `rule_id`. A rule is identified by its
+statement text throughout the engine — `InstructionFile` maps rule text to
+severity, detector and fix — and markdown-sourced rules have no id at all.
+Emitting an empty `rule_id` on most findings would be a field that looks pinnable
+and is not. Should stable ids become real, they arrive as an additive minor bump.
+
+**Fatal hypothesis.** A consumer can be fully served by a stable JSON shape
+without ever reaching into the engine.
+
+**Kill-test.** If Standards Hub's first integration needs a field this contract
+does not carry, the contract was designed from the producer's side rather than
+the consumer's query, and it is re-derived from that query in one dated revision.
+Checked at Hub integration.
+
+**Validation gate.** Standards Hub reads a report end-to-end using only
+documented fields, with no access to this repository's modules.
+
+**Consequences.** The Hub never gates local or CI execution: a report is a file on
+disk, produced offline, and a Hub outage cannot stop a commit or a pipeline. The
+contract is now a public surface — changing a field's meaning is a major bump,
+not a refactor.
+
+*Rejected*: (a) version the payload with the tool's own release tag — a patch
+release with no payload change would signal a contract change, and a payload
+change inside a patch would signal none; (b) publish a JSON Schema file and skip
+the inline version — a consumer that fetches a schema out of band cannot tell
+which version *this* file was produced against.
