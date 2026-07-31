@@ -75,6 +75,8 @@ _DETECT_SCAN_KEY = "scan"
 # A citation here, its definition elsewhere (see loader.CrossReference).
 _DETECT_CROSSREF_KEY = "cross_reference"
 _CROSSREF_FIELDS = ("cite", "define_in", "define_as")
+# File-freshness threshold in days (file-freshness kind, ADR D-0020).
+_DETECT_FRESHNESS_KEY = "stale_after_days"
 
 _FIX_FIELD = "fix"
 _FIX_OPS = frozenset({"remove_line", "replace", "regex_replace"})
@@ -550,6 +552,7 @@ def _merge_detectors(base: RuleDetector | None, child: RuleDetector | None) -> R
         # scan_checks was missing here: a base's scanner silently vanished on extends.
         scan_checks=_union(base.scan_checks, child.scan_checks),
         cross_reference=child.cross_reference or base.cross_reference,
+        stale_after_days=child.stale_after_days if child.stale_after_days is not None else base.stale_after_days,
         match_in_comments=base.match_in_comments or child.match_in_comments,
     )
 
@@ -599,6 +602,7 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
         _DETECT_AST_KEY,
         _DETECT_SCAN_KEY,
         _DETECT_CROSSREF_KEY,
+        _DETECT_FRESHNESS_KEY,
         "match_in_comments",
     }
     unknown = set(block) - allowed
@@ -632,8 +636,18 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
         raise GuidelineError(f"{path}: rule {raw['id']!r} 'detect.match_in_comments' must be a boolean.")
 
     cross_reference = _build_cross_reference(path, raw, block)
-    if not any(patterns.values()) and not ast_checks and not scan_checks and cross_reference is None:
-        detect_keys = sorted((*_DETECT_PATTERN_KEYS, _DETECT_AST_KEY, _DETECT_SCAN_KEY, _DETECT_CROSSREF_KEY))
+    stale_after_days = _coerce_stale_after_days(path, raw["id"], block.get(_DETECT_FRESHNESS_KEY))
+    has_any = (
+        any(patterns.values())
+        or ast_checks
+        or scan_checks
+        or cross_reference is not None
+        or stale_after_days is not None
+    )
+    if not has_any:
+        detect_keys = sorted(
+            (*_DETECT_PATTERN_KEYS, _DETECT_AST_KEY, _DETECT_SCAN_KEY, _DETECT_CROSSREF_KEY, _DETECT_FRESHNESS_KEY)
+        )
         raise GuidelineError(
             f"{path}: rule {raw['id']!r} 'detect' declares no patterns — "
             f"add at least one of {detect_keys} or drop the block.",
@@ -647,8 +661,20 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
         cross_reference=cross_reference,
         ast_checks=ast_checks,
         scan_checks=scan_checks,
+        stale_after_days=stale_after_days,
         match_in_comments=match_in_comments,
     )
+
+
+def _coerce_stale_after_days(path: Path, rule_id: object, value: object) -> int | None:
+    """Validate ``detect.stale_after_days`` — a positive integer number of days, or absent."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise GuidelineError(
+            f"{path}: rule {rule_id!r} 'detect.{_DETECT_FRESHNESS_KEY}' must be a positive integer (days).",
+        )
+    return value
 
 
 def _build_cross_reference(path: Path, raw: dict[str, object], block: dict[str, object]) -> CrossReference | None:
