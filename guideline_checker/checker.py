@@ -6,6 +6,7 @@ import fnmatch
 import functools
 import os
 import re
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
@@ -774,6 +775,37 @@ def _scan_violations(
     return violations
 
 
+_SECONDS_PER_DAY = 86400
+
+
+def _freshness_violations(file_path: Path, rule: str, detector: RuleDetector) -> list[Violation]:
+    """Flag a matching file whose last modification is older than the threshold.
+
+    The ``file-freshness`` mechanism (ADR D-0020): the engine measures a file's
+    age; the ``stale_after_days`` value comes from the host's prose. Age is
+    computed against the run's wall-clock, so PASS/FAIL is deterministic within a
+    run but shifts over time as the file ages — which is the point of freshness.
+    """
+    if detector.stale_after_days is None:
+        return []
+    try:
+        mtime = file_path.stat().st_mtime
+    except OSError:  # file vanished between discovery and stat — nothing to flag
+        return []
+    age_days = (time.time() - mtime) / _SECONDS_PER_DAY
+    if age_days <= detector.stale_after_days:
+        return []
+    return [
+        Violation(
+            file=file_path,
+            line_number=1,
+            line_content=f"last modified ~{int(age_days)}d ago (stale after {detector.stale_after_days}d)",
+            rule=rule,
+            severity="warning",
+        ),
+    ]
+
+
 def _declared_violations(
     file_path: Path,
     lines: list[str],
@@ -795,6 +827,7 @@ def _declared_violations(
     violations.extend(_cross_reference_violations(file_path, lines, rule, detector, root))
     violations.extend(_ast_violations(file_path, lines, rule, detector))
     violations.extend(_scan_violations(file_path, lines, rule, detector, root))
+    violations.extend(_freshness_violations(file_path, rule, detector))
     return violations
 
 

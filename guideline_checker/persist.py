@@ -158,6 +158,8 @@ def detector_to_detect(detector: RuleDetector) -> dict[str, Any]:
         values = getattr(detector, attr)
         if values:
             detect[key] = list(values)
+    if detector.stale_after_days is not None:
+        detect["stale_after_days"] = detector.stale_after_days
     if detector.match_in_comments:
         detect["match_in_comments"] = True
     return detect

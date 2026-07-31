@@ -674,6 +674,13 @@ is the anchor for later work (interpret-once maps a host sentence onto a kind +
 its params; a kind not yet implemented — e.g. `file-freshness`, an explicit
 `naming-convention` — is added here once, not case by case across the checker).
 
+*Update 2026-08:* the `file-freshness` kind is now implemented as a first mechanism
+of that "add a kind once" path — a `detect.stale_after_days: <int>` on a rule flags
+any matching file whose last-modified age exceeds the threshold (`checker._freshness_violations`,
+value from host prose, glob scope from the rule's `apply_to`). `CheckKind.FILE_FRESHNESS`
+classifies it; the loader validates a positive-integer day count and it round-trips
+through `persist`. Detection stays deterministic-within-a-run (age vs the run clock).
+
 **Fatal hypothesis.** The rules real host prose expresses fall into this finite
 kind set; a rule needing a mechanism outside it is rare enough to add as one new
 kind, not a reason to abandon the fixed taxonomy.
