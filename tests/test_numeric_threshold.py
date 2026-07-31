@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from guideline_checker.checker import Violation, _numeric_threshold_violations
 from guideline_checker.guidelines import GuidelineError, load_yaml_guidelines
 from guideline_checker.kinds import CheckKind, kind_of_detector
 from guideline_checker.loader import NumericThreshold, RuleDetector
@@ -102,3 +103,60 @@ def test_a_threshold_outranks_a_pattern_on_the_same_rule() -> None:
     """Measuring is the stronger claim: report it over a pattern shipped beside it."""
     detector = RuleDetector(forbid=("print(",), numeric_threshold=NumericThreshold("file_lines", 500))
     assert kind_of_detector(detector) is CheckKind.NUMERIC_THRESHOLD
+
+
+# ─── checker: the mechanism measures and fires ────────────────────────────────
+
+
+def _measure(tmp_path: Path, source: str, threshold: NumericThreshold) -> list[Violation]:
+    target = tmp_path / "sample.py"
+    target.write_text(source, encoding="utf-8")
+    return _numeric_threshold_violations(
+        target,
+        source.splitlines(),
+        "A measured metric stays under the bound",
+        RuleDetector(numeric_threshold=threshold),
+    )
+
+
+def test_a_file_over_the_bound_fires_at_line_one(tmp_path: Path) -> None:
+    [violation] = _measure(tmp_path, "a = 1\nb = 2\nc = 3\nd = 4\n", NumericThreshold("file_lines", 3))
+    assert violation.line_number == 1
+    assert "4" in violation.line_content
+    assert "3" in violation.line_content
+
+
+def test_a_file_exactly_at_the_bound_does_not_fire(tmp_path: Path) -> None:
+    """``max`` is a bound, not a target: reaching it is compliance, crossing it is not."""
+    assert _measure(tmp_path, "a = 1\nb = 2\nc = 3\n", NumericThreshold("file_lines", 3)) == []
+
+
+def test_a_long_function_fires_at_its_def_line(tmp_path: Path) -> None:
+    source = "x = 0\n\n\ndef big():\n    a = 1\n    b = 2\n    return a + b\n"
+    [violation] = _measure(tmp_path, source, NumericThreshold("function_lines", 2))
+    assert violation.line_number == 4
+    assert violation.line_content == "function 'big' measured 4 (max: 2)"
+
+
+def test_each_function_over_the_bound_fires_once(tmp_path: Path) -> None:
+    source = "def a():\n    x = 1\n    return x\n\n\ndef b():\n    y = 1\n    return y\n"
+    violations = _measure(tmp_path, source, NumericThreshold("function_lines", 2))
+    assert len(violations) == 2
+
+
+def test_a_branchy_function_fires_on_the_branch_metric(tmp_path: Path) -> None:
+    source = "def f(x):\n    if x:\n        return 1\n    for _ in range(x):\n        pass\n    return 0\n"
+    [violation] = _measure(tmp_path, source, NumericThreshold("branches", 2))
+    assert "f" in violation.line_content
+
+
+def test_a_detector_without_a_threshold_measures_nothing(tmp_path: Path) -> None:
+    target = tmp_path / "sample.py"
+    target.write_text("a = 1\n" * 900, encoding="utf-8")
+    assert _numeric_threshold_violations(target, ["a = 1"] * 900, "r", RuleDetector(forbid=("x",))) == []
+
+
+def test_the_evidence_names_the_measurement_and_the_bound(tmp_path: Path) -> None:
+    """A violation a human cannot act on is a violation they will baseline instead."""
+    [violation] = _measure(tmp_path, "a = 1\nb = 2\n", NumericThreshold("file_lines", 1))
+    assert violation.line_content == "file measured 2 (max: 1)"
