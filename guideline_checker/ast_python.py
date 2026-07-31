@@ -76,15 +76,91 @@ def _is_route_decorator(node: ast.expr) -> bool:
     return False
 
 
+# Calls whose presence makes a handler legitimately synchronous. FastAPI runs a
+# plain `def` handler in a threadpool, so blocking work belongs there; the same
+# body under `async def` would block the event loop for its whole duration.
+#
+# Deliberately a denylist, and deliberately narrow. Bare HTTP verbs are not in it:
+# `requests.get` blocks, `some_dict.get` does not, and a rule that cannot tell them
+# apart is the reason this check needed fixing in the first place. Network and
+# process work is therefore matched on the *module* it is called through.
+_BLOCKING_NAMES = frozenset({"open", "input"})
+_BLOCKING_ATTRS = frozenset(
+    {
+        "read_text",
+        "write_text",
+        "read_bytes",
+        "write_bytes",
+        "mkdir",
+        "unlink",
+        "rmdir",
+        "rename",
+        "replace",
+        "touch",
+        "chmod",
+        "copy",
+        "copytree",
+        "rmtree",
+        "read",
+        "readlines",
+        "write",
+        "writelines",
+        "execute",
+        "executemany",
+        "commit",
+        "fetchone",
+        "fetchall",
+    }
+)
+# Modules whose calls block the calling thread whatever the method is named.
+_BLOCKING_MODULES = frozenset({"subprocess", "shutil", "requests", "httpx", "urllib", "socket", "time", "os"})
+
+
+def _blocks(call: ast.Call) -> bool:
+    """True when this call does work that must not run on the event loop."""
+    func = call.func
+    if isinstance(func, ast.Name):
+        return func.id in _BLOCKING_NAMES
+    if not isinstance(func, ast.Attribute):
+        return False
+    if func.attr in _BLOCKING_ATTRS:
+        return True
+    owner = func.value
+    return isinstance(owner, ast.Name) and owner.id in _BLOCKING_MODULES
+
+
+def _body_blocks(node: ast.FunctionDef) -> bool:
+    """True when the handler's *body* performs blocking work.
+
+    Only the body: walking the whole node would sweep in the route decorator, and
+    ``@app.get(...)`` reads as an attribute call like any other.
+    """
+    return any(isinstance(inner, ast.Call) and _blocks(inner) for stmt in node.body for inner in ast.walk(stmt))
+
+
 def _check_sync_fastapi_route(tree: ast.Module) -> list[tuple[int, str]]:
-    """Flag a route decorator applied to a plain (non-async) handler."""
+    """Flag a route handler declared ``def`` while doing nothing that blocks.
+
+    The standard says "do not block the event loop", not "declare handlers async",
+    and the two only coincide when the body does no blocking work. A handler that
+    writes a file is *correctly* synchronous: FastAPI gives it a threadpool, and
+    ``async def`` would stall the loop until the write returned.
+
+    Known limit, not an oversight: blocking work reached through a helper is
+    invisible here. ``def persist(...): result = write_derived_ruleset(...)`` still
+    fires, because the ``write_text`` lives one call away and a single-file AST pass
+    cannot follow it. Findings therefore remain a *warning* that needs a human to
+    ask "does this body block?" — see the issue this check was narrowed under.
+    """
     findings: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue  # AsyncFunctionDef is the compliant case
+        if _body_blocks(node):
+            continue  # sync on purpose — FastAPI will run it off the loop
         for deco in node.decorator_list:
             if _is_route_decorator(deco):
-                findings.append((deco.lineno, f"sync route handler: {node.name}"))
+                findings.append((deco.lineno, f"sync route handler with a non-blocking body: {node.name}"))
                 break
     return findings
 
