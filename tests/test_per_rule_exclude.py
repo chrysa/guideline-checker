@@ -30,12 +30,7 @@ def _referential(root: Path, *, exclude: str) -> None:
 
 
 def _flagged(root: Path) -> list[str]:
-    return [
-        v.file.name
-        for result in run_checks(root, all_sources=True)
-        for v in result.violations
-        if v.rule == _RULE
-    ]
+    return [v.file.name for result in run_checks(root, all_sources=True) for v in result.violations if v.rule == _RULE]
 
 
 def _project(root: Path) -> None:
