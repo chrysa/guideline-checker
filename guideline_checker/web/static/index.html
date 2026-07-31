@@ -558,8 +558,31 @@ function renderDerived(derived) {
     `<div class="proof">
        <div class="head">Interpreted <b>${derived.length}</b> advisory rule(s) into proven detectors</div>
        <div class="hits">${rows}</div>
-       <p class="note">Derived from host prose (ADR D-0016). Click a rule in the list to arm it via the workshop.</p>
+       <p class="note">Derived from host prose (ADR D-0016). Persist them as the per-repo cache CI applies cold.</p>
+       <button class="btn primary" id="persist-derived" type="button" style="width:100%">Persist to cache (guidelines/derived) →</button>
      </div>`;
+  $("persist-derived").addEventListener("click", persistDerived);
+}
+
+// Cache the derived ruleset: preview the diff, confirm, then write it (ADR D-0016).
+async function persistDerived() {
+  const btn = $("persist-derived");
+  btn.disabled = true; btn.textContent = "Previewing…";
+  try {
+    const preview = await api("/api/interpret/persist", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dry_run: true }),
+    });
+    if (!preview.count) { toast(preview.note || "Nothing to persist"); btn.disabled = false; btn.textContent = "Persist to cache (guidelines/derived) →"; return; }
+    if (!confirm(`Write ${preview.count} derived rule(s) into\n${preview.file}?\n\nThis is a regenerable per-repo cache — re-running interpret replaces it.`)) {
+      btn.disabled = false; btn.textContent = "Persist to cache (guidelines/derived) →"; return;
+    }
+    const done = await api("/api/interpret/persist", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dry_run: false }),
+    });
+    btn.textContent = `Cached ${done.count} rule(s) ✓`;
+    toast(`Wrote ${done.count} rule(s) to ${done.file}`);
+    runScan($("project").value && $("project").value !== "__all__" ? $("project").value : undefined);
+  } catch (e) { toast(e.message, true); btn.disabled = false; btn.textContent = "Persist to cache (guidelines/derived) →"; }
 }
 
 function renderResult(d) {
