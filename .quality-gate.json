@@ -3,6 +3,22 @@
     "build": "make build",
     "coverage": "make docker-test",
     "lint": "make lint",
+    "security_vulns": [
+      {
+        "cmd": [
+          "pip-audit"
+        ],
+        "requires": "pyproject.toml"
+      },
+      {
+        "cmd": [
+          "npm",
+          "audit",
+          "--audit-level=high"
+        ],
+        "requires": "package.json"
+      }
+    ],
     "tests": "make docker-test",
     "types": "make typecheck"
   },
