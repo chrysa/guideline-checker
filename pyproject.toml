@@ -118,6 +118,14 @@ select = [
     "SIM",  # simplify
     "RUF",  # ruff-specific
     "PERF", # performance
+    "C901",
+    "PLR0402",
+    "PLR0911",
+    "PLR0912",
+    "PLR0915",
+    "PLR1714",
+    "PLR1730",
+    "PLR5501",
 ]
 ignore = [
     "S101",    # use of assert (sanctioned by chrysa standard)
