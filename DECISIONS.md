@@ -727,3 +727,68 @@ aggregate) stays frozen — this is a *pull* selector, not an aggregate server.
 reporters pushing in; the selector is read-only and needs no per-repo agent;
 (b) accept an arbitrary root path in the API — path-traversal risk; the
 discovery whitelist is the safe boundary.
+
+## D-0021 — The `numeric-threshold` mechanism: the engine measures, the host bounds
+
+**Date**: 2026-08-01
+**Status**: accepted
+
+D-0020 named `numeric-threshold` in the taxonomy and shipped it with nothing
+behind it: no `detect.*` key could express one, and no detector measured
+anything. A kind a rule cannot be written in is a mechanism that measures
+nothing — the silent green this project exists to refuse, sitting inside its own
+taxonomy. The numeric fleet gates (file ≤ 500 lines, function ≤ 50, complexity
+≤ 10) were therefore enforced only where a host happened to write them as prose
+the checker's regexes recognised, and not at all from the YAML referential.
+
+**Decision.** Give the kind a mechanism and keep every number out of it.
+`metrics.py` owns three measurers — `file_lines`, `function_lines`, `branches`
+(decision points + 1, the cyclomatic heuristic) — each returning *what it read
+and where*, never a verdict. A rule opts in with
+
+```yaml
+detect:
+  numeric_threshold:
+    metric: function_lines
+    max: 50
+```
+
+The loader validates both fields together (a metric with no bound measures
+without judging; a bound with no metric judges nothing), rejects an unknown
+metric at load rather than arming a rule that checks nothing, and
+`checker._numeric_threshold_violations` flags every subject strictly over the
+bound. `max` is a bound, not a target: reaching it is compliance. Three rules
+ship in `guidelines/languages/python.yml` carrying the fleet's own numbers, so
+the values live in the host referential and `metrics.py` states no threshold of
+its own — a guard test asserts exactly that.
+
+**Fatal hypothesis.** Measuring length and branch count from a single-file AST is
+close enough to what the fleet gate already measures (`ruff` `C901` / `PLR0915`)
+that a finding here predicts a finding there.
+
+**Kill-test.** Run both over the fleet's ten largest repos. If they disagree on
+more than 10% of functions, this mechanism is measuring something else while
+claiming the gate's authority, and it must defer to the linter instead of
+restating it. Checked at the next referential review. First signal, on this
+repo: `py-branch-count` fires **zero** times where `C901` is already enforced and
+green — consistent, not yet conclusive.
+
+**Validation gate.** The shipped rules fire on real code before any promotion
+from `warning` to `error`. Met on landing: 13 findings on this repository's own
+sources (3 files over 500 lines, 10 functions over 50), no false positive.
+
+**Consequences.** Severity stays `warning`: `ruff` already blocks on the same
+bounds in CI, and a second blocking source for one number would double-report a
+single defect. Known blind spot, stated rather than hidden — `.guidelineignore`
+excludes `checker.py` and `cli.py` wholesale because a *pattern* detector's own
+tables contain the patterns it flags. That exclusion now also blinds a
+*measurement* rule to the two longest files in the repository. The right fix is
+per-rule scope (`detect.exclude`) rather than a file-level blanket, and it is not
+done here.
+
+*Rejected*: (a) shell out to `ruff`/`radon` and parse their output — the engine
+would depend on a host toolchain being installed, which is the exact failure
+mode #310 documents, and offline determinism (D-0016) is not negotiable;
+(b) keep the numbers in `metrics.py` behind named constants — shorter, and
+precisely the drift D-0016 forbids: the engine would then carry a value and every
+host would inherit chrysa's bound whether or not it is theirs.

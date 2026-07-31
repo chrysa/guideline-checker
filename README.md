@@ -354,8 +354,30 @@ All keys are optional but a `detect:` block must declare at least one pattern (o
 | name | flags |
 |------|-------|
 | `pydantic-v1` | Pydantic v1 imports (`validator`, `root_validator`, `BaseSettings`, `pydantic.v1.*`) and `@validator` / `@root_validator` decorators |
-| `sync-fastapi-route` | a route decorator (`@app.get` / `@router.post` …) applied to a non-`async def` handler |
+| `sync-fastapi-route` | a route decorator (`@app.get` / `@router.post` …) applied to a `def` handler **whose body does no blocking work** — a handler that writes a file is correctly synchronous, since FastAPI runs it in a threadpool |
 | `mutable-default-arg` | a function parameter whose default is a shared mutable (`[]`, `{}`, `set()`, `list()`, `dict()`) |
+
+**`numeric_threshold`** measures a metric and flags every subject that crosses a bound the *host* supplies ([ADR D-0021](DECISIONS.md)). The engine owns the measuring and carries no number of its own:
+
+```yaml
+rules:
+  - id: py-function-length
+    category: correctness
+    severity: warning
+    rule: "A function stays under the fleet function-length bound"
+    detect:
+      numeric_threshold:
+        metric: function_lines   # what to measure
+        max: 50                  # the bound — your number, not the tool's
+```
+
+| metric | measures | reported at |
+|--------|----------|-------------|
+| `file_lines` | the file's total line count | line 1 |
+| `function_lines` | each function's span, `def` to end | its `def` line |
+| `branches` | each function's decision points + 1 (the cyclomatic heuristic) | its `def` line |
+
+Both fields are required: a metric with no bound measures without judging, a bound with no metric judges nothing. An unknown metric fails the load rather than arming a rule that silently checks nothing. `max` is a bound, not a target — reaching it is compliance, only crossing it is a violation. Function metrics need a parse, so a file that does not parse yields nothing; `file_lines` needs none and always measures.
 
 #### Inheritance and rule packs (`extends:` / `include:`)
 
@@ -410,6 +432,9 @@ Every `languages/` rule below carries a working `detect:` block (AST, scanner, o
 | python | `py-safe-yaml` | warning | unsafe `yaml.load(` |
 | python | `py-no-debugger` | warning | `breakpoint(` / `pdb.set_trace(` |
 | python | `py-provider-sdk-direct` | error | direct vendor LLM SDK import (`openai` / `anthropic` / … — Mark-L LLM001) |
+| python | `py-file-length` | warning | a file over the bound the referential sets (`numeric_threshold`, ships at 500) |
+| python | `py-function-length` | warning | a function over the bound the referential sets (ships at 50) |
+| python | `py-branch-count` | warning | a function over the branch-count bound the referential sets (ships at 10) |
 | python | `py-no-weak-hash` | error | `hashlib.md5(` / `sha1(` (extends the security pack) |
 | pack | `pack-no-pickle-loads` | error | `pickle.loads(` (via `include: packs/security-strict.yml`) |
 | typescript | `ts-strict-types` | error | the `any` type |
