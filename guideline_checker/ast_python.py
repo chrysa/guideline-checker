@@ -76,15 +76,54 @@ def _is_route_decorator(node: ast.expr) -> bool:
     return False
 
 
+# Calls whose presence makes a handler legitimately synchronous. FastAPI runs a
+# plain `def` handler in a threadpool, so blocking work belongs there; the same
+# body under `async def` would block the event loop for its whole duration.
+# Deliberately a denylist: missing an entry costs a finding, guessing wrong costs
+# a wrong fix, and this rule already prompted one handler to be "corrected" into a
+# regression.
+_BLOCKING_NAMES = frozenset({"open", "input", "sleep", "run", "check_output", "call", "system", "urlopen"})
+_BLOCKING_ATTRS = frozenset(
+    {
+        "read_text", "write_text", "read_bytes", "write_bytes", "mkdir", "unlink",
+        "rmdir", "rename", "replace", "touch", "chmod", "copy", "copytree", "rmtree",
+        "read", "write", "readlines", "writelines", "flush", "close",
+        "execute", "executemany", "commit", "fetchone", "fetchall",
+        "get", "post", "put", "delete", "patch", "request", "send",
+    }
+)
+
+
+def _body_blocks(node: ast.FunctionDef) -> bool:
+    """True when the handler's body performs work that must not run on the loop."""
+    for inner in ast.walk(node):
+        if not isinstance(inner, ast.Call):
+            continue
+        func = inner.func
+        if isinstance(func, ast.Name) and func.id in _BLOCKING_NAMES:
+            return True
+        if isinstance(func, ast.Attribute) and func.attr in _BLOCKING_ATTRS | _BLOCKING_NAMES:
+            return True
+    return False
+
+
 def _check_sync_fastapi_route(tree: ast.Module) -> list[tuple[int, str]]:
-    """Flag a route decorator applied to a plain (non-async) handler."""
+    """Flag a route handler declared ``def`` while doing nothing that blocks.
+
+    The standard says "do not block the event loop", not "declare handlers async",
+    and the two only coincide when the body does no blocking work. A handler that
+    writes a file is *correctly* synchronous: FastAPI gives it a threadpool, and
+    ``async def`` would stall the loop until the write returned.
+    """
     findings: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue  # AsyncFunctionDef is the compliant case
+        if _body_blocks(node):
+            continue  # sync on purpose — FastAPI will run it off the loop
         for deco in node.decorator_list:
             if _is_route_decorator(deco):
-                findings.append((deco.lineno, f"sync route handler: {node.name}"))
+                findings.append((deco.lineno, f"sync route handler with a non-blocking body: {node.name}"))
                 break
     return findings
 
