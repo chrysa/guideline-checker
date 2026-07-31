@@ -82,6 +82,23 @@ def test_attribute_owner_route_flagged() -> None:
     assert run_ast_checks(["sync-fastapi-route"], src)
 
 
+def test_sync_route_with_blocking_io_not_flagged() -> None:
+    # A sync handler that does blocking work is the correct choice — FastAPI runs
+    # it in a threadpool, and an ``async def`` would stall the loop. Do not flag.
+    src = '@app.post("/persist")\ndef persist(p):\n    p.mkdir()\n    p.write_text("x")\n    return 1\n'
+    assert run_ast_checks(["sync-fastapi-route"], src) == []
+
+
+def test_sync_route_with_open_call_not_flagged() -> None:
+    src = '@app.get("/f")\ndef read():\n    return open("x").read()\n'
+    assert run_ast_checks(["sync-fastapi-route"], src) == []
+
+
+def test_sync_route_with_subprocess_not_flagged() -> None:
+    src = '@router.post("/x")\ndef run_it():\n    subprocess.run(["ls"])\n    return 1\n'
+    assert run_ast_checks(["sync-fastapi-route"], src) == []
+
+
 def test_bare_and_unknown_owner_decorators_ignored() -> None:
     # Bare name decorator (not a Call) and a get() on an unrelated owner.
     src = "@cached\ndef a():\n    return 1\n\n\n@thing.get()\ndef b():\n    return 2\n"
