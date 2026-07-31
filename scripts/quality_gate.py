@@ -47,7 +47,7 @@ class CommandSpec:
     requires: tuple[str | None, ...] = ()
 
     @classmethod
-    def parse(cls, raw: object) -> CommandSpec:
+    def parse(cls, raw: object, *, swallow_exit: bool = False) -> CommandSpec:
         """Build a spec from a config override.
 
         Accepted forms:
@@ -58,10 +58,10 @@ class CommandSpec:
           each alternative guarded by a manifest that must exist for it to apply.
         """
         if isinstance(raw, str):
-            return cls((tuple(shlex.split(raw)),))
+            return cls((tuple(shlex.split(raw)),), swallow_exit=swallow_exit)
         if isinstance(raw, list):
             if raw and all(isinstance(item, str) for item in raw):
-                return cls((tuple(raw),))
+                return cls((tuple(raw),), swallow_exit=swallow_exit)
             chain: list[tuple[str, ...]] = []
             guards: list[str | None] = []
             for alt in raw:
@@ -77,7 +77,7 @@ class CommandSpec:
                     raise ValueError(f"Unsupported command specification: {raw!r}")
                 chain.append(tuple(str(part) for part in alt))
                 guards.append(None)
-            return cls(tuple(chain), requires=tuple(guards))
+            return cls(tuple(chain), swallow_exit=swallow_exit, requires=tuple(guards))
         raise ValueError(f"Unsupported command specification: {raw!r}")
 
     def guard_for(self, index: int) -> str | None:
@@ -141,7 +141,10 @@ class QualityGate:
             guard = spec.guard_for(index)
             if guard is not None and not Path(guard).exists():
                 combined += f"Skipped {argv[0]}: {guard} not present\n"
-                returncode = _EXIT_NOT_APPLICABLE
+                if not ran_any:
+                    # Only while nothing has run: a later skip must not overwrite
+                    # the exit code of an alternative that did the work.
+                    returncode = _EXIT_NOT_APPLICABLE
                 continue
             executable = shutil.which(argv[0])
             if executable is None:
@@ -285,7 +288,10 @@ class QualityGate:
 
     def _run_gate(self, gate_name: str, key: str, metric_name: str, default_spec: CommandSpec) -> dict[str, Any]:
         raw = self.config.get("commands", {}).get(key)
-        spec = CommandSpec.parse(raw) if raw is not None else default_spec
+        # Inherit the default's swallow_exit: overriding *which* command runs must
+        # not silently change whether its exit code gates. Moving security_vulns
+        # into config dropped it once, and pip-audit finding a CVE failed the gate.
+        spec = CommandSpec.parse(raw, swallow_exit=default_spec.swallow_exit) if raw is not None else default_spec
         print(f"RUN_GATE|{gate_name}|{spec.display()}")
         exit_code, output = self._run(spec)
         metric = self._parse_metric(gate_name, exit_code, output)
