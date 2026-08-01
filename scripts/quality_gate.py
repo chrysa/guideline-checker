@@ -101,6 +101,44 @@ class CommandSpec:
         return f"{rendered} || true" if self.swallow_exit else rendered
 
 
+# One row per gate: display name, config key, metric name, comparison operator,
+# and the command to run when the config overrides nothing. Module-level data
+# rather than construction, so the defaults are inspectable — and testable —
+# without a .quality-gate.json on disk.
+GateSpec = tuple[str, str, str, str, "CommandSpec"]
+
+DEFAULT_GATES: list[GateSpec] = [
+    ("Tests", "tests", "passed_tests", "≥", CommandSpec((("make", "test"),))),
+    ("Coverage", "coverage", "coverage_percentage", "≥", CommandSpec((("make", "test-cov"),))),
+    ("Lint", "lint", "warning_count", "=", CommandSpec((("make", "lint"),))),
+    ("Types", "types", "error_count", "≤", CommandSpec((("make", "typecheck"),))),
+    ("Build", "build", "build_status", "=", CommandSpec((("make", "build"),))),
+    (
+        "Secrets",
+        "security_secrets",
+        "secret_count",
+        "=",
+        # NOT --all-files: that scans the working *directory*, and Tests and
+        # Coverage run before this gate in the same job, writing coverage.xml and
+        # report files into it. The metric then measures partly the run instead of
+        # the code — it reported 111 against a baseline of 110 for a commit whose
+        # tracked tree measured 110 exactly. Without the flag detect-secrets scans
+        # what git tracks, which is what the baseline describes.
+        CommandSpec((("detect-secrets", "scan"),), swallow_exit=True),
+    ),
+    (
+        "VulnDeps",
+        "security_vulns",
+        "vuln_count",
+        "≤",
+        CommandSpec(
+            (("pip-audit",), ("npm", "audit", "--audit-level=high")),
+            swallow_exit=True,
+        ),
+    ),
+]
+
+
 class QualityGate:
     CONFIG_FILE = ".quality-gate.json"
     BASELINE_FILE = ".quality-gate-baseline.json"
@@ -118,30 +156,7 @@ class QualityGate:
         with open(self.config_path, encoding="utf-8") as handle:
             self.config = json.load(handle)
 
-        self.gates: list[tuple[str, str, str, str, CommandSpec]] = [
-            ("Tests", "tests", "passed_tests", "≥", CommandSpec((("make", "test"),))),
-            ("Coverage", "coverage", "coverage_percentage", "≥", CommandSpec((("make", "test-cov"),))),
-            ("Lint", "lint", "warning_count", "=", CommandSpec((("make", "lint"),))),
-            ("Types", "types", "error_count", "≤", CommandSpec((("make", "typecheck"),))),
-            ("Build", "build", "build_status", "=", CommandSpec((("make", "build"),))),
-            (
-                "Secrets",
-                "security_secrets",
-                "secret_count",
-                "=",
-                CommandSpec((("detect-secrets", "scan", "--all-files"),), swallow_exit=True),
-            ),
-            (
-                "VulnDeps",
-                "security_vulns",
-                "vuln_count",
-                "≤",
-                CommandSpec(
-                    (("pip-audit",), ("npm", "audit", "--audit-level=high")),
-                    swallow_exit=True,
-                ),
-            ),
-        ]
+        self.gates: list[GateSpec] = list(DEFAULT_GATES)
 
     def _execute(self, executable: str, argv: list[str]) -> tuple[int, str, bool]:
         """Run one resolved alternative: ``(exit code, output, aborted)``.

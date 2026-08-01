@@ -15,7 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from quality_gate import CommandSpec, QualityGate
+from quality_gate import DEFAULT_GATES, CommandSpec, QualityGate
 
 
 @pytest.fixture
@@ -300,3 +300,34 @@ def test_an_unguarded_alternative_still_applies_everywhere(gate: QualityGate) ->
 
     assert exit_code == 0
     assert spec.guard_for(0) is None
+
+
+# ─── the secrets gate measures the code, not the run ──────────────────────────
+
+
+def _secrets_spec() -> CommandSpec:
+    """The Secrets gate's default command spec, read from the module-level table."""
+    return next(spec for name, _key, _metric, _op, spec in DEFAULT_GATES if name == "Secrets")
+
+
+def test_the_secrets_scan_does_not_read_the_working_directory() -> None:
+    """``--all-files`` scans the working directory, artifacts and all.
+
+    Tests and Coverage run before Secrets in the same job and write into that
+    directory, so the metric became partly a measurement of the run rather than
+    of the code: the gate reported 111 against a baseline of 110 for a commit
+    whose tracked tree measured 110 exactly. Without the flag, detect-secrets
+    scans the files git tracks, which is the thing the baseline describes.
+    """
+    assert "--all-files" not in _secrets_spec().alternatives[0]
+
+
+def test_the_secrets_scan_still_runs_detect_secrets() -> None:
+    """Guard on the fix above: dropping the flag must not drop the scanner."""
+    argv = _secrets_spec().alternatives[0]
+    assert argv[:2] == ("detect-secrets", "scan")
+
+
+def test_the_secrets_gate_still_judges_its_metric_not_the_exit_code() -> None:
+    """detect-secrets exits non-zero merely for finding something; the count gates."""
+    assert _secrets_spec().swallow_exit is True
