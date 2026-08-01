@@ -403,7 +403,7 @@ Both fields are required: a metric with no bound measures without judging, a bou
           "content": "function 'build_summary' measured 71 (max: 50)",
           "rule": "A function stays under the fleet function-length bound",
           "kind": "numeric-threshold",
-          "fingerprint": "8f1c2b90ad4e7731"
+          "fingerprint": "<content hash — see baseline.fingerprint>"
         }
       ]
     }
