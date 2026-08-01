@@ -757,10 +757,21 @@ The loader validates both fields together (a metric with no bound measures
 without judging; a bound with no metric judges nothing), rejects an unknown
 metric at load rather than arming a rule that checks nothing, and
 `checker._numeric_threshold_violations` flags every subject strictly over the
-bound. `max` is a bound, not a target: reaching it is compliance. Three rules
-ship in `guidelines/languages/python.yml` carrying the fleet's own numbers, so
-the values live in the host referential and `metrics.py` states no threshold of
-its own — a guard test asserts exactly that.
+bound. `max` is a bound, not a target: reaching it is compliance. `metrics.py`
+states no threshold of its own — a guard test asserts exactly that.
+
+**Shipped in two steps, for a reason worth recording.** This repository applies
+its own hook at a pinned release (`.pre-commit-config.yaml`), so a referential
+using a `detect.*` key the pinned build does not know **fails to load** — the
+gate goes red on the repo's own rules, in CI as well as locally, and no local
+`SKIP` reaches CI. Any new schema key therefore lands in two parts: the
+**mechanism** first (this change — no referential edit, so the pinned hook still
+loads), then a release, then the **rules** that use it. `stale_after_days`
+(D-0020) shipped the same way. The three rules carrying the fleet's numbers
+(`py-file-length` 500, `py-function-length` 50, `py-branch-count` 10) follow in
+that second step; they were written and measured against real code before this
+ADR was accepted, so the validation gate below is met on evidence, not on
+intention.
 
 **Fatal hypothesis.** Measuring length and branch count from a single-file AST is
 close enough to what the fleet gate already measures (`ruff` `C901` / `PLR0915`)
@@ -773,9 +784,10 @@ restating it. Checked at the next referential review. First signal, on this
 repo: `py-branch-count` fires **zero** times where `C901` is already enforced and
 green — consistent, not yet conclusive.
 
-**Validation gate.** The shipped rules fire on real code before any promotion
-from `warning` to `error`. Met on landing: 13 findings on this repository's own
-sources (3 files over 500 lines, 10 functions over 50), no false positive.
+**Validation gate.** The rules fire on real code before any promotion from
+`warning` to `error`. Met before acceptance: run against this repository's own
+sources, the three rules produced **13 findings, no false positive** — 3 files
+over 500 lines, 10 functions over 50, and zero from `py-branch-count`.
 
 **Consequences.** Severity stays `warning`: `ruff` already blocks on the same
 bounds in CI, and a second blocking source for one number would double-report a
