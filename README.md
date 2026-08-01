@@ -471,6 +471,9 @@ Every `languages/` rule below carries a working `detect:` block (AST, scanner, o
 | python | `py-safe-yaml` | warning | unsafe `yaml.load(` |
 | python | `py-no-debugger` | warning | `breakpoint(` / `pdb.set_trace(` |
 | python | `py-provider-sdk-direct` | error | direct vendor LLM SDK import (`openai` / `anthropic` / … — Mark-L LLM001) |
+| python | `py-file-length` | warning | a file over the bound the referential sets (`numeric_threshold`, ships at 500) |
+| python | `py-function-length` | warning | a function over the bound the referential sets (ships at 50) |
+| python | `py-branch-count` | warning | a function over the branch-count bound the referential sets (ships at 10) |
 | python | `py-no-weak-hash` | error | `hashlib.md5(` / `sha1(` (extends the security pack) |
 | pack | `pack-no-pickle-loads` | error | `pickle.loads(` (via `include: packs/security-strict.yml`) |
 | typescript | `ts-strict-types` | error | the `any` type |

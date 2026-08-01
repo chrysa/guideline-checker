@@ -167,6 +167,18 @@ def test_the_evidence_names_the_measurement_and_the_bound(tmp_path: Path) -> Non
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+def test_the_shipped_referential_arms_the_numeric_threshold_kind() -> None:
+    """A kind in the taxonomy with no rule behind it is a mechanism that measures nothing."""
+    instructions = load_yaml_guidelines(_REPO_ROOT)
+    armed = {
+        rule
+        for instr in instructions
+        for rule, detector in instr.rule_detectors.items()
+        if kind_of_detector(detector) is CheckKind.NUMERIC_THRESHOLD
+    }
+    assert len(armed) >= 3
+
+
 def test_the_engine_states_no_bound_of_its_own() -> None:
     """The bounds live in the host referential; restating one in engine code is the drift."""
     engine = (_REPO_ROOT / "guideline_checker" / "metrics.py").read_text(encoding="utf-8")
