@@ -17,6 +17,7 @@ runs exactly as before.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -68,27 +69,29 @@ _NUMERIC_PROSE = re.compile(
 _PRESENCE_PROSE = re.compile(r"\b(must (?:exist|be present|have)|require[sd]?|mandatory)\b", re.I)
 
 
+# Detector field -> kind, in precedence order, as a table rather than an if/elif
+# ladder: adding a mechanism is a row, not a branch, and the precedence is readable
+# as data. Order follows how the checker dispatches — a structural or scanner
+# mechanism is reported over a raw pattern one when a rule carries several.
+_DETECTOR_KINDS: tuple[tuple[Callable[[RuleDetector], bool], CheckKind], ...] = (
+    (lambda d: d.stale_after_days is not None, CheckKind.FILE_FRESHNESS),
+    (lambda d: d.cross_reference is not None, CheckKind.CROSS_REFERENCE),
+    (lambda d: bool(d.ast_checks), CheckKind.AST_STRUCTURE),
+    (lambda d: bool(d.scan_checks), CheckKind.CONTENT_SCAN),
+    (lambda d: bool(d.file_regex or d.require_regex), CheckKind.FILE_CONTENT),
+    (lambda d: bool(d.forbid or d.forbid_regex), CheckKind.FORBIDDEN_PATTERN),
+)
+
+
 def kind_of_detector(detector: RuleDetector | None) -> CheckKind | None:
     """Classify a declarative ``RuleDetector`` into its kind, or ``None`` if empty.
 
-    Precedence follows how the checker dispatches: a structural (AST) or scanner
+    Precedence is the order of :data:`_DETECTOR_KINDS`: a structural or scanner
     mechanism is reported over a raw pattern one when a rule carries several.
     """
     if detector is None:
         return None
-    if detector.stale_after_days is not None:
-        return CheckKind.FILE_FRESHNESS
-    if detector.cross_reference is not None:
-        return CheckKind.CROSS_REFERENCE
-    if detector.ast_checks:
-        return CheckKind.AST_STRUCTURE
-    if detector.scan_checks:
-        return CheckKind.CONTENT_SCAN
-    if detector.file_regex or detector.require_regex:
-        return CheckKind.FILE_CONTENT
-    if detector.forbid or detector.forbid_regex:
-        return CheckKind.FORBIDDEN_PATTERN
-    return None
+    return next((kind for matches, kind in _DETECTOR_KINDS if matches(detector)), None)
 
 
 def kind_of_phrase(rule: str) -> CheckKind:

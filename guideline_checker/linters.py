@@ -41,6 +41,35 @@ class LinterResult:
 # ─── Individual linter runners ────────────────────────────────────────────────
 
 
+def _parse_ruff_output(raw: str) -> LinterResult:
+    """Turn ``ruff check --output-format json`` stdout into a :class:`LinterResult`.
+
+    Split out from :func:`_run_ruff` so the parsing is testable on a fixture string,
+    with no ruff on PATH and no subprocess.
+    """
+    if not raw:
+        return LinterResult(linter="ruff", available=True)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return LinterResult(linter="ruff", available=True, error=f"JSON parse error: {exc}")
+
+    violations = [
+        LinterViolation(
+            file=Path(item.get("filename", "")),
+            line=item.get("location", {}).get("row", 0),
+            col=item.get("location", {}).get("column", 0),
+            code=item.get("code", ""),
+            message=item.get("message", ""),
+            # A finding ruff can fix itself is a warning; one needing a human is an error.
+            severity="warning" if item.get("fix") else "error",
+            linter="ruff",
+        )
+        for item in data
+    ]
+    return LinterResult(linter="ruff", available=True, violations=violations)
+
+
 def _run_ruff(root: Path) -> LinterResult:
     """Run ``ruff check`` on *root* and return a :class:`LinterResult`."""
     ruff_path = shutil.which("ruff")
@@ -67,37 +96,7 @@ def _run_ruff(root: Path) -> LinterResult:
             timeout=120,
             cwd=root,
         )
-        raw = result.stdout.strip()
-        if not raw:
-            return LinterResult(linter="ruff", available=True)
-
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            return LinterResult(linter="ruff", available=True, error=f"JSON parse error: {exc}")
-
-        violations: list[LinterViolation] = []
-        for item in data:
-            file_path = Path(item.get("filename", ""))
-            location = item.get("location", {})
-            line = location.get("row", 0)
-            col = location.get("column", 0)
-            code = item.get("code", "")
-            message = item.get("message", "")
-            fix = item.get("fix")
-            severity = "warning" if fix else "error"
-            violations.append(
-                LinterViolation(
-                    file=file_path,
-                    line=line,
-                    col=col,
-                    code=code,
-                    message=message,
-                    severity=severity,
-                    linter="ruff",
-                )
-            )
-        return LinterResult(linter="ruff", available=True, violations=violations)
+        return _parse_ruff_output(result.stdout.strip())
 
     except subprocess.TimeoutExpired:
         return LinterResult(linter="ruff", available=True, error="ruff timed out (>120s)")
@@ -162,6 +161,36 @@ def _run_mypy(root: Path) -> LinterResult:
         return LinterResult(linter="mypy", available=True, error=str(exc))
 
 
+def _parse_eslint_output(raw: str) -> LinterResult:
+    """Turn ``eslint --format json`` stdout into a :class:`LinterResult`.
+
+    Split out from :func:`_run_eslint` so the parsing is testable on a fixture
+    string, with no node toolchain and no subprocess.
+    """
+    if not raw:
+        return LinterResult(linter="eslint", available=True)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return LinterResult(linter="eslint", available=True, error=f"JSON parse error: {exc}")
+
+    violations = [
+        LinterViolation(
+            file=Path(file_item.get("filePath", "")),
+            line=msg.get("line", 0),
+            col=msg.get("column", 0),
+            code=msg.get("ruleId") or "",
+            message=msg.get("message", ""),
+            # eslint severity 2 is an error, 1 a warning.
+            severity="error" if msg.get("severity", 1) == 2 else "warning",
+            linter="eslint",
+        )
+        for file_item in data
+        for msg in file_item.get("messages", [])
+    ]
+    return LinterResult(linter="eslint", available=True, violations=violations)
+
+
 def _run_eslint(root: Path) -> LinterResult:
     """Run ``eslint`` or ``biome check`` on *root* and return a :class:`LinterResult`."""
     has_ts_js = any(root.rglob("*.ts")) or any(root.rglob("*.tsx")) or any(root.rglob("*.js"))
@@ -200,30 +229,7 @@ def _run_eslint(root: Path) -> LinterResult:
             cwd=root,
             env={**os.environ, "NO_UPDATE_NOTIFIER": "1"},
         )
-        raw = result.stdout.strip()
-        if not raw:
-            return LinterResult(linter="eslint", available=True)
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            return LinterResult(linter="eslint", available=True, error=f"JSON parse error: {exc}")
-
-        violations: list[LinterViolation] = []
-        for file_item in data:
-            file_path = Path(file_item.get("filePath", ""))
-            violations.extend(
-                LinterViolation(
-                    file=file_path,
-                    line=msg.get("line", 0),
-                    col=msg.get("column", 0),
-                    code=msg.get("ruleId") or "",
-                    message=msg.get("message", ""),
-                    severity="error" if msg.get("severity", 1) == 2 else "warning",
-                    linter="eslint",
-                )
-                for msg in file_item.get("messages", [])
-            )
-        return LinterResult(linter="eslint", available=True, violations=violations)
+        return _parse_eslint_output(result.stdout.strip())
 
     except subprocess.TimeoutExpired:
         return LinterResult(linter="eslint", available=True, error="eslint timed out (>120s)")

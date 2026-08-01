@@ -9,42 +9,17 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import NamedTuple
 
 from guideline_checker.checker import RuleResult, run_checks
 from guideline_checker.gh_client import GhClient
 from guideline_checker.reporters.html import HtmlReporter
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="guideline-checker",
-        description="Check project compliance against Copilot instruction rules.",
-    )
-    sub = parser.add_subparsers(dest="command")
-
-    # ── init subcommand ──────────────────────────────────────────────────────
-    init_cmd = sub.add_parser("init", help="Scaffold default instruction files in a project.")
-    init_cmd.add_argument(
-        "--root",
-        type=Path,
-        default=Path("."),
-        help="Project root directory (default: current directory).",
-    )
-    init_cmd.add_argument(
-        "--instructions",
-        type=Path,
-        default=None,
-        help="Target instructions directory (default: <root>/.github/instructions).",
-    )
-    init_cmd.add_argument(
-        "--force",
-        action="store_true",
-        default=False,
-        help="Overwrite existing instruction files.",
-    )
-
-    # ── check subcommand ─────────────────────────────────────────────────────
+def _add_check_subcommand(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    """Build the ``check`` subparser — the widest surface, kept out of build_parser."""
     check_cmd = sub.add_parser("check", help="Run compliance checks and generate report.")
     check_cmd.add_argument(
         "--root",
@@ -176,6 +151,37 @@ def build_parser() -> argparse.ArgumentParser:
         dest="fix_dry_run",
         help="With --fix, print a unified diff of the changes and write nothing.",
     )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="guideline-checker",
+        description="Check project compliance against Copilot instruction rules.",
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    # ── init subcommand ──────────────────────────────────────────────────────
+    init_cmd = sub.add_parser("init", help="Scaffold default instruction files in a project.")
+    init_cmd.add_argument(
+        "--root",
+        type=Path,
+        default=Path("."),
+        help="Project root directory (default: current directory).",
+    )
+    init_cmd.add_argument(
+        "--instructions",
+        type=Path,
+        default=None,
+        help="Target instructions directory (default: <root>/.github/instructions).",
+    )
+    init_cmd.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Overwrite existing instruction files.",
+    )
+
+    _add_check_subcommand(sub)
 
     _add_fix_subcommand(sub)
 
@@ -512,34 +518,13 @@ def _add_fix_subcommand(sub: argparse._SubParsersAction) -> None:  # type: ignor
     fix_cmd.set_defaults(fix=True, fail_on=None, diff=False, baseline=None, write_baseline=None, linters=None)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
+def _cmd_init(args: argparse.Namespace) -> int:
+    """Scaffold default instruction files. Imported lazily — `init` is rarely the command."""
+    from guideline_checker.init_cmd import run_init
 
-    if args.command == "init":
-        from guideline_checker.init_cmd import run_init
-
-        root: Path = args.root.resolve()
-        instructions_dir: Path | None = args.instructions
-        return run_init(root=root, instructions_dir=instructions_dir, force=args.force)
-
-    if args.command == "synthesize":
-        return _cmd_synthesize(args)
-
-    if args.command == "web":
-        return _cmd_web(args)
-
-    if args.command == "central":
-        return _cmd_central(args)
-
-    if args.command == "push":
-        return _cmd_push(args)
-
-    if args.command not in ("check", "fix"):
-        parser.print_help()
-        return 0
-
-    return _cmd_check(args)
+    root: Path = args.root.resolve()
+    instructions_dir: Path | None = args.instructions
+    return run_init(root=root, instructions_dir=instructions_dir, force=args.force)
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
@@ -1018,44 +1003,44 @@ def _slug_repo(name: str) -> str:
     return _REPO_SLUG_RE.sub("-", name).strip("-")
 
 
-def _cmd_push(args: argparse.Namespace) -> int:
-    """Push a ``check --json`` report to a central server's ingest endpoint."""
+class _PushPlan(NamedTuple):
+    """A validated push: where to send it, under which repo name, and what."""
+
+    url: str
+    repo: str
+    payload: dict[str, object]
+
+
+def _push_plan(args: argparse.Namespace) -> tuple[_PushPlan | None, str]:
+    """Validate the push inputs into a plan, or return the reason it cannot proceed.
+
+    Every failure here is a user-input problem with a specific fix, so each returns
+    its own message rather than a bare exit code — split out from :func:`_cmd_push`
+    so the validation is testable without a server or a network.
+    """
     import json
-    import urllib.error
-    import urllib.request
 
     report_path: Path = args.report
     if not report_path.is_file():
-        print(f"[guideline-checker] Report not found: {report_path}", file=sys.stderr)
-        return 1
+        return None, f"Report not found: {report_path}"
     try:
         report = json.loads(report_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        print(f"[guideline-checker] Cannot read report: {exc}", file=sys.stderr)
-        return 1
+        return None, f"Cannot read report: {exc}"
 
     summary = report.get("summary") if isinstance(report, dict) else None
     if not isinstance(summary, dict):
-        print(
-            "[guideline-checker] Report has no 'summary' block — is this a 'check --json' output?",
-            file=sys.stderr,
-        )
-        return 1
+        return None, "Report has no 'summary' block — is this a 'check --json' output?"
 
     repo = _slug_repo(args.repo or _default_repo_name())
     if not repo:
-        print(
-            "[guideline-checker] Could not determine a valid repo name; pass --repo.",
-            file=sys.stderr,
-        )
-        return 1
+        return None, "Could not determine a valid repo name; pass --repo."
 
     url = args.server.rstrip("/") + "/api/ingest"
     if not url.startswith(("http://", "https://")):
-        print("[guideline-checker] --server must be an http(s) URL.", file=sys.stderr)
-        return 1
+        return None, "--server must be an http(s) URL."
 
-    payload = {
+    payload: dict[str, object] = {
         "repo": repo,
         "summary": summary,
         "commit": args.commit or _git_output(["rev-parse", "HEAD"]),
@@ -1063,6 +1048,21 @@ def _cmd_push(args: argparse.Namespace) -> int:
         "generated_at": report.get("generated_at"),
         "report": report,
     }
+    return _PushPlan(url=url, repo=repo, payload=payload), ""
+
+
+def _cmd_push(args: argparse.Namespace) -> int:
+    """Push a ``check --json`` report to a central server's ingest endpoint."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    plan, problem = _push_plan(args)
+    if plan is None:
+        print(f"[guideline-checker] {problem}", file=sys.stderr)
+        return 1
+    url, repo, payload = plan.url, plan.repo, plan.payload
+
     headers = {"Content-Type": "application/json"}
     api_key = args.api_key or os.environ.get("API_KEY", "")
     if api_key:
@@ -1090,6 +1090,29 @@ def _cmd_push(args: argparse.Namespace) -> int:
 
     print(f"[guideline-checker] Pushed report for '{repo}' to {url} (HTTP {status_code}).")
     return 0
+
+
+# Subcommand -> handler. A table, not an if/elif ladder: adding a command is a row,
+# and `fix` sharing `check`'s handler is visible here instead of buried in control flow.
+_COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
+    "init": _cmd_init,
+    "synthesize": _cmd_synthesize,
+    "web": _cmd_web,
+    "central": _cmd_central,
+    "push": _cmd_push,
+    "check": _cmd_check,
+    "fix": _cmd_check,
+}
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    handler = _COMMANDS.get(args.command)
+    if handler is None:  # no subcommand, or one argparse accepted but nothing handles
+        parser.print_help()
+        return 0
+    return handler(args)
 
 
 if __name__ == "__main__":

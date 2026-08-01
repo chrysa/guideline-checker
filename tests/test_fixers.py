@@ -79,24 +79,23 @@ def test_apply_fix_happy_path_opens_pr() -> None:
 
     calls: list[str] = []
 
+    # The `gh` calls this flow makes, in order, as a table of (matcher, response).
+    # A row per API call reads as the script of the happy path; anything not listed
+    # falls through to "unexpected" and fails the assertion below.
+    responses = (
+        (lambda j: j.startswith("pr list"), GhResult(True, "\n", "", 0)),  # no existing PR
+        (lambda j: j.endswith("--jq .default_branch"), GhResult(True, "main\n", "", 0)),
+        (lambda j: j.endswith("--jq .object.sha"), GhResult(True, "deadbeef\n", "", 0)),
+        (lambda j: "git/refs" in j, GhResult(True, "", "", 0)),  # create_branch
+        (lambda j: j.endswith("--jq .sha"), GhResult(False, "", "404", 1)),  # no existing file content sha
+        (lambda j: "--method PUT" in j, GhResult(True, "", "", 0)),  # put_file
+        (lambda j: j.startswith("pr create"), GhResult(True, "https://github.com/chrysa/alpha/pull/7\n", "", 0)),
+    )
+
     def runner(args):  # type: ignore[no-untyped-def]
         joined = " ".join(args)
         calls.append(joined)
-        if joined.startswith("pr list"):
-            return GhResult(True, "\n", "", 0)  # no existing PR
-        if joined.endswith("--jq .default_branch"):
-            return GhResult(True, "main\n", "", 0)
-        if joined.endswith("--jq .object.sha"):
-            return GhResult(True, "deadbeef\n", "", 0)
-        if "git/refs" in joined:
-            return GhResult(True, "", "", 0)  # create_branch
-        if joined.endswith("--jq .sha"):
-            return GhResult(False, "", "404", 1)  # no existing file content sha
-        if "--method PUT" in joined:
-            return GhResult(True, "", "", 0)  # put_file
-        if joined.startswith("pr create"):
-            return GhResult(True, "https://github.com/chrysa/alpha/pull/7\n", "", 0)
-        return GhResult(False, "", "unexpected", 1)
+        return next((r for matches, r in responses if matches(joined)), GhResult(False, "", "unexpected", 1))
 
     out = apply_fix(
         "chrysa",
