@@ -286,7 +286,16 @@ class QualityGate:
             return int(match.group(1))
         return 0
 
-    def _parse_vuln_count(self, output: str) -> int:
+    def _parse_vuln_count(self, output: str) -> int | None:
+        """Vulnerabilities found, or ``None`` when the output says nothing either way.
+
+        The previous final ``return 0`` made a *failed* audit indistinguishable
+        from a clean one: a run that crashed before auditing anything reported
+        zero vulnerabilities, and ``0 ≤ baseline`` passed. Since the gate swallows
+        the exit code for this tool — it exits non-zero merely for finding
+        something — the exit code could not tell them apart either. ``None`` means
+        "not measured", and :meth:`_compare` fails closed on it.
+        """
         match = re.search(r"found\s+(\d+)\s+vulnerabilit", output, re.IGNORECASE)
         if match:
             return int(match.group(1))
@@ -295,7 +304,7 @@ class QualityGate:
             return count
         if re.search(r"no\s+known\s+vulnerabilit", output, re.IGNORECASE):
             return 0
-        return 0
+        return None
 
     def _parse_metric(self, gate_name: str, exit_code: int, output: str) -> int | float | None:
         """Gate name -> its metric parser, as a table: a new gate is a row, not a branch."""
@@ -312,7 +321,14 @@ class QualityGate:
         return parse() if parse is not None else None
 
     def _compare(self, current: int | float | None, target: int | float | None, operator: str) -> bool:
-        """Apply a comparison operator. Unknown operator is False — never a silent pass."""
+        """Apply a comparison operator, failing closed on anything it cannot judge.
+
+        ``None`` on either side means the metric was never measured. Comparing it
+        would either raise or, worse, pass — a ``≤`` gate reads an unmeasured
+        metric as satisfied. An unknown operator fails the same way.
+        """
+        if current is None or target is None:
+            return False
         compare = _COMPARISONS.get(operator)
         return compare(current, target) if compare is not None else False
 

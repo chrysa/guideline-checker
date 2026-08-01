@@ -331,3 +331,37 @@ def test_the_secrets_scan_still_runs_detect_secrets() -> None:
 def test_the_secrets_gate_still_judges_its_metric_not_the_exit_code() -> None:
     """detect-secrets exits non-zero merely for finding something; the count gates."""
     assert _secrets_spec().swallow_exit is True
+
+
+# ─── an audit that never ran is not an audit that found nothing ───────────────
+
+
+def test_a_failed_audit_is_not_reported_as_zero_vulnerabilities(gate: QualityGate) -> None:
+    """The gate swallows this tool's exit code, so only the output can tell.
+
+    pip-audit exits non-zero merely for finding something, so swallow_exit is
+    correct — but it means a run that crashed before auditing anything looks
+    identical to a clean one unless the parser says "not measured".
+    """
+    assert gate._parse_vuln_count("make: *** [Makefile:124: docker-audit] Error 1") is None
+
+
+def test_a_clean_audit_is_still_zero(gate: QualityGate) -> None:
+    assert gate._parse_vuln_count("No known vulnerabilities found") == 0
+
+
+def test_a_reported_count_is_read(gate: QualityGate) -> None:
+    assert gate._parse_vuln_count("Found 3 vulnerabilities in 2 packages") == 3
+
+
+def test_advisory_ids_are_counted_when_no_summary_line_is_printed(gate: QualityGate) -> None:
+    assert gate._parse_vuln_count("pkg 1.0 GHSA-aaaa-bbbb-cccc\nother 2.0 CVE-2026-1234") == 2
+
+
+def test_an_unmeasured_metric_never_passes_a_less_than_gate(gate: QualityGate) -> None:
+    """A `≤` gate would read an unmeasured metric as satisfied. It must not."""
+    assert gate._compare(None, 7, "≤") is False
+
+
+def test_an_unmeasured_target_never_passes_either(gate: QualityGate) -> None:
+    assert gate._compare(0, None, "≤") is False
