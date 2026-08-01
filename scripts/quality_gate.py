@@ -16,6 +16,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,17 @@ from typing import Any
 _EXIT_NOT_FOUND = 127
 # No alternative applied: every one was guarded by a manifest this repo lacks.
 _EXIT_NOT_APPLICABLE = 126
+
+# Operator -> comparison, as a table. Both the unicode and ASCII spellings of each
+# ordering are accepted because baselines exist carrying either. An operator absent
+# from this table compares False: an unrecognised gate must never pass by default.
+_COMPARISONS: dict[str, Callable[[Any, Any], bool]] = {
+    "=": lambda current, target: bool(current == target),
+    "≥": lambda current, target: bool(current >= target),
+    ">=": lambda current, target: bool(current >= target),
+    "≤": lambda current, target: bool(current <= target),
+    "<=": lambda current, target: bool(current <= target),
+}
 
 
 @dataclass(frozen=True)
@@ -131,6 +143,28 @@ class QualityGate:
             ),
         ]
 
+    def _execute(self, executable: str, argv: list[str]) -> tuple[int, str, bool]:
+        """Run one resolved alternative: ``(exit code, output, aborted)``.
+
+        ``aborted`` is True when the command could not be run to completion — a
+        timeout or an OS-level failure. Those end the whole spec rather than
+        falling through to the next alternative, because a metric parsed from a
+        run that never finished is exactly the green this gate exists to refuse.
+        """
+        try:
+            result = subprocess.run(
+                [executable, *argv[1:]],
+                capture_output=True,
+                text=True,
+                timeout=600,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return 124, "Command timed out after 600 seconds", True
+        except OSError as exc:
+            return _EXIT_NOT_FOUND, f"Execution error: {exc}", True
+        return result.returncode, (result.stdout or "") + (result.stderr or ""), False
+
     def _run(self, spec: CommandSpec) -> tuple[int, str]:
         combined = ""
         returncode = 0
@@ -149,22 +183,14 @@ class QualityGate:
             executable = shutil.which(argv[0])
             if executable is None:
                 combined += f"Command not found: {argv[0]}\n"
-                returncode = 127
+                returncode = _EXIT_NOT_FOUND
                 continue
-            try:
-                result = subprocess.run(
-                    [executable, *argv[1:]],
-                    capture_output=True,
-                    text=True,
-                    timeout=600,
-                    check=False,
-                )
-            except subprocess.TimeoutExpired:
-                return 124, combined + "Command timed out after 600 seconds"
-            except OSError as exc:
-                return 127, combined + f"Execution error: {exc}"
-            combined += (result.stdout or "") + (result.stderr or "")
-            returncode = result.returncode
+            returncode, output, aborted = self._execute(executable, argv)
+            combined += output
+            if aborted:
+                # The command existed and failed to run at all. Trying the next
+                # alternative would report a metric no execution produced.
+                return returncode, combined
             ran_any = True
             if returncode == 0:
                 break
@@ -257,34 +283,23 @@ class QualityGate:
         return 0
 
     def _parse_metric(self, gate_name: str, exit_code: int, output: str) -> int | float | None:
-        if gate_name == "Tests":
-            return self._parse_passed_tests(output)
-        if gate_name == "Coverage":
-            return self._parse_coverage(output)
-        if gate_name == "Lint":
-            return self._parse_warning_count(output)
-        if gate_name == "Types":
-            return self._parse_error_count(output)
-        if gate_name == "Build":
-            return 0 if exit_code == 0 else 1
-        if gate_name == "Secrets":
-            return self._parse_secret_count(output)
-        if gate_name == "VulnDeps":
-            return self._parse_vuln_count(output)
-        return None
+        """Gate name -> its metric parser, as a table: a new gate is a row, not a branch."""
+        parsers: dict[str, Callable[[], int | float | None]] = {
+            "Tests": lambda: self._parse_passed_tests(output),
+            "Coverage": lambda: self._parse_coverage(output),
+            "Lint": lambda: self._parse_warning_count(output),
+            "Types": lambda: self._parse_error_count(output),
+            "Build": lambda: 0 if exit_code == 0 else 1,
+            "Secrets": lambda: self._parse_secret_count(output),
+            "VulnDeps": lambda: self._parse_vuln_count(output),
+        }
+        parse = parsers.get(gate_name)
+        return parse() if parse is not None else None
 
     def _compare(self, current: int | float | None, target: int | float | None, operator: str) -> bool:
-        if operator == "=":
-            return current == target
-        if operator == "≥":
-            return current >= target
-        if operator == "≤":
-            return current <= target
-        if operator == ">=":
-            return current >= target
-        if operator == "<=":
-            return current <= target
-        return False
+        """Apply a comparison operator. Unknown operator is False — never a silent pass."""
+        compare = _COMPARISONS.get(operator)
+        return compare(current, target) if compare is not None else False
 
     def _run_gate(self, gate_name: str, key: str, metric_name: str, default_spec: CommandSpec) -> dict[str, Any]:
         raw = self.config.get("commands", {}).get(key)
