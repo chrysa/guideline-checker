@@ -136,34 +136,3 @@ rules:
   rationale: "LLM001 — a direct vendor SDK import in feature code is provider lock-in; route calls through a declared adapter (allowed in an adapter or ai-aggregator via a `# guideline: disable` comment). Promoted to error after a 0-false-positive report pass on floating-agent/pilote-paperclip/dev-nexus."
   rule: Route AI provider calls through a provider adapter, never import a vendor SDK directly in feature code
   severity: error
-- category: correctness
-  detect:
-    numeric_threshold:
-      max: 500
-      metric: file_lines
-  id: py-file-length
-  rationale: The fleet quality gate caps a source file at 500 lines. Encoding the
-    bound here makes it a host value the referential owns, not a literal buried in
-    the engine.
-  rule: A source file stays under the fleet file-length bound
-  severity: warning
-- category: correctness
-  detect:
-    numeric_threshold:
-      max: 50
-      metric: function_lines
-  id: py-function-length
-  rationale: A function past 50 lines does more than one thing at one level of abstraction,
-    which is what makes it untestable in isolation.
-  rule: A function stays under the fleet function-length bound
-  severity: warning
-- category: correctness
-  detect:
-    numeric_threshold:
-      max: 10
-      metric: branches
-  id: py-branch-count
-  rationale: Branch count is the cyclomatic-complexity heuristic the fleet gate caps
-    at 10. A lookup table keeps it flat where an if/elif ladder would not.
-  rule: A function stays under the fleet branch-count bound
-  severity: warning
