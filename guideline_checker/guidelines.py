@@ -37,7 +37,15 @@ import yaml
 
 from guideline_checker.ast_javascript import VALID_JS_AST_CHECKS, unknown_js_checks
 from guideline_checker.ast_python import VALID_AST_CHECKS, unknown_checks
-from guideline_checker.loader import CrossReference, InstructionFile, RuleDetector, RuleFix, SourceType
+from guideline_checker.loader import (
+    CrossReference,
+    InstructionFile,
+    NumericThreshold,
+    RuleDetector,
+    RuleFix,
+    SourceType,
+)
+from guideline_checker.metrics import VALID_METRICS
 from guideline_checker.scanners import VALID_SCANS, unknown_scans
 
 logger = logging.getLogger(__name__)
@@ -79,6 +87,9 @@ _DETECT_EXCLUDE_KEY = "exclude"
 _CROSSREF_FIELDS = ("cite", "define_in", "define_as")
 # File-freshness threshold in days (file-freshness kind, ADR D-0020).
 _DETECT_FRESHNESS_KEY = "stale_after_days"
+# A measured metric compared to a host-supplied bound (numeric-threshold kind, ADR D-0021).
+_DETECT_NUMERIC_KEY = "numeric_threshold"
+_NUMERIC_FIELDS = ("metric", "max")
 
 _FIX_FIELD = "fix"
 _FIX_OPS = frozenset({"remove_line", "replace", "regex_replace"})
@@ -555,6 +566,9 @@ def _merge_detectors(base: RuleDetector | None, child: RuleDetector | None) -> R
         scan_checks=_union(base.scan_checks, child.scan_checks),
         cross_reference=child.cross_reference or base.cross_reference,
         stale_after_days=child.stale_after_days if child.stale_after_days is not None else base.stale_after_days,
+        # A child that declares no bound of its own keeps the base's, like every
+        # other scalar here — omitting this would drop a base's threshold on extends.
+        numeric_threshold=child.numeric_threshold or base.numeric_threshold,
         exclude=_union(base.exclude, child.exclude),
         match_in_comments=base.match_in_comments or child.match_in_comments,
     )
@@ -606,6 +620,7 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
         _DETECT_SCAN_KEY,
         _DETECT_CROSSREF_KEY,
         _DETECT_FRESHNESS_KEY,
+        _DETECT_NUMERIC_KEY,
         _DETECT_EXCLUDE_KEY,
         "match_in_comments",
     }
@@ -641,16 +656,25 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
 
     cross_reference = _build_cross_reference(path, raw, block)
     stale_after_days = _coerce_stale_after_days(path, raw["id"], block.get(_DETECT_FRESHNESS_KEY))
+    numeric_threshold = _build_numeric_threshold(path, raw["id"], block.get(_DETECT_NUMERIC_KEY))
     has_any = (
         any(patterns.values())
         or ast_checks
         or scan_checks
         or cross_reference is not None
         or stale_after_days is not None
+        or numeric_threshold is not None
     )
     if not has_any:
         detect_keys = sorted(
-            (*_DETECT_PATTERN_KEYS, _DETECT_AST_KEY, _DETECT_SCAN_KEY, _DETECT_CROSSREF_KEY, _DETECT_FRESHNESS_KEY)
+            (
+                *_DETECT_PATTERN_KEYS,
+                _DETECT_AST_KEY,
+                _DETECT_SCAN_KEY,
+                _DETECT_CROSSREF_KEY,
+                _DETECT_FRESHNESS_KEY,
+                _DETECT_NUMERIC_KEY,
+            )
         )
         raise GuidelineError(
             f"{path}: rule {raw['id']!r} 'detect' declares no patterns — "
@@ -667,8 +691,41 @@ def _build_detector(path: Path, raw: dict[str, object]) -> RuleDetector | None:
         ast_checks=ast_checks,
         scan_checks=scan_checks,
         stale_after_days=stale_after_days,
+        numeric_threshold=numeric_threshold,
         match_in_comments=match_in_comments,
     )
+
+
+def _build_numeric_threshold(path: Path, rule_id: object, value: object) -> NumericThreshold | None:
+    """Validate ``detect.numeric_threshold`` — a known metric and a positive bound.
+
+    Both fields are required together: a metric with no bound measures without
+    judging, and a bound with no metric judges nothing. The metric must be one the
+    engine can actually measure, so a typo fails the load instead of arming a rule
+    that silently checks nothing.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise GuidelineError(f"{path}: rule {rule_id!r} 'detect.{_DETECT_NUMERIC_KEY}' must be a mapping.")
+    missing = [f for f in _NUMERIC_FIELDS if f not in value]
+    if missing:
+        raise GuidelineError(
+            f"{path}: rule {rule_id!r} 'detect.{_DETECT_NUMERIC_KEY}' is missing {missing} "
+            f"(both {list(_NUMERIC_FIELDS)} are required).",
+        )
+    metric = value["metric"]
+    if not isinstance(metric, str) or metric not in VALID_METRICS:
+        raise GuidelineError(
+            f"{path}: rule {rule_id!r} 'detect.{_DETECT_NUMERIC_KEY}' has unknown metric {metric!r} "
+            f"(available: {sorted(VALID_METRICS)}).",
+        )
+    bound = value["max"]
+    if isinstance(bound, bool) or not isinstance(bound, int) or bound <= 0:
+        raise GuidelineError(
+            f"{path}: rule {rule_id!r} 'detect.{_DETECT_NUMERIC_KEY}.max' must be a positive integer.",
+        )
+    return NumericThreshold(metric=metric, max_value=bound)
 
 
 def _coerce_stale_after_days(path: Path, rule_id: object, value: object) -> int | None:
