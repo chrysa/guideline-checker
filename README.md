@@ -354,8 +354,69 @@ All keys are optional but a `detect:` block must declare at least one pattern (o
 | name | flags |
 |------|-------|
 | `pydantic-v1` | Pydantic v1 imports (`validator`, `root_validator`, `BaseSettings`, `pydantic.v1.*`) and `@validator` / `@root_validator` decorators |
-| `sync-fastapi-route` | a route decorator (`@app.get` / `@router.post` …) applied to a non-`async def` handler |
+| `sync-fastapi-route` | a route decorator (`@app.get` / `@router.post` …) applied to a `def` handler **whose body does no blocking work** — a handler that writes a file is correctly synchronous, since FastAPI runs it in a threadpool |
 | `mutable-default-arg` | a function parameter whose default is a shared mutable (`[]`, `{}`, `set()`, `list()`, `dict()`) |
+
+**`numeric_threshold`** measures a metric and flags every subject that crosses a bound the *host* supplies ([ADR D-0021](DECISIONS.md)). The engine owns the measuring and carries no number of its own:
+
+```yaml
+rules:
+  - id: py-function-length
+    category: correctness
+    severity: warning
+    rule: "A function stays under the fleet function-length bound"
+    detect:
+      numeric_threshold:
+        metric: function_lines   # what to measure
+        max: 50                  # the bound — your number, not the tool's
+```
+
+| metric | measures | reported at |
+|--------|----------|-------------|
+| `file_lines` | the file's total line count | line 1 |
+| `function_lines` | each function's span, `def` to end | its `def` line |
+| `branches` | each function's decision points + 1 (the cyclomatic heuristic) | its `def` line |
+
+Both fields are required: a metric with no bound measures without judging, a bound with no metric judges nothing. An unknown metric fails the load rather than arming a rule that silently checks nothing. `max` is a bound, not a target — reaching it is compliance, only crossing it is a violation. Function metrics need a parse, so a file that does not parse yields nothing; `file_lines` needs none and always measures.
+
+#### JSON result contract
+
+`check --json report.json` writes a **versioned contract** ([ADR D-0022](DECISIONS.md)), meant to be consumed by another system — Standards Hub above all — without reaching into the engine. Pin `schema_version`, not the tool's git tag:
+
+```json
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-08-01T09:12:44.180273+00:00",
+  "project_root": "/srv/repos/my-service",
+  "summary": { "files_checked": 214, "total_violations": 3, "errors": 1, "warnings": 2, "info": 0 },
+  "rules": [
+    {
+      "instruction_file": "python.yml",
+      "description": "Python coding standards",
+      "apply_to": "**/*.py",
+      "files_checked": 214,
+      "violations": [
+        {
+          "severity": "warning",
+          "file": "app/services/report.py",
+          "line": 88,
+          "content": "function 'build_summary' measured 71 (max: 50)",
+          "rule": "A function stays under the fleet function-length bound",
+          "kind": "numeric-threshold",
+          "fingerprint": "<content hash — see baseline.fingerprint>"
+        }
+      ]
+    }
+  ]
+}
+```
+
+- **`schema_version`** — this payload's own version, independent of the tool's release. An additive field bumps the minor; a removal or a changed field meaning bumps the major. SARIF output keeps its own `2.1.0`, which belongs to the SARIF spec.
+- **`kind`** — the mechanism the rule was measured by ([the taxonomy](#declarative-detectors-detect)). Never blank.
+- **`fingerprint`** — the same content hash the baseline uses, so a consumer can tell a new finding from debt the project already accepts, without re-deriving the hash.
+- There is deliberately **no `rule_id`**: a rule is identified by its statement text throughout the engine, and markdown-sourced rules carry no id. An empty field that looks pinnable is worse than an absent one.
+
+A report is a file on disk, produced offline — no consumer, and no consumer outage, can gate a local run or a CI pipeline.
 
 #### Inheritance and rule packs (`extends:` / `include:`)
 

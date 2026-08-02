@@ -18,6 +18,7 @@ import yaml
 from guideline_checker.ast_javascript import JS_SUFFIXES, run_js_ast_checks
 from guideline_checker.ast_python import run_ast_checks
 from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources, load_instructions
+from guideline_checker.metrics import FILE_SUBJECT, METRICS
 from guideline_checker.scanners import run_scans
 
 IGNORE_DIRS = {
@@ -816,6 +817,42 @@ def _freshness_violations(file_path: Path, rule: str, detector: RuleDetector) ->
     ]
 
 
+def _measurement_text(subject: str, value: int, bound: int) -> str:
+    """Evidence a human can act on: what was measured, how much, against which bound."""
+    what = FILE_SUBJECT if subject == FILE_SUBJECT else f"function {subject!r}"
+    return f"{what} measured {value} (max: {bound})"
+
+
+def _numeric_threshold_violations(
+    file_path: Path,
+    lines: list[str],
+    rule: str,
+    detector: RuleDetector,
+) -> list[Violation]:
+    """Measure the rule's metric and flag every subject over the host's bound.
+
+    The ``numeric-threshold`` mechanism (ADR D-0021): the engine owns the measuring
+    (:mod:`guideline_checker.metrics`), the metric name and the bound are host
+    values the referential supplies. ``max`` is a bound, not a target — reaching it
+    is compliance, only crossing it is a violation.
+    """
+    threshold = detector.numeric_threshold
+    if threshold is None:
+        return []
+    measurer = METRICS[threshold.metric]
+    return [
+        Violation(
+            file=file_path,
+            line_number=line,
+            line_content=_measurement_text(subject, value, threshold.max_value),
+            rule=rule,
+            severity="warning",
+        )
+        for line, value, subject in measurer("\n".join(lines))
+        if value > threshold.max_value
+    ]
+
+
 def _declared_violations(
     file_path: Path,
     lines: list[str],
@@ -838,6 +875,7 @@ def _declared_violations(
     violations.extend(_ast_violations(file_path, lines, rule, detector))
     violations.extend(_scan_violations(file_path, lines, rule, detector, root))
     violations.extend(_freshness_violations(file_path, rule, detector))
+    violations.extend(_numeric_threshold_violations(file_path, lines, rule, detector))
     return violations
 
 
