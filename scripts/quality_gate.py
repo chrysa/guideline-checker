@@ -101,6 +101,44 @@ class CommandSpec:
         return f"{rendered} || true" if self.swallow_exit else rendered
 
 
+# One row per gate: display name, config key, metric name, comparison operator,
+# and the command to run when the config overrides nothing. Module-level data
+# rather than construction, so the defaults are inspectable — and testable —
+# without a .quality-gate.json on disk.
+GateSpec = tuple[str, str, str, str, "CommandSpec"]
+
+DEFAULT_GATES: list[GateSpec] = [
+    ("Tests", "tests", "passed_tests", "≥", CommandSpec((("make", "test"),))),
+    ("Coverage", "coverage", "coverage_percentage", "≥", CommandSpec((("make", "test-cov"),))),
+    ("Lint", "lint", "warning_count", "=", CommandSpec((("make", "lint"),))),
+    ("Types", "types", "error_count", "≤", CommandSpec((("make", "typecheck"),))),
+    ("Build", "build", "build_status", "=", CommandSpec((("make", "build"),))),
+    (
+        "Secrets",
+        "security_secrets",
+        "secret_count",
+        "=",
+        # NOT --all-files: that scans the working *directory*, and Tests and
+        # Coverage run before this gate in the same job, writing coverage.xml and
+        # report files into it. The metric then measures partly the run instead of
+        # the code — it reported 111 against a baseline of 110 for a commit whose
+        # tracked tree measured 110 exactly. Without the flag detect-secrets scans
+        # what git tracks, which is what the baseline describes.
+        CommandSpec((("detect-secrets", "scan"),), swallow_exit=True),
+    ),
+    (
+        "VulnDeps",
+        "security_vulns",
+        "vuln_count",
+        "≤",
+        CommandSpec(
+            (("pip-audit",), ("npm", "audit", "--audit-level=high")),
+            swallow_exit=True,
+        ),
+    ),
+]
+
+
 class QualityGate:
     CONFIG_FILE = ".quality-gate.json"
     BASELINE_FILE = ".quality-gate-baseline.json"
@@ -118,30 +156,7 @@ class QualityGate:
         with open(self.config_path, encoding="utf-8") as handle:
             self.config = json.load(handle)
 
-        self.gates: list[tuple[str, str, str, str, CommandSpec]] = [
-            ("Tests", "tests", "passed_tests", "≥", CommandSpec((("make", "test"),))),
-            ("Coverage", "coverage", "coverage_percentage", "≥", CommandSpec((("make", "test-cov"),))),
-            ("Lint", "lint", "warning_count", "=", CommandSpec((("make", "lint"),))),
-            ("Types", "types", "error_count", "≤", CommandSpec((("make", "typecheck"),))),
-            ("Build", "build", "build_status", "=", CommandSpec((("make", "build"),))),
-            (
-                "Secrets",
-                "security_secrets",
-                "secret_count",
-                "=",
-                CommandSpec((("detect-secrets", "scan", "--all-files"),), swallow_exit=True),
-            ),
-            (
-                "VulnDeps",
-                "security_vulns",
-                "vuln_count",
-                "≤",
-                CommandSpec(
-                    (("pip-audit",), ("npm", "audit", "--audit-level=high")),
-                    swallow_exit=True,
-                ),
-            ),
-        ]
+        self.gates: list[GateSpec] = list(DEFAULT_GATES)
 
     def _execute(self, executable: str, argv: list[str]) -> tuple[int, str, bool]:
         """Run one resolved alternative: ``(exit code, output, aborted)``.
@@ -271,7 +286,16 @@ class QualityGate:
             return int(match.group(1))
         return 0
 
-    def _parse_vuln_count(self, output: str) -> int:
+    def _parse_vuln_count(self, output: str) -> int | None:
+        """Vulnerabilities found, or ``None`` when the output says nothing either way.
+
+        The previous final ``return 0`` made a *failed* audit indistinguishable
+        from a clean one: a run that crashed before auditing anything reported
+        zero vulnerabilities, and ``0 ≤ baseline`` passed. Since the gate swallows
+        the exit code for this tool — it exits non-zero merely for finding
+        something — the exit code could not tell them apart either. ``None`` means
+        "not measured", and :meth:`_compare` fails closed on it.
+        """
         match = re.search(r"found\s+(\d+)\s+vulnerabilit", output, re.IGNORECASE)
         if match:
             return int(match.group(1))
@@ -280,7 +304,7 @@ class QualityGate:
             return count
         if re.search(r"no\s+known\s+vulnerabilit", output, re.IGNORECASE):
             return 0
-        return 0
+        return None
 
     def _parse_metric(self, gate_name: str, exit_code: int, output: str) -> int | float | None:
         """Gate name -> its metric parser, as a table: a new gate is a row, not a branch."""
@@ -297,7 +321,14 @@ class QualityGate:
         return parse() if parse is not None else None
 
     def _compare(self, current: int | float | None, target: int | float | None, operator: str) -> bool:
-        """Apply a comparison operator. Unknown operator is False — never a silent pass."""
+        """Apply a comparison operator, failing closed on anything it cannot judge.
+
+        ``None`` on either side means the metric was never measured. Comparing it
+        would either raise or, worse, pass — a ``≤`` gate reads an unmeasured
+        metric as satisfied. An unknown operator fails the same way.
+        """
+        if current is None or target is None:
+            return False
         compare = _COMPARISONS.get(operator)
         return compare(current, target) if compare is not None else False
 
