@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>guideline-checker · workshop</title>
+<script>
+  /* Resolve the theme before first paint. The attribute on <html> is only a fallback
+     for a browser with scripting off; leaving it to the main script at the end of
+     <body> would paint dark first and flash to light for anyone who prefers light. */
+  (function () {
+    try {
+      var saved = localStorage.getItem("gc:theme");
+      document.documentElement.dataset.theme =
+        (saved === "dark" || saved === "light") ? saved
+        : (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    } catch (e) { /* storage blocked — the fallback attribute stands */ }
+  })();
+</script>
 <style>
   /* ── Design tokens (Exaggerated Minimalism · Fira · #1E293B/#22C55E/#0F172A) ── */
   :root {
@@ -14,15 +27,33 @@
     --mono: "Fira Code", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
     --sans: "Fira Sans", "Inter var", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --radius: 10px; --radius-sm: 7px;
+    /* Tint behind a chip or the primary button, painted in that element's own hue.
+       Tokenised because a light surface needs a weaker one: the tint lightens the
+       backdrop about as fast as darkening the text darkens the ink, so on white it
+       pins the ratio near 4:1 whatever the palette. Dark keeps 16%; light uses 8%
+       (see the light block for the measurements). */
+    --tint: 16%; --tint-strong: 26%;
     --sp-1: 0.4rem; --sp-2: 0.7rem; --sp-3: 1rem; --sp-4: 1.4rem; --sp-5: 2rem;
     --shadow: 0 1px 2px rgba(0,0,0,.25), 0 8px 24px -12px rgba(0,0,0,.4);
   }
+  /* The light theme failed WCAG AA. These colours carry 0.6rem text (chips, source
+     labels, hints) — never large text, so 4.5:1 applies, not 3:1. Measured on the
+     rendered page, compositing every alpha layer, worst ratio per element class:
+
+       original palette + 16% tint  -> 2.96   (4 element classes below 4.5)
+       original palette +  8% tint  -> 3.26   (3 below)
+       darker palette   + 16% tint  -> 4.13   (1 below)
+       darker palette   +  8% tint  -> 4.62   (none)          <- shipped
+
+     Neither change carries it alone, which is why both are here. Dark measures 4.53
+     worst-case and was already compliant; it is untouched apart from the tint token. */
   :root[data-theme="light"] {
-    --ground: #eef2f8; --panel: #ffffff; --panel-2: #f4f7fc; --edge: #d3dced;
-    --ink: #16233b; --ink-dim: #43536e; --ink-faint: #64748b;
-    --proven: #12924a; --armed: #0273b0; --dead: #cf1667; --advisory: #64748b;
-    --warn: #b7791f; --accent: #12924a;
+    --ground: #eef2f8; --panel: #ffffff; --panel-2: #f4f7fc; --edge: #b9c5da;
+    --ink: #16233b; --ink-dim: #43536e; --ink-faint: #59677c;
+    --proven: #0e753b; --armed: #026aa3; --dead: #be145f; --advisory: #59677c;
+    --warn: #8b5c17; --accent: #0e753b;
     --shadow: 0 1px 2px rgba(16,32,60,.06), 0 10px 26px -14px rgba(16,32,60,.22);
+    --tint: 8%; --tint-strong: 16%;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -42,11 +73,19 @@
   .actions { display: flex; gap: var(--sp-1); align-items: center; flex-wrap: wrap; }
   .btn { font-family: var(--mono); font-size: 0.78rem; font-weight: 600; cursor: pointer; padding: 0.5rem 0.9rem; border-radius: var(--radius-sm); border: 1px solid var(--edge); background: var(--panel); color: var(--ink); transition: border-color .15s, background .15s, color .15s; }
   .btn:hover:not(:disabled) { border-color: var(--accent); }
-  .btn.primary { border-color: color-mix(in srgb, var(--accent) 55%, var(--edge)); background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
-  .btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+  .btn.primary { border-color: color-mix(in srgb, var(--accent) 55%, var(--edge)); background: color-mix(in srgb, var(--accent) var(--tint), transparent); color: var(--accent); }
+  .btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) var(--tint-strong), transparent); }
   .btn:disabled { opacity: .55; cursor: default; }
   .btn.icon { padding: 0.5rem 0.6rem; }
   .select { font-family: var(--mono); font-size: 0.78rem; padding: 0.5rem 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--edge); background: var(--panel); color: var(--ink); max-width: 240px; cursor: pointer; }
+
+  /* A coarse pointer has no pixel precision: the compact 0.78rem controls measure
+     ~32px tall, under the 44px the standard asks for on touch. Only raise them
+     where the pointer is actually coarse, so the mouse density is left alone. */
+  @media (pointer: coarse) {
+    .btn, .select, .rules .resolve, .toolbar input[type=text] { min-height: 44px; }
+    .tile { min-height: 44px; }
+  }
 
   /* ── Summary band: grade hero + tiles ── */
   .summary { display: grid; grid-template-columns: auto 1fr; gap: var(--sp-3); align-items: stretch; margin-bottom: var(--sp-2); }
@@ -94,25 +133,25 @@
   .rules .row:hover, .rules .row:focus-visible { background: var(--panel-2); }
   .chip { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.07em; text-transform: uppercase; padding: 0.2rem 0.45rem; border-radius: 5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 0.28rem; }
   .chip::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: currentColor; flex: none; }
-  .chip.proven { color: var(--proven); background: color-mix(in srgb, var(--proven) 16%, transparent); }
-  .chip.armed { color: var(--armed); background: color-mix(in srgb, var(--armed) 16%, transparent); }
-  .chip.dead { color: var(--dead); background: color-mix(in srgb, var(--dead) 16%, transparent); }
-  .chip.advisory { color: var(--advisory); background: color-mix(in srgb, var(--advisory) 18%, transparent); }
+  .chip.proven { color: var(--proven); background: color-mix(in srgb, var(--proven) var(--tint), transparent); }
+  .chip.armed { color: var(--armed); background: color-mix(in srgb, var(--armed) var(--tint), transparent); }
+  .chip.dead { color: var(--dead); background: color-mix(in srgb, var(--dead) var(--tint), transparent); }
+  .chip.advisory { color: var(--advisory); background: color-mix(in srgb, var(--advisory) var(--tint), transparent); }
   .rules .rule { font-size: 0.85rem; }
   .rules .src { font-family: var(--mono); font-size: 0.64rem; color: var(--ink-faint); margin-top: 0.15rem; }
   .rules .kind { color: var(--armed); }
   .rules .fires { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
-  .rules .resolve { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.3rem 0.6rem; border-radius: 6px; border: 1px solid var(--armed); background: color-mix(in srgb, var(--armed) 15%, transparent); color: var(--armed); cursor: pointer; white-space: nowrap; }
-  .rules .resolve:hover:not(:disabled) { background: color-mix(in srgb, var(--armed) 28%, transparent); }
+  .rules .resolve { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.3rem 0.6rem; border-radius: 6px; border: 1px solid var(--armed); background: color-mix(in srgb, var(--armed) var(--tint), transparent); color: var(--armed); cursor: pointer; white-space: nowrap; }
+  .rules .resolve:hover:not(:disabled) { background: color-mix(in srgb, var(--armed) var(--tint-strong), transparent); }
   .rules .resolve:disabled { opacity: 0.6; cursor: default; }
 
   /* Row grade chip (all-projects view) */
   .grade { font-family: var(--mono); font-weight: 700; font-size: 0.7rem; letter-spacing: 0.03em; padding: 0.16rem 0.5rem; border-radius: 6px; white-space: nowrap; }
-  .grade.gA { background: color-mix(in srgb, var(--proven) 16%, transparent); }
-  .grade.gB { background: color-mix(in srgb, var(--armed) 16%, transparent); }
-  .grade.gC { background: color-mix(in srgb, var(--warn) 18%, transparent); }
-  .grade.gD { background: color-mix(in srgb, #ef8f4d 18%, transparent); }
-  .grade.gF { background: color-mix(in srgb, var(--dead) 16%, transparent); }
+  .grade.gA { background: color-mix(in srgb, var(--proven) var(--tint), transparent); }
+  .grade.gB { background: color-mix(in srgb, var(--armed) var(--tint), transparent); }
+  .grade.gC { background: color-mix(in srgb, var(--warn) var(--tint), transparent); }
+  .grade.gD { background: color-mix(in srgb, #ef8f4d var(--tint), transparent); }
+  .grade.gF { background: color-mix(in srgb, var(--dead) var(--tint), transparent); }
 
   /* ── States (loading / empty / error) ── */
   .state { padding: 1.6rem 1.4rem; color: var(--ink-dim); font-family: var(--mono); font-size: 0.8rem; text-align: center; }
@@ -266,9 +305,35 @@ function toast(msg, isError) {
   setTimeout(() => t.classList.remove("show"), 2200);
 }
 
+// ── Theme: OS default, user override, persisted, synced across tabs ──────────
+// The toggle used to flip a DOM attribute and nothing else: every reload threw the
+// choice away and returned to dark, whatever the OS said. The standard asks for the
+// OS preference as the default, an override that survives reload, and a change that
+// propagates to the app's other tabs and on refocus.
+const THEME_KEY = "gc:theme";
+
+function preferredTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === "dark" || saved === "light") return saved;  // a stale value is discarded
+  return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $("theme").setAttribute("aria-pressed", String(theme === "light"));
+}
+
+applyTheme(preferredTheme());
+
 $("theme").addEventListener("click", () => {
-  const root = document.documentElement;
-  root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme(next);
+});
+// Another tab changed it, or the OS did while this tab was hidden.
+addEventListener("storage", (e) => { if (e.key === THEME_KEY) applyTheme(preferredTheme()); });
+addEventListener("focus", () => applyTheme(preferredTheme()));
+matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+  if (!localStorage.getItem(THEME_KEY)) applyTheme(preferredTheme());  // no override = follow the OS
 });
 
 // ── Toolbar (filter + sort) ─────────────────────────────────────────────────
@@ -605,10 +670,44 @@ function renderResult(d) {
 }
 
 // ── Toolbar wiring + init ────────────────────────────────────────────────────
-$("q").addEventListener("input", () => (viewMode === "all" ? renderAllRows() : renderRules()));
-$("sort").addEventListener("change", () => { sortKey[viewMode] = $("sort").value; viewMode === "all" ? renderAllRows() : renderRules(); });
+// Filter and sort go in the URL, not just in memory: the standard treats an active
+// filter as view state that must survive a reload, and putting it in the query
+// string makes a filtered view shareable — paste the link, land on the same rows.
+function readViewState() {
+  const p = new URLSearchParams(location.search);
+  const q = p.get("q");
+  if (q) $("q").value = q;
+  const s = p.get("sort");
+  if (s && SORTS[viewMode] && SORTS[viewMode][s]) { sortKey[viewMode] = s; $("sort").value = s; }
+}
+function writeViewState() {
+  const p = new URLSearchParams(location.search);
+  const q = $("q").value.trim();
+  q ? p.set("q", q) : p.delete("q");
+  p.set("sort", sortKey[viewMode]);
+  // replaceState, not pushState: typing a filter must not bury the previous view
+  // under a history entry per keystroke. The hash (which project) stays the route.
+  history.replaceState(null, "", location.pathname + (p.toString() ? "?" + p : "") + location.hash);
+}
 
-loadProjects().then(() => applyRoute(false));
+$("q").addEventListener("input", () => {
+  writeViewState();
+  viewMode === "all" ? renderAllRows() : renderRules();
+});
+$("sort").addEventListener("change", () => {
+  sortKey[viewMode] = $("sort").value;
+  writeViewState();
+  viewMode === "all" ? renderAllRows() : renderRules();
+});
+
+// Restore after the route has rendered, then re-render: the toolbar only exists
+// once a view has been drawn, and applyRoute is what draws it.
+loadProjects()
+  .then(() => applyRoute(false))
+  .then(() => {
+    readViewState();
+    if (!$("toolbar").hidden) viewMode === "all" ? renderAllRows() : renderRules();
+  });
 </script>
 </body>
 </html>
