@@ -24,10 +24,11 @@ name: CI
 
 on:
     pull_request:
-        branches: [main]
+        branches: [develop, main]
     push:
         branches:
             - main
+            - develop
             # chrysa branch conventions (CLAUDE.md) — full and short prefixes, so
             # a PR branch triggers CI on push regardless of which form it uses.
             - "feature/**"
