@@ -6,7 +6,8 @@
     "security_vulns": [
       {
         "cmd": [
-          "pip-audit"
+          "make",
+          "docker-audit"
         ],
         "requires": "pyproject.toml"
       },
