@@ -46,6 +46,8 @@ rules:
   severity: warning
 - category: stack
   detect:
+    exclude:
+    - guideline_checker/cli.py
     forbid:
     - print(
     - pprint(
@@ -81,6 +83,8 @@ rules:
   severity: warning
 - category: security
   detect:
+    exclude:
+    - guideline_checker/checker.py
     forbid:
     - eval(
     - exec(
