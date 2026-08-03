@@ -791,12 +791,13 @@ over 500 lines, 10 functions over 50, and zero from `py-branch-count`.
 
 **Consequences.** Severity stays `warning`: `ruff` already blocks on the same
 bounds in CI, and a second blocking source for one number would double-report a
-single defect. Known blind spot, stated rather than hidden — `.guidelineignore`
-excludes `checker.py` and `cli.py` wholesale because a *pattern* detector's own
-tables contain the patterns it flags. That exclusion now also blinds a
-*measurement* rule to the two longest files in the repository. The right fix is
-per-rule scope (`detect.exclude`) rather than a file-level blanket, and it is not
-done here.
+single defect. **Former blind spot, now closed** — `.guidelineignore` used to
+exclude `checker.py` and `cli.py` wholesale because a *pattern* detector's own
+tables contain the patterns it flags, and that same blanket blinded the
+*measurement* rules to the two longest files in the repository. The exclusion is
+now scoped per-rule (`detect.exclude`): `py-no-eval-exec` excludes `checker.py`,
+`py-structured-logging` excludes `cli.py`, and the numeric rules carry no
+exclude, so they measure both files. The two are off the file-level blanket.
 
 *Rejected*: (a) shell out to `ruff`/`radon` and parse their output — the engine
 would depend on a host toolchain being installed, which is the exact failure
