@@ -5,6 +5,10 @@ on:
     pull_request:
         types: [opened, synchronize, reopened, ready_for_review]
 
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
 jobs:
     call:
         uses: chrysa/github-actions/.github/workflows/enforce-feature-branch.yml@v1.6.0
