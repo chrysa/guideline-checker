@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# quality-gate: repo-managed — this copy extends the canonical gate with the CommandSpec
+# layer (shlex-parsed argv vectors, guarded alternatives via `requires`, swallow_exit).
+# The distribution converges every other repo onto shared-standards' canonical copy; this
+# marker opts this one out so the extra layer is not silently removed (shared-standards#372).
+# Porting CommandSpec upstream would let this file rejoin the canonical: see #372.
 """Quality Gate Verification Script.
 
 Machine-readable output lines:
