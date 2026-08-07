@@ -80,7 +80,7 @@ repos:
   - id: python-mutable-default
   - id: python-dispatch-ladder
   repo: https://github.com/chrysa/pre-commit-tools
-  rev: v0.2.0-247
+  rev: v0.2.0-253
 - hooks:
   - id: gitleaks
   repo: https://github.com/gitleaks/gitleaks
