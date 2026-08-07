@@ -11,11 +11,13 @@ CHANGELOG.md
 # patterns they flag (`eval(`, `exec(`, `shell=True`, `os.system(`, …). Those
 # matches are the engine's data, not violations of it. The rest of the library
 # (loader, guidelines, persist, sandbox, web, scanners, …) stays checked.
-guideline_checker/checker.py
 guideline_checker/proposer.py
 guideline_checker/init_cmd.py
 scripts
 
-# CLI entrypoint: a command-line tool's stdout IS its user interface, so print()
-# is the correct output mechanism there, not a "use logging" violation.
-guideline_checker/cli.py
+# checker.py and cli.py are NOT excluded here (D-0021): a file-level blanket also
+# blinds the numeric measurement rules (py-file-length, py-function-length) to
+# the two longest files in the repo. The pattern rules that legitimately match
+# them carry a per-rule `detect.exclude` instead — `py-no-eval-exec` excludes
+# checker.py (its detector tables hold `eval(`/`exec(`), `py-structured-logging`
+# excludes cli.py (a CLI's stdout IS its interface, so `print(` is correct).
