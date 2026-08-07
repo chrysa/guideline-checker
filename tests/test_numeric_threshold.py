@@ -167,8 +167,52 @@ def test_the_evidence_names_the_measurement_and_the_bound(tmp_path: Path) -> Non
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+def test_the_shipped_referential_arms_the_numeric_threshold_kind() -> None:
+    """A kind in the taxonomy with no rule behind it is a mechanism that measures nothing."""
+    instructions = load_yaml_guidelines(_REPO_ROOT)
+    armed = {
+        rule
+        for instr in instructions
+        for rule, detector in instr.rule_detectors.items()
+        if kind_of_detector(detector) is CheckKind.NUMERIC_THRESHOLD
+    }
+    assert len(armed) >= 3
+
+
 def test_the_engine_states_no_bound_of_its_own() -> None:
     """The bounds live in the host referential; restating one in engine code is the drift."""
     engine = (_REPO_ROOT / "guideline_checker" / "metrics.py").read_text(encoding="utf-8")
     assert "500" not in engine
     assert "max_value" not in engine
+
+
+# ─── D-0021 blind spot: the numeric rules must see the repo's longest files ────
+#
+# ``.guidelineignore`` blanket-excluded checker.py and cli.py because a *pattern*
+# detector's own tables hold the patterns it flags. That same blanket blinded the
+# *measurement* rules to the two longest files in the repo — the exact silent-green
+# this project refuses. The fix scopes the exclusion per-rule instead of per-file.
+
+_BLIND_SPOT_FILES = ("guideline_checker/checker.py", "guideline_checker/cli.py")
+
+
+def _shipped_detectors() -> dict[str, RuleDetector]:
+    instructions = load_yaml_guidelines(_REPO_ROOT)
+    return {rule: detector for instr in instructions for rule, detector in instr.rule_detectors.items()}
+
+
+def test_the_numeric_rules_do_not_exclude_the_longest_files() -> None:
+    """A measurement rule that skips the two longest files measures nothing worth measuring."""
+    detectors = _shipped_detectors()
+    for rule in (
+        "A source file stays under the fleet file-length bound",
+        "A function stays under the fleet function-length bound",
+    ):
+        assert not any(f in detectors[rule].exclude for f in _BLIND_SPOT_FILES)
+
+
+def test_the_pattern_rules_scope_the_exclusion_per_rule() -> None:
+    """checker.py and cli.py leave the blanket only because the pattern rules that match them opt out."""
+    detectors = _shipped_detectors()
+    assert "guideline_checker/checker.py" in detectors["Never use eval() or exec() on runtime data"].exclude
+    assert "guideline_checker/cli.py" in detectors["Emit operational output through the logging module"].exclude
