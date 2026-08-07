@@ -245,6 +245,12 @@ class QualityGate:
         ``test_synthesis_multiple_repos_totals PASSED [ 93%]`` reported 93% for a
         run that covered 88.88%. Anchor on the two shapes coverage really emits,
         and only then fall back to the loose scan.
+
+        When the current run's stdout carries no coverage at all, the honest
+        answer is ``-1.0`` (missing), never a number recovered from a
+        ``coverage.xml`` left on disk by an earlier run: that stale, possibly
+        passing figure would mask a real regression — exactly the green this
+        gate exists to refuse. A missing metric fails closed in :meth:`_compare`.
         """
         anchored = (
             r"total\s+coverage[:\s]+(\d+(?:\.\d+)?)%",  # pytest-cov's --cov-fail-under line
@@ -260,26 +266,6 @@ class QualityGate:
                 # the try/except this replaces was dead defensive code (PERF203).
                 for value in re.findall(r"(\d+(?:\.\d+)?)%", line):
                     return float(value)
-        return self._parse_coverage_report()
-
-    def _parse_coverage_report(self) -> float:
-        """Read the coverage percentage from a written XML report.
-
-        `make test-cov` may emit only `--cov-report=xml`, in which case stdout
-        carries no summary at all and the textual patterns above find nothing.
-        """
-        for candidate in (Path("reports/coverage.xml"), Path("coverage.xml")):
-            if not candidate.is_file():
-                continue
-            match = re.search(
-                r'<coverage[^>]*\bline-rate="([0-9.]+)"',
-                candidate.read_text(encoding="utf-8", errors="replace"),
-            )
-            if match:
-                try:
-                    return round(float(match.group(1)) * 100, 2)
-                except ValueError:
-                    continue
         return -1.0
 
     def _parse_warning_count(self, output: str) -> int:
