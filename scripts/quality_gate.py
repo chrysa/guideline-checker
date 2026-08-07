@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-# quality-gate: repo-managed — this copy extends the canonical gate with the CommandSpec
-# layer (shlex-parsed argv vectors, guarded alternatives via `requires`, swallow_exit).
-# The distribution converges every other repo onto shared-standards' canonical copy; this
-# marker opts this one out so the extra layer is not silently removed (shared-standards#372).
-# Porting CommandSpec upstream would let this file rejoin the canonical: see #372.
 """Quality Gate Verification Script.
 
 Machine-readable output lines:
@@ -261,11 +256,30 @@ class QualityGate:
                 return float(match.group(1))
         for line in output.splitlines():
             if any(token in line.lower() for token in ["total", "coverage", "covered"]):
+                # The pattern captures digits only, so float() cannot raise here —
+                # the try/except this replaces was dead defensive code (PERF203).
                 for value in re.findall(r"(\d+(?:\.\d+)?)%", line):
-                    try:
-                        return float(value)
-                    except ValueError:
-                        continue
+                    return float(value)
+        return self._parse_coverage_report()
+
+    def _parse_coverage_report(self) -> float:
+        """Read the coverage percentage from a written XML report.
+
+        `make test-cov` may emit only `--cov-report=xml`, in which case stdout
+        carries no summary at all and the textual patterns above find nothing.
+        """
+        for candidate in (Path("reports/coverage.xml"), Path("coverage.xml")):
+            if not candidate.is_file():
+                continue
+            match = re.search(
+                r'<coverage[^>]*\bline-rate="([0-9.]+)"',
+                candidate.read_text(encoding="utf-8", errors="replace"),
+            )
+            if match:
+                try:
+                    return round(float(match.group(1)) * 100, 2)
+                except ValueError:
+                    continue
         return -1.0
 
     def _parse_warning_count(self, output: str) -> int:
