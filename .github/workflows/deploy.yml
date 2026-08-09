@@ -16,12 +16,18 @@ permissions:
 
 jobs:
     deploy:
-        uses: chrysa/github-actions/.github/workflows/deploy.yml@v1.4.4
+        uses: chrysa/github-actions/.github/workflows/deploy.yml@v1.6.0
         with:
             image-base: ghcr.io/chrysa/guideline-checker
             tag: ${{ inputs.tag }}
             backend-context: .
             target: web
+            # Stamp the real version into the wheel: setuptools-scm reads
+            # SETUPTOOLS_SCM_PRETEND_VERSION from this build arg (Dockerfile), so
+            # the image reports the release tag instead of the 0.0.0+unknown
+            # fallback. On a release the tag name is used; workflow_dispatch passes
+            # its own tag input. setuptools-scm normalises the leading `v`.
+            backend-build-args: VERSION=${{ github.event.release.tag_name || inputs.tag }}
             gitops: true
             api-values-path: apps/dev/guideline-checker/values.yaml
         secrets:

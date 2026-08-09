@@ -37,9 +37,9 @@ repos:
   rev: v2.3.0
 - hooks:
   - id: makefile-check
-  - exclude: ^(tests/|scripts/|guideline_checker/(cli|checker|init_cmd)\.py$)
+  - exclude: (^|/)tests?/|^(README\.md|docs/)
     id: python-print-detection
-  - exclude: ^(tests/|guideline_checker/checker\.py$)
+  - exclude: (^|/)tests?/|^(README\.md|docs/)
     id: python-pprint-detection
   - id: python-unreachable-code
   - exclude: ^\.github/(workflows|ISSUE_TEMPLATE)/|^\.github/dependabot\.yml$
@@ -48,10 +48,12 @@ repos:
   - exclude: ^tests/
     id: no-bare-except
   - id: python-logger-detection
+    exclude: (^|/)tests?/|^(README\.md|docs/)
   - id: no-sync-in-async
-  - exclude: ^(tests/|README\.md$|DECISIONS\.md$|guidelines/)
+  - exclude: (^|/)tests?/|^(README\.md|docs/)
     id: debugger-detection
   - id: fastapi-missing-response-model
+    exclude: (^|/)tests/
   - exclude: ^tests/
     id: console-log-detection
   - id: console-debug-detection
@@ -66,7 +68,7 @@ repos:
   - id: env-example-sync
   - exclude: tests?/|\.test\.|\.spec\.|^guideline_checker/(proposer\.py$|web/app\.py$)
     id: no-hardcoded-localhost
-  - exclude: ^tests/
+  - exclude: (^|/)tests/
     id: fastapi-missing-links
   - id: claude-skill-frontmatter
   - id: claude-agent-frontmatter
@@ -74,7 +76,7 @@ repos:
   - id: python-no-unittest-import
   - id: claude-assets-present
   - id: python-untyped-raise
-    exclude: ^tests?/
+    exclude: (^|/)tests?/
   - id: python-mutable-default
   - id: python-dispatch-ladder
   repo: https://github.com/chrysa/pre-commit-tools
@@ -132,6 +134,6 @@ repos:
   repo: https://github.com/igorshubovych/markdownlint-cli
   rev: v0.49.1
 - repo: https://github.com/chrysa/guideline-checker
-  rev: v1.31.0-5
+  rev: v1.31.0-13
   hooks:
   - id: guideline-check

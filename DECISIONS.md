@@ -727,3 +727,137 @@ aggregate) stays frozen — this is a *pull* selector, not an aggregate server.
 reporters pushing in; the selector is read-only and needs no per-repo agent;
 (b) accept an arbitrary root path in the API — path-traversal risk; the
 discovery whitelist is the safe boundary.
+
+## D-0021 — The `numeric-threshold` mechanism: the engine measures, the host bounds
+
+**Date**: 2026-08-01
+**Status**: accepted
+
+D-0020 named `numeric-threshold` in the taxonomy and shipped it with nothing
+behind it: no `detect.*` key could express one, and no detector measured
+anything. A kind a rule cannot be written in is a mechanism that measures
+nothing — the silent green this project exists to refuse, sitting inside its own
+taxonomy. The numeric fleet gates (file ≤ 500 lines, function ≤ 50, complexity
+≤ 10) were therefore enforced only where a host happened to write them as prose
+the checker's regexes recognised, and not at all from the YAML referential.
+
+**Decision.** Give the kind a mechanism and keep every number out of it.
+`metrics.py` owns three measurers — `file_lines`, `function_lines`, `branches`
+(decision points + 1, the cyclomatic heuristic) — each returning *what it read
+and where*, never a verdict. A rule opts in with
+
+```yaml
+detect:
+  numeric_threshold:
+    metric: function_lines
+    max: 50
+```
+
+The loader validates both fields together (a metric with no bound measures
+without judging; a bound with no metric judges nothing), rejects an unknown
+metric at load rather than arming a rule that checks nothing, and
+`checker._numeric_threshold_violations` flags every subject strictly over the
+bound. `max` is a bound, not a target: reaching it is compliance. `metrics.py`
+states no threshold of its own — a guard test asserts exactly that.
+
+**Shipped in two steps, for a reason worth recording.** This repository applies
+its own hook at a pinned release (`.pre-commit-config.yaml`), so a referential
+using a `detect.*` key the pinned build does not know **fails to load** — the
+gate goes red on the repo's own rules, in CI as well as locally, and no local
+`SKIP` reaches CI. Any new schema key therefore lands in two parts: the
+**mechanism** first (this change — no referential edit, so the pinned hook still
+loads), then a release, then the **rules** that use it. `stale_after_days`
+(D-0020) shipped the same way. The three rules carrying the fleet's numbers
+(`py-file-length` 500, `py-function-length` 50, `py-branch-count` 10) follow in
+that second step; they were written and measured against real code before this
+ADR was accepted, so the validation gate below is met on evidence, not on
+intention.
+
+**Fatal hypothesis.** Measuring length and branch count from a single-file AST is
+close enough to what the fleet gate already measures (`ruff` `C901` / `PLR0915`)
+that a finding here predicts a finding there.
+
+**Kill-test.** Run both over the fleet's ten largest repos. If they disagree on
+more than 10% of functions, this mechanism is measuring something else while
+claiming the gate's authority, and it must defer to the linter instead of
+restating it. Checked at the next referential review. First signal, on this
+repo: `py-branch-count` fires **zero** times where `C901` is already enforced and
+green — consistent, not yet conclusive.
+
+**Validation gate.** The rules fire on real code before any promotion from
+`warning` to `error`. Met before acceptance: run against this repository's own
+sources, the three rules produced **13 findings, no false positive** — 3 files
+over 500 lines, 10 functions over 50, and zero from `py-branch-count`.
+
+**Consequences.** Severity stays `warning`: `ruff` already blocks on the same
+bounds in CI, and a second blocking source for one number would double-report a
+single defect. **Former blind spot, now closed** — `.guidelineignore` used to
+exclude `checker.py` and `cli.py` wholesale because a *pattern* detector's own
+tables contain the patterns it flags, and that same blanket blinded the
+*measurement* rules to the two longest files in the repository. The exclusion is
+now scoped per-rule (`detect.exclude`): `py-no-eval-exec` excludes `checker.py`,
+`py-structured-logging` excludes `cli.py`, and the numeric rules carry no
+exclude, so they measure both files. The two are off the file-level blanket.
+
+*Rejected*: (a) shell out to `ruff`/`radon` and parse their output — the engine
+would depend on a host toolchain being installed, which is the exact failure
+mode #310 documents, and offline determinism (D-0016) is not negotiable;
+(b) keep the numbers in `metrics.py` behind named constants — shorter, and
+precisely the drift D-0016 forbids: the engine would then carry a value and every
+host would inherit chrysa's bound whether or not it is theirs.
+
+## D-0022 — The JSON result contract carries its own version
+
+**Date**: 2026-08-01
+**Status**: accepted
+
+Standards Hub is to expose the compliance results this tool produces without
+integrating its engine or reaching into its internals. The JSON report carried no
+version, so the only thing a consumer could pin was the tool's git tag — coupling
+the Hub to every unrelated release, and giving it no way to tell an added field
+from a changed meaning. It also carried no way to answer the first question a
+dashboard asks of a finding: *is this already accepted debt?*
+
+**Decision.** The payload is a contract with a version of its own.
+`schema_version` leads the envelope, versioned independently of the tool: an
+additive field bumps the minor, a removal or a changed field meaning bumps the
+major. Every existing key is kept — this landed additive, so no current consumer
+broke. Each violation gains two fields:
+
+- `kind` — the mechanism it was measured by (D-0020), derived from the rule's
+  declarative detector or, for a phrase-detected markdown rule, from its prose.
+  Never blank: a field a consumer cannot rely on is a field they will ignore.
+- `fingerprint` — the *same* content hash `baseline.fingerprint` computes, so a
+  consumer joins a result to the project's accepted debt instead of re-deriving
+  the hash and drifting from it.
+
+SARIF keeps its own `2.1.0`: that version belongs to the SARIF specification, not
+to us, and conflating the two would make our contract unversionable.
+
+The report deliberately carries **no** `rule_id`. A rule is identified by its
+statement text throughout the engine — `InstructionFile` maps rule text to
+severity, detector and fix — and markdown-sourced rules have no id at all.
+Emitting an empty `rule_id` on most findings would be a field that looks pinnable
+and is not. Should stable ids become real, they arrive as an additive minor bump.
+
+**Fatal hypothesis.** A consumer can be fully served by a stable JSON shape
+without ever reaching into the engine.
+
+**Kill-test.** If Standards Hub's first integration needs a field this contract
+does not carry, the contract was designed from the producer's side rather than
+the consumer's query, and it is re-derived from that query in one dated revision.
+Checked at Hub integration.
+
+**Validation gate.** Standards Hub reads a report end-to-end using only
+documented fields, with no access to this repository's modules.
+
+**Consequences.** The Hub never gates local or CI execution: a report is a file on
+disk, produced offline, and a Hub outage cannot stop a commit or a pipeline. The
+contract is now a public surface — changing a field's meaning is a major bump,
+not a refactor.
+
+*Rejected*: (a) version the payload with the tool's own release tag — a patch
+release with no payload change would signal a contract change, and a payload
+change inside a patch would signal none; (b) publish a JSON Schema file and skip
+the inline version — a consumer that fetches a schema out of band cannot tell
+which version *this* file was produced against.

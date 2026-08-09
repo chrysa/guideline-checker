@@ -16,10 +16,9 @@ Wire in .claude/settings.json:
 The hook reads the prompt on stdin (Claude Code passes the user prompt) and writes
 context to stdout, which Claude Code injects before the turn.
 """
-import sys
-import re
-import json
 import argparse
+import re
+import sys
 
 # --- fast triage: is this prompt worth optimizing at all? ---
 
@@ -45,7 +44,7 @@ def triage(prompt: str) -> str:
     if FORCE_BLOCK.search(p):
         return "BLOCKING"
     # count structure cues as a proxy for slots already filled
-    cues = len(set(m.group(0).lower() for m in STRUCTURE_CUES.finditer(p)))
+    cues = len({m.group(0).lower() for m in STRUCTURE_CUES.finditer(p)})
     if cues >= 3 or len(p) < 15:
         return "SILENT"
     # long / high-stakes prompts get the blocking treatment

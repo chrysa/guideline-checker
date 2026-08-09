@@ -115,6 +115,18 @@ docker-test: ## Run tests inside Docker container
 	@# meaning what it says.
 	@docker compose run --rm -T --build test
 
+docker-audit: ## Audit dependencies for known vulnerabilities inside Docker
+	@# The gate's VulnDeps check ran pip-audit on the *host*, which CI does not
+	@# install: every alternative was inapplicable and the gate reported
+	@# command_failed. Tests and Coverage already answer through the container;
+	@# this makes VulnDeps self-sufficient the same way, so the gate no longer
+	@# depends on what happens to be on the runner.
+	@# --cache-dir is not optional: the container runs as the host UID with no
+	@# writable HOME, so pip-audit's default ~/.cache lands on /.cache and is
+	@# denied. /tmp is inside the container and outside the bind mount, which is
+	@# where the standard says tool caches belong.
+	@docker compose run --rm -T test pip-audit --cache-dir /tmp/pip-audit-cache
+
 docker-lint: ## Run lint + type-check inside Docker container
 	@docker compose run --rm -T lint
 

@@ -1,4 +1,9 @@
-"""JSON report generator for guideline-checker results (CI artifact)."""
+"""JSON report generator for guideline-checker results (CI artifact).
+
+The payload is a **contract** (ADR D-0022): a consumer — Standards Hub above all —
+pins ``schema_version`` and reads documented fields, instead of pinning the tool's
+git tag and coupling itself to every unrelated release.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +11,44 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from guideline_checker.checker import RuleResult
+from guideline_checker.baseline import fingerprint
+from guideline_checker.checker import RuleResult, Violation
+from guideline_checker.kinds import kind_of_detector, kind_of_phrase
+from guideline_checker.loader import InstructionFile
+
+# The result contract's own version, independent of the tool's release version.
+# Bump the minor for an additive field, the major for a removal or a changed
+# meaning. SARIF keeps its own "2.1.0" — that version belongs to the SARIF spec.
+SCHEMA_VERSION = "1.0"
+
+
+def _kind_of(instruction: InstructionFile, rule: str) -> str:
+    """The mechanism this rule was measured by (ADR D-0020).
+
+    A YAML rule is classified from its declarative detector; a markdown rule the
+    checker recognised by prose is classified from that prose. Every rule reports
+    exactly one kind, because a blank would make the field unusable to a consumer.
+    """
+    detector = instruction.rule_detectors.get(rule)
+    return (kind_of_detector(detector) or kind_of_phrase(rule)).value
+
+
+def _violation_entry(violation: Violation, instruction: InstructionFile, root: Path) -> dict[str, object]:
+    """One violation, with the evidence a consumer needs to act on it.
+
+    ``fingerprint`` is the same content hash the baseline uses, so a consumer can
+    join a result to the project's accepted debt without re-deriving it — the
+    difference between "a finding" and "a finding this project already accepts".
+    """
+    return {
+        "severity": violation.severity,
+        "file": str(violation.file.relative_to(root)) if violation.file.is_relative_to(root) else str(violation.file),
+        "line": violation.line_number,
+        "content": violation.line_content,
+        "rule": violation.rule,
+        "kind": _kind_of(instruction, violation.rule),
+        "fingerprint": fingerprint(violation, root),
+    }
 
 
 class JsonReporter:
@@ -20,21 +62,13 @@ class JsonReporter:
                 "description": result.instruction.description,
                 "apply_to": result.instruction.apply_to,
                 "files_checked": result.files_checked,
-                "violations": [
-                    {
-                        "severity": v.severity,
-                        "file": str(v.file.relative_to(root)) if v.file.is_relative_to(root) else str(v.file),
-                        "line": v.line_number,
-                        "content": v.line_content,
-                        "rule": v.rule,
-                    }
-                    for v in result.violations
-                ],
+                "violations": [_violation_entry(v, result.instruction, root) for v in result.violations],
             }
             for result in results
         ]
 
         report: dict[str, object] = {
+            "schema_version": SCHEMA_VERSION,
             "generated_at": datetime.now(tz=UTC).isoformat(),
             "project_root": str(root),
             "summary": {

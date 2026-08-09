@@ -16,6 +16,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,17 @@ from typing import Any
 _EXIT_NOT_FOUND = 127
 # No alternative applied: every one was guarded by a manifest this repo lacks.
 _EXIT_NOT_APPLICABLE = 126
+
+# Operator -> comparison, as a table. Both the unicode and ASCII spellings of each
+# ordering are accepted because baselines exist carrying either. An operator absent
+# from this table compares False: an unrecognised gate must never pass by default.
+_COMPARISONS: dict[str, Callable[[Any, Any], bool]] = {
+    "=": lambda current, target: bool(current == target),
+    "≥": lambda current, target: bool(current >= target),
+    ">=": lambda current, target: bool(current >= target),
+    "≤": lambda current, target: bool(current <= target),
+    "<=": lambda current, target: bool(current <= target),
+}
 
 
 @dataclass(frozen=True)
@@ -89,6 +101,44 @@ class CommandSpec:
         return f"{rendered} || true" if self.swallow_exit else rendered
 
 
+# One row per gate: display name, config key, metric name, comparison operator,
+# and the command to run when the config overrides nothing. Module-level data
+# rather than construction, so the defaults are inspectable — and testable —
+# without a .quality-gate.json on disk.
+GateSpec = tuple[str, str, str, str, "CommandSpec"]
+
+DEFAULT_GATES: list[GateSpec] = [
+    ("Tests", "tests", "passed_tests", "≥", CommandSpec((("make", "test"),))),
+    ("Coverage", "coverage", "coverage_percentage", "≥", CommandSpec((("make", "test-cov"),))),
+    ("Lint", "lint", "warning_count", "=", CommandSpec((("make", "lint"),))),
+    ("Types", "types", "error_count", "≤", CommandSpec((("make", "typecheck"),))),
+    ("Build", "build", "build_status", "=", CommandSpec((("make", "build"),))),
+    (
+        "Secrets",
+        "security_secrets",
+        "secret_count",
+        "=",
+        # NOT --all-files: that scans the working *directory*, and Tests and
+        # Coverage run before this gate in the same job, writing coverage.xml and
+        # report files into it. The metric then measures partly the run instead of
+        # the code — it reported 111 against a baseline of 110 for a commit whose
+        # tracked tree measured 110 exactly. Without the flag detect-secrets scans
+        # what git tracks, which is what the baseline describes.
+        CommandSpec((("detect-secrets", "scan"),), swallow_exit=True),
+    ),
+    (
+        "VulnDeps",
+        "security_vulns",
+        "vuln_count",
+        "≤",
+        CommandSpec(
+            (("pip-audit",), ("npm", "audit", "--audit-level=high")),
+            swallow_exit=True,
+        ),
+    ),
+]
+
+
 class QualityGate:
     CONFIG_FILE = ".quality-gate.json"
     BASELINE_FILE = ".quality-gate-baseline.json"
@@ -106,30 +156,29 @@ class QualityGate:
         with open(self.config_path, encoding="utf-8") as handle:
             self.config = json.load(handle)
 
-        self.gates: list[tuple[str, str, str, str, CommandSpec]] = [
-            ("Tests", "tests", "passed_tests", "≥", CommandSpec((("make", "test"),))),
-            ("Coverage", "coverage", "coverage_percentage", "≥", CommandSpec((("make", "test-cov"),))),
-            ("Lint", "lint", "warning_count", "=", CommandSpec((("make", "lint"),))),
-            ("Types", "types", "error_count", "≤", CommandSpec((("make", "typecheck"),))),
-            ("Build", "build", "build_status", "=", CommandSpec((("make", "build"),))),
-            (
-                "Secrets",
-                "security_secrets",
-                "secret_count",
-                "=",
-                CommandSpec((("detect-secrets", "scan", "--all-files"),), swallow_exit=True),
-            ),
-            (
-                "VulnDeps",
-                "security_vulns",
-                "vuln_count",
-                "≤",
-                CommandSpec(
-                    (("pip-audit",), ("npm", "audit", "--audit-level=high")),
-                    swallow_exit=True,
-                ),
-            ),
-        ]
+        self.gates: list[GateSpec] = list(DEFAULT_GATES)
+
+    def _execute(self, executable: str, argv: list[str]) -> tuple[int, str, bool]:
+        """Run one resolved alternative: ``(exit code, output, aborted)``.
+
+        ``aborted`` is True when the command could not be run to completion — a
+        timeout or an OS-level failure. Those end the whole spec rather than
+        falling through to the next alternative, because a metric parsed from a
+        run that never finished is exactly the green this gate exists to refuse.
+        """
+        try:
+            result = subprocess.run(
+                [executable, *argv[1:]],
+                capture_output=True,
+                text=True,
+                timeout=600,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return 124, "Command timed out after 600 seconds", True
+        except OSError as exc:
+            return _EXIT_NOT_FOUND, f"Execution error: {exc}", True
+        return result.returncode, (result.stdout or "") + (result.stderr or ""), False
 
     def _run(self, spec: CommandSpec) -> tuple[int, str]:
         combined = ""
@@ -149,22 +198,14 @@ class QualityGate:
             executable = shutil.which(argv[0])
             if executable is None:
                 combined += f"Command not found: {argv[0]}\n"
-                returncode = 127
+                returncode = _EXIT_NOT_FOUND
                 continue
-            try:
-                result = subprocess.run(
-                    [executable, *argv[1:]],
-                    capture_output=True,
-                    text=True,
-                    timeout=600,
-                    check=False,
-                )
-            except subprocess.TimeoutExpired:
-                return 124, combined + "Command timed out after 600 seconds"
-            except OSError as exc:
-                return 127, combined + f"Execution error: {exc}"
-            combined += (result.stdout or "") + (result.stderr or "")
-            returncode = result.returncode
+            returncode, output, aborted = self._execute(executable, argv)
+            combined += output
+            if aborted:
+                # The command existed and failed to run at all. Trying the next
+                # alternative would report a metric no execution produced.
+                return returncode, combined
             ran_any = True
             if returncode == 0:
                 break
@@ -204,6 +245,12 @@ class QualityGate:
         ``test_synthesis_multiple_repos_totals PASSED [ 93%]`` reported 93% for a
         run that covered 88.88%. Anchor on the two shapes coverage really emits,
         and only then fall back to the loose scan.
+
+        When the current run's stdout carries no coverage at all, the honest
+        answer is ``-1.0`` (missing), never a number recovered from a
+        ``coverage.xml`` left on disk by an earlier run: that stale, possibly
+        passing figure would mask a real regression — exactly the green this
+        gate exists to refuse. A missing metric fails closed in :meth:`_compare`.
         """
         anchored = (
             r"total\s+coverage[:\s]+(\d+(?:\.\d+)?)%",  # pytest-cov's --cov-fail-under line
@@ -215,11 +262,10 @@ class QualityGate:
                 return float(match.group(1))
         for line in output.splitlines():
             if any(token in line.lower() for token in ["total", "coverage", "covered"]):
+                # The pattern captures digits only, so float() cannot raise here —
+                # the try/except this replaces was dead defensive code (PERF203).
                 for value in re.findall(r"(\d+(?:\.\d+)?)%", line):
-                    try:
-                        return float(value)
-                    except ValueError:
-                        continue
+                    return float(value)
         return -1.0
 
     def _parse_warning_count(self, output: str) -> int:
@@ -245,7 +291,16 @@ class QualityGate:
             return int(match.group(1))
         return 0
 
-    def _parse_vuln_count(self, output: str) -> int:
+    def _parse_vuln_count(self, output: str) -> int | None:
+        """Vulnerabilities found, or ``None`` when the output says nothing either way.
+
+        The previous final ``return 0`` made a *failed* audit indistinguishable
+        from a clean one: a run that crashed before auditing anything reported
+        zero vulnerabilities, and ``0 ≤ baseline`` passed. Since the gate swallows
+        the exit code for this tool — it exits non-zero merely for finding
+        something — the exit code could not tell them apart either. ``None`` means
+        "not measured", and :meth:`_compare` fails closed on it.
+        """
         match = re.search(r"found\s+(\d+)\s+vulnerabilit", output, re.IGNORECASE)
         if match:
             return int(match.group(1))
@@ -254,37 +309,33 @@ class QualityGate:
             return count
         if re.search(r"no\s+known\s+vulnerabilit", output, re.IGNORECASE):
             return 0
-        return 0
-
-    def _parse_metric(self, gate_name: str, exit_code: int, output: str) -> int | float | None:
-        if gate_name == "Tests":
-            return self._parse_passed_tests(output)
-        if gate_name == "Coverage":
-            return self._parse_coverage(output)
-        if gate_name == "Lint":
-            return self._parse_warning_count(output)
-        if gate_name == "Types":
-            return self._parse_error_count(output)
-        if gate_name == "Build":
-            return 0 if exit_code == 0 else 1
-        if gate_name == "Secrets":
-            return self._parse_secret_count(output)
-        if gate_name == "VulnDeps":
-            return self._parse_vuln_count(output)
         return None
 
+    def _parse_metric(self, gate_name: str, exit_code: int, output: str) -> int | float | None:
+        """Gate name -> its metric parser, as a table: a new gate is a row, not a branch."""
+        parsers: dict[str, Callable[[], int | float | None]] = {
+            "Tests": lambda: self._parse_passed_tests(output),
+            "Coverage": lambda: self._parse_coverage(output),
+            "Lint": lambda: self._parse_warning_count(output),
+            "Types": lambda: self._parse_error_count(output),
+            "Build": lambda: 0 if exit_code == 0 else 1,
+            "Secrets": lambda: self._parse_secret_count(output),
+            "VulnDeps": lambda: self._parse_vuln_count(output),
+        }
+        parse = parsers.get(gate_name)
+        return parse() if parse is not None else None
+
     def _compare(self, current: int | float | None, target: int | float | None, operator: str) -> bool:
-        if operator == "=":
-            return current == target
-        if operator == "≥":
-            return current >= target
-        if operator == "≤":
-            return current <= target
-        if operator == ">=":
-            return current >= target
-        if operator == "<=":
-            return current <= target
-        return False
+        """Apply a comparison operator, failing closed on anything it cannot judge.
+
+        ``None`` on either side means the metric was never measured. Comparing it
+        would either raise or, worse, pass — a ``≤`` gate reads an unmeasured
+        metric as satisfied. An unknown operator fails the same way.
+        """
+        if current is None or target is None:
+            return False
+        compare = _COMPARISONS.get(operator)
+        return compare(current, target) if compare is not None else False
 
     def _run_gate(self, gate_name: str, key: str, metric_name: str, default_spec: CommandSpec) -> dict[str, Any]:
         raw = self.config.get("commands", {}).get(key)
