@@ -208,50 +208,51 @@
 </style>
 </head>
 <body>
-<a class="skip" href="#rules-title">Skip to results</a>
+<a class="skip" href="#rules-title" data-i18n="skip">Skip to results</a>
 <div class="wrap">
   <header class="topbar">
-    <h1 class="brand"><span class="dot" aria-hidden="true"></span>guideline-checker <span class="sub">· workshop</span></h1>
-    <div class="actions" role="group" aria-label="Scan controls">
-      <label class="sr-only" for="project">Project to scan</label>
-      <select class="select" id="project" title="Project to scan"></select>
-      <button class="btn" id="browse" type="button" title="Browse for any folder to scan">Browse…</button>
-      <button class="btn icon" id="theme" type="button" aria-label="Toggle light or dark theme"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 0 0 13z" fill="currentColor"/></svg></button>
-      <button class="btn primary" id="scan" type="button">Scan</button>
+    <h1 class="brand"><span class="dot" aria-hidden="true"></span>guideline-checker <span class="sub" data-i18n="brand_sub">· workshop</span></h1>
+    <div class="actions" role="group" aria-label="Scan controls" data-i18n-attr="aria-label:aria_scan_controls">
+      <label class="sr-only" for="project" data-i18n="project_label">Project to scan</label>
+      <select class="select" id="project" title="Project to scan" data-i18n-attr="title:project_label"></select>
+      <button class="btn" id="browse" type="button" title="Browse for any folder to scan" data-i18n="browse" data-i18n-attr="title:browse_title">Browse…</button>
+      <button class="btn icon" id="theme" type="button" aria-label="Toggle light or dark theme" data-i18n-attr="aria-label:theme_toggle"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 0 0 13z" fill="currentColor"/></svg></button>
+      <button class="btn icon" id="lang" type="button" aria-label="Switch language" data-i18n-attr="aria-label:lang_toggle"></button>
+      <button class="btn primary" id="scan" type="button" data-i18n="scan">Scan</button>
     </div>
   </header>
 
   <section class="summary" aria-labelledby="summary-h">
-    <h2 id="summary-h" class="sr-only">Compliance and rule health</h2>
+    <h2 id="summary-h" class="sr-only" data-i18n="summary_h">Compliance and rule health</h2>
     <div class="grade-hero" id="grade-hero" title="Compliance grade for the current view" aria-live="polite"></div>
-    <div class="tiles" id="tiles" role="group" aria-label="Rule health states — activate to filter"></div>
+    <div class="tiles" id="tiles" role="group" aria-label="Rule health states — activate to filter" data-i18n-attr="aria-label:tiles_aria"></div>
   </section>
-  <div class="bar" id="bar" role="img" aria-label="Rule health distribution"></div>
-  <p class="stamp" id="stamp" aria-live="polite">Not scanned yet.</p>
+  <div class="bar" id="bar" role="img" aria-label="Rule health distribution" data-i18n-attr="aria-label:bar_aria"></div>
+  <p class="stamp" id="stamp" aria-live="polite" data-i18n="not_scanned">Not scanned yet.</p>
 
   <main class="layout">
     <section aria-labelledby="rules-title">
-      <h2 id="rules-title">Rules</h2>
+      <h2 id="rules-title" data-i18n="rules">Rules</h2>
       <div class="toolbar" id="toolbar" hidden role="search">
-        <label class="sr-only" for="q">Filter rows</label>
+        <label class="sr-only" for="q" data-i18n="filter_rows">Filter rows</label>
         <input type="text" id="q" placeholder="filter…" autocomplete="off">
-        <label class="sr-only" for="sort">Sort rows</label>
-        <select class="select" id="sort" title="Sort rows"></select>
+        <label class="sr-only" for="sort" data-i18n="sort_rows">Sort rows</label>
+        <select class="select" id="sort" title="Sort rows" data-i18n-attr="title:sort_rows"></select>
       </div>
       <div class="rules" id="rules" aria-live="polite" aria-busy="false">
-        <div class="state">Scan the repository to load rule health.</div>
+        <div class="state" data-i18n="rules_hint_load">Scan the repository to load rule health.</div>
       </div>
     </section>
 
     <section aria-labelledby="workshop-title">
-      <h2 id="workshop-title">Workshop — propose &amp; prove</h2>
+      <h2 id="workshop-title" data-i18n="workshop_title">Workshop — propose &amp; prove</h2>
       <div class="panel">
         <div class="field">
-          <label for="rule">Rule text</label>
-          <textarea id="rule" rows="3" placeholder="e.g. Never unpickle untrusted data"></textarea>
+          <label for="rule" data-i18n="rule_text">Rule text</label>
+          <textarea id="rule" rows="3" placeholder="e.g. Never unpickle untrusted data" data-i18n-attr="placeholder:rule_ph"></textarea>
         </div>
-        <button class="btn primary" id="propose" type="button" style="width:100%">Propose &amp; replay</button>
-        <button class="btn" id="interpret" type="button" style="width:100%;margin-top:.5rem" title="Derive detectors for this project's advisory prose (LLM, bounded)">Interpret advisory prose →</button>
+        <button class="btn primary" id="propose" type="button" style="width:100%" data-i18n="propose">Propose &amp; replay</button>
+        <button class="btn" id="interpret" type="button" style="width:100%;margin-top:.5rem" title="Derive detectors for this project's advisory prose (LLM, bounded)" data-i18n="interpret" data-i18n-attr="title:interpret_title">Interpret advisory prose →</button>
         <div id="result" aria-live="polite"></div>
       </div>
     </section>
@@ -259,14 +260,14 @@
 </div>
 <dialog class="browser" id="browser" aria-labelledby="browser-title">
   <form method="dialog" class="browser-head">
-    <h2 id="browser-title">Choose a folder to scan</h2>
-    <button class="btn icon" value="cancel" aria-label="Close folder browser">✕</button>
+    <h2 id="browser-title" data-i18n="browser_title">Choose a folder to scan</h2>
+    <button class="btn icon" value="cancel" aria-label="Close folder browser" data-i18n-attr="aria-label:browser_close">✕</button>
   </form>
   <p class="browser-cwd" id="browser-cwd" aria-live="polite"></p>
-  <div class="browser-list" id="browser-list" role="listbox" aria-label="Sub-folders" aria-busy="false"></div>
+  <div class="browser-list" id="browser-list" role="listbox" aria-label="Sub-folders" aria-busy="false" data-i18n-attr="aria-label:browser_subfolders"></div>
   <div class="browser-foot">
     <span class="browser-hint" id="browser-hint"></span>
-    <button class="btn primary" id="browser-scan" type="button">Scan this folder</button>
+    <button class="btn primary" id="browser-scan" type="button" data-i18n="browser_scan">Scan this folder</button>
   </div>
 </dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -283,17 +284,17 @@ let allProjects = [];        // cached fleet payload for client-side sort/filter
 const STATE_RANK = { dead: 0, suspect: 1, armed: 2, proven: 3, advisory: 4 };
 const SORTS = {
   single: {
-    worst: { label: "health (worst first)", cmp: (a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || a.rule.localeCompare(b.rule) },
-    fires: { label: "fires (most first)", cmp: (a, b) => (b.fire_count || 0) - (a.fire_count || 0) },
-    name: { label: "rule (A–Z)", cmp: (a, b) => a.rule.localeCompare(b.rule) },
-    source: { label: "source (A–Z)", cmp: (a, b) => a.instruction.localeCompare(b.instruction) || a.rule.localeCompare(b.rule) },
+    worst: { label: "sort_worst", cmp: (a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || a.rule.localeCompare(b.rule) },
+    fires: { label: "sort_fires", cmp: (a, b) => (b.fire_count || 0) - (a.fire_count || 0) },
+    name: { label: "sort_name", cmp: (a, b) => a.rule.localeCompare(b.rule) },
+    source: { label: "sort_source", cmp: (a, b) => a.instruction.localeCompare(b.instruction) || a.rule.localeCompare(b.rule) },
   },
   all: {
-    worst: { label: "grade (worst first)", cmp: (a, b) => pScore(a) - pScore(b) || pName(a).localeCompare(pName(b)) },
-    best: { label: "grade (best first)", cmp: (a, b) => pScore(b) - pScore(a) || pName(a).localeCompare(pName(b)) },
-    name: { label: "name (A–Z)", cmp: (a, b) => pName(a).localeCompare(pName(b)) },
-    dead: { label: "dead rules (most)", cmp: (a, b) => ((b.summary || {}).dead || 0) - ((a.summary || {}).dead || 0) },
-    proven: { label: "proven rules (most)", cmp: (a, b) => ((b.summary || {}).proven || 0) - ((a.summary || {}).proven || 0) },
+    worst: { label: "sort_grade_worst", cmp: (a, b) => pScore(a) - pScore(b) || pName(a).localeCompare(pName(b)) },
+    best: { label: "sort_grade_best", cmp: (a, b) => pScore(b) - pScore(a) || pName(a).localeCompare(pName(b)) },
+    name: { label: "sort_pname", cmp: (a, b) => pName(a).localeCompare(pName(b)) },
+    dead: { label: "sort_dead", cmp: (a, b) => ((b.summary || {}).dead || 0) - ((a.summary || {}).dead || 0) },
+    proven: { label: "sort_proven", cmp: (a, b) => ((b.summary || {}).proven || 0) - ((a.summary || {}).proven || 0) },
   },
 };
 let sortKey = { single: "worst", all: "worst" };
@@ -304,10 +305,161 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const fmtTime = (t) => (t ? t.slice(0, 19).replace("T", " ") : "");
 
+// ── i18n: FR + EN from V1 (chrysa standard) ──────────────────────────────────
+// A flat key → string catalogue with {placeholder} interpolation. The default is
+// the browser language (FR if it starts with "fr", else EN); a user override
+// persists in localStorage and survives reload, syncing <html lang> and across
+// tabs like the theme. Domain state words (dead/armed/proven/advisory) are the
+// product's own vocabulary and stay untranslated, as do source file names.
+const I18N = {
+  en: {
+    skip: "Skip to results", brand_sub: "· workshop", aria_scan_controls: "Scan controls",
+    project_label: "Project to scan", browse: "Browse…", browse_title: "Browse for any folder to scan",
+    theme_toggle: "Toggle light or dark theme", lang_toggle: "Switch language (English / français)",
+    scan: "Scan", scanning: "Scanning…", scanning_fleet: "Scanning fleet…",
+    summary_h: "Compliance and rule health", grade_hero_title: "Compliance grade for the current view",
+    tiles_aria: "Rule health states — activate to filter", bar_aria: "Rule health distribution",
+    not_scanned: "Not scanned yet.", rules: "Rules", filter_rows: "Filter rows", sort_rows: "Sort rows",
+    rules_hint_load: "Scan the repository to load rule health.",
+    workshop_title: "Workshop — propose & prove", rule_text: "Rule text",
+    rule_ph: "e.g. Never unpickle untrusted data", propose: "Propose & replay",
+    interpret: "Interpret advisory prose →",
+    interpret_title: "Derive detectors for this project's advisory prose (LLM, bounded)",
+    browser_title: "Choose a folder to scan", browser_close: "Close folder browser",
+    browser_subfolders: "Sub-folders", browser_scan: "Scan this folder",
+    browser_scannable: "✓ carries rule sources", browser_not_scannable: "no rule sources here — scan finds nothing",
+    browser_empty: "No sub-folders here.",
+    scanning_project: "Scanning the project…", scanning_folder: "Scanning the folder…",
+    scanning_every: "Scanning every project… (first run is slow)",
+    fleet_timeout: "The fleet scan did not finish in time.", could_not_load: "Could not load the scan.",
+    press_scan_retry: "Press {scan} to retry.", no_rules_found: "No rules found for this project.",
+    no_rules_hint: "The engine derives rules from CLAUDE.md, AGENTS.md, .github/instructions and guidelines/.",
+    no_rules_match: "No rules match this filter.", no_projects_match: "No projects match this filter.",
+    scanned: "Scanned", scanned_at: "Scanned {t}", resolvable_suffix: "{stamp} · {n} resolvable",
+    fleet: "Fleet", fleet_scanned_at: "Fleet scanned {t}", compliance: "compliance",
+    all_projects: "◇ All projects ({n})", filter_projects_ph: "filter projects (name or grade)…",
+    filter_rules_ph: "filter rules…", resolve: "Resolve", resolve_title: "Derive, prove and arm a detector",
+    resolving: "Resolving…", resolvable_count: "resolvable", api_key_prompt: "API key required for this dashboard:",
+    enter_rule_first: "Enter a rule first", replaying: "Replaying…", deriving_proving: "Deriving & proving a detector…",
+    no_matches: "no matches", review_hits: "Review the hits for false positives before arming.",
+    error_grade: "error", na: "n/a",
+    row_load_hint: "click to load into the workshop", open_project: "Open {name}, grade {grade}",
+    no_proposal: "No proposal.", markdown_sourced: "Markdown-sourced rule",
+    not_detectable: "the rule is not mechanically detectable",
+    interpreting: "Interpreting…", interpret_reading: "Reading advisory prose and deriving detectors (LLM, bounded)…",
+    no_derived: "No detectors could be derived from the advisory prose (it is semantic, or no LLM backend is available).",
+    persist_cache: "Persist to cache (guidelines/derived) →", nothing_to_persist: "Nothing to persist",
+    arming: "Arming…", arm_this_rule: "Arm this rule", armed_ok: "Armed ✓", re_propose: "↻ Re-propose",
+    re_propose_try: "↻ Re-propose (try another detector)", previewing: "Previewing…",
+    resolving_head: "Resolving “{rule}”", derive_step: "① Deriving a detector (free heuristic → LLM if needed)…",
+    no_detector: "✗ No detector could be derived — {reason}.",
+    proposed_by: "① Proposed by <b>{source}</b>: {patterns}", proven_head: "② Proven in sandbox → <b>{n}</b> hit(s) across {files} files",
+    step_proved_only: "③ {note} — proposed & proven only, nothing to persist.",
+    step_ready_arm: "③ Ready to arm → writes the detector into <b>{file}</b>.",
+    step_armed: "✓ Armed — detector written into <b>{file}</b>. Rescanning…",
+    interpreted_head: "Interpreted <b>{n}</b> advisory rule(s) into proven detectors",
+    derived_note: "Derived from host prose (ADR D-0016). Persist them as the per-repo cache CI applies cold.",
+    cached_ok: "Cached {n} rule(s) ✓", wrote_rules: "Wrote {n} rule(s) to {file}",
+    confirm_persist: "Write {n} derived rule(s) into\n{file}?\n\nThis is a regenerable per-repo cache — re-running interpret replaces it.",
+    proposed_tag: "Proposed by", hits_across: "→ <b>{n}</b> hit(s) across {files} files",
+    sort_worst: "health (worst first)", sort_fires: "fires (most first)", sort_name: "rule (A–Z)",
+    sort_source: "source (A–Z)", sort_grade_worst: "grade (worst first)", sort_grade_best: "grade (best first)",
+    sort_pname: "name (A–Z)", sort_dead: "dead rules (most)", sort_proven: "proven rules (most)",
+  },
+  fr: {
+    skip: "Aller aux résultats", brand_sub: "· atelier", aria_scan_controls: "Contrôles de scan",
+    project_label: "Projet à scanner", browse: "Parcourir…", browse_title: "Parcourir un dossier à scanner",
+    theme_toggle: "Basculer le thème clair ou sombre", lang_toggle: "Changer de langue (English / français)",
+    scan: "Scanner", scanning: "Scan en cours…", scanning_fleet: "Scan de la flotte…",
+    summary_h: "Conformité et santé des règles", grade_hero_title: "Note de conformité de la vue courante",
+    tiles_aria: "États de santé des règles — activer pour filtrer", bar_aria: "Répartition de la santé des règles",
+    not_scanned: "Pas encore scanné.", rules: "Règles", filter_rows: "Filtrer les lignes", sort_rows: "Trier les lignes",
+    rules_hint_load: "Scannez le dépôt pour charger la santé des règles.",
+    workshop_title: "Atelier — proposer & prouver", rule_text: "Texte de la règle",
+    rule_ph: "ex. Ne jamais désérialiser de données non fiables", propose: "Proposer & rejouer",
+    interpret: "Interpréter la prose indicative →",
+    interpret_title: "Dériver des détecteurs pour la prose indicative du projet (LLM, borné)",
+    browser_title: "Choisir un dossier à scanner", browser_close: "Fermer le navigateur de dossiers",
+    browser_subfolders: "Sous-dossiers", browser_scan: "Scanner ce dossier",
+    browser_scannable: "✓ contient des sources de règles", browser_not_scannable: "aucune source de règles ici — le scan ne trouvera rien",
+    browser_empty: "Aucun sous-dossier ici.",
+    scanning_project: "Scan du projet…", scanning_folder: "Scan du dossier…",
+    scanning_every: "Scan de tous les projets… (le premier est lent)",
+    fleet_timeout: "Le scan de la flotte n'a pas fini à temps.", could_not_load: "Impossible de charger le scan.",
+    press_scan_retry: "Appuyez sur {scan} pour réessayer.", no_rules_found: "Aucune règle trouvée pour ce projet.",
+    no_rules_hint: "Le moteur dérive les règles de CLAUDE.md, AGENTS.md, .github/instructions et guidelines/.",
+    no_rules_match: "Aucune règle ne correspond à ce filtre.", no_projects_match: "Aucun projet ne correspond à ce filtre.",
+    scanned: "Scanné", scanned_at: "Scanné {t}", resolvable_suffix: "{stamp} · {n} résolvable(s)",
+    fleet: "Flotte", fleet_scanned_at: "Flotte scannée {t}", compliance: "conformité",
+    all_projects: "◇ Tous les projets ({n})", filter_projects_ph: "filtrer les projets (nom ou note)…",
+    filter_rules_ph: "filtrer les règles…", resolve: "Résoudre", resolve_title: "Dériver, prouver et armer un détecteur",
+    resolving: "Résolution…", resolvable_count: "résolvable(s)", api_key_prompt: "Clé API requise pour ce tableau de bord :",
+    enter_rule_first: "Entrez d'abord une règle", replaying: "Rejeu…", deriving_proving: "Dérivation & preuve d'un détecteur…",
+    no_matches: "aucune correspondance", review_hits: "Vérifiez les correspondances (faux positifs) avant d'armer.",
+    error_grade: "erreur", na: "n/a",
+    row_load_hint: "cliquer pour charger dans l'atelier", open_project: "Ouvrir {name}, note {grade}",
+    no_proposal: "Aucune proposition.", markdown_sourced: "Règle issue du markdown",
+    not_detectable: "la règle n'est pas détectable mécaniquement",
+    interpreting: "Interprétation…", interpret_reading: "Lecture de la prose indicative et dérivation de détecteurs (LLM, borné)…",
+    no_derived: "Aucun détecteur n'a pu être dérivé de la prose indicative (elle est sémantique, ou aucun backend LLM n'est disponible).",
+    persist_cache: "Persister au cache (guidelines/derived) →", nothing_to_persist: "Rien à persister",
+    arming: "Armement…", arm_this_rule: "Armer cette règle", armed_ok: "Armée ✓", re_propose: "↻ Re-proposer",
+    re_propose_try: "↻ Re-proposer (essayer un autre détecteur)", previewing: "Aperçu…",
+    resolving_head: "Résolution de « {rule} »", derive_step: "① Dérivation d'un détecteur (heuristique gratuite → LLM si besoin)…",
+    no_detector: "✗ Aucun détecteur n'a pu être dérivé — {reason}.",
+    proposed_by: "① Proposé par <b>{source}</b> : {patterns}", proven_head: "② Prouvé en sandbox → <b>{n}</b> correspondance(s) sur {files} fichiers",
+    step_proved_only: "③ {note} — proposé & prouvé seulement, rien à persister.",
+    step_ready_arm: "③ Prêt à armer → écrit le détecteur dans <b>{file}</b>.",
+    step_armed: "✓ Armée — détecteur écrit dans <b>{file}</b>. Re-scan…",
+    interpreted_head: "Interprété <b>{n}</b> règle(s) indicative(s) en détecteurs prouvés",
+    derived_note: "Dérivé de la prose hôte (ADR D-0016). Persistez-les comme cache par-repo appliqué à froid par la CI.",
+    cached_ok: "{n} règle(s) en cache ✓", wrote_rules: "{n} règle(s) écrite(s) dans {file}",
+    confirm_persist: "Écrire {n} règle(s) dérivée(s) dans\n{file} ?\n\nC'est un cache par-repo régénérable — relancer interpret le remplace.",
+    proposed_tag: "Proposé par", hits_across: "→ <b>{n}</b> correspondance(s) sur {files} fichiers",
+    sort_worst: "santé (pire d'abord)", sort_fires: "déclenchements (plus d'abord)", sort_name: "règle (A–Z)",
+    sort_source: "source (A–Z)", sort_grade_worst: "note (pire d'abord)", sort_grade_best: "note (meilleure d'abord)",
+    sort_pname: "nom (A–Z)", sort_dead: "règles mortes (plus)", sort_proven: "règles prouvées (plus)",
+  },
+};
+const LANG_KEY = "gc:lang";
+
+function preferredLang() {
+  const saved = localStorage.getItem(LANG_KEY);
+  if (saved === "fr" || saved === "en") return saved;  // a stale value is discarded
+  return (navigator.language || "en").toLowerCase().startsWith("fr") ? "fr" : "en";
+}
+let LANG = preferredLang();
+
+function t(key, vars) {
+  let s = (I18N[LANG] && I18N[LANG][key]) ?? I18N.en[key] ?? key;
+  if (vars) for (const k in vars) s = s.replaceAll("{" + k + "}", vars[k]);
+  return s;
+}
+
+function applyStaticI18n() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-attr]").forEach((el) => {
+    el.dataset.i18nAttr.split(";").forEach((pair) => {
+      const [attr, key] = pair.split(":");
+      if (attr && key) el.setAttribute(attr.trim(), t(key.trim()));
+    });
+  });
+  $("grade-hero").setAttribute("title", t("grade_hero_title"));
+  $("lang").textContent = LANG.toUpperCase();
+}
+
+function applyLang(lang) {
+  LANG = lang;
+  applyStaticI18n();
+  if (!$("toolbar").hidden) showToolbar(viewMode);  // re-render sort labels + placeholder
+  viewMode === "all" ? renderAllRows() : renderRules();
+}
+
 // ── Reusable view states (loading / empty / error) ──────────────────────────
 function showLoading(msg) { const el = $("rules"); el.setAttribute("aria-busy", "true"); el.innerHTML = `<div class="state"><span class="spinner" aria-hidden="true"></span>${esc(msg)}</div>`; }
 function showEmpty(msg, hint) { $("rules").setAttribute("aria-busy", "false"); $("rules").innerHTML = `<div class="state">${esc(msg)}${hint ? `<div class="hint">${esc(hint)}</div>` : ""}</div>`; }
-function showRowsError(msg) { $("rules").setAttribute("aria-busy", "false"); $("rules").innerHTML = `<div class="state error">⚠ ${esc(msg)}<div class="hint">Press <b>Scan</b> to retry.</div></div>`; }
+function showRowsError(msg) { $("rules").setAttribute("aria-busy", "false"); $("rules").innerHTML = `<div class="state error">⚠ ${esc(msg)}<div class="hint">${esc(t("press_scan_retry", { scan: t("scan") }))}</div></div>`; }
 
 function authHeaders(extra) {
   const headers = Object.assign({}, extra || {});
@@ -319,7 +471,7 @@ async function api(path, opts) {
   opts = opts || {};
   let res = await fetch(path, Object.assign({}, opts, { headers: authHeaders(opts.headers) }));
   if (res.status === 401) {
-    const key = prompt("API key required for this dashboard:");
+    const key = prompt(t("api_key_prompt"));
     if (key) {
       sessionStorage.setItem("gc-api-key", key);
       res = await fetch(path, Object.assign({}, opts, { headers: authHeaders(opts.headers) }));
@@ -364,13 +516,22 @@ matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
   if (!localStorage.getItem(THEME_KEY)) applyTheme(preferredTheme());  // no override = follow the OS
 });
 
+// ── Language: browser default, user override, persisted, synced across tabs ───
+applyStaticI18n();  // paint the static UI in the resolved language before first render
+$("lang").addEventListener("click", () => {
+  const next = LANG === "fr" ? "en" : "fr";
+  localStorage.setItem(LANG_KEY, next);
+  applyLang(next);
+});
+addEventListener("storage", (e) => { if (e.key === LANG_KEY) applyLang(preferredLang()); });
+
 // ── Toolbar (filter + sort) ─────────────────────────────────────────────────
 function showToolbar(mode) {
   if (mode !== viewMode) $("q").value = "";  // a rule filter is meaningless in the project view
   viewMode = mode;
   const sel = $("sort");
-  sel.innerHTML = Object.entries(SORTS[mode]).map(([k, o]) => `<option value="${k}"${k === sortKey[mode] ? " selected" : ""}>↕ ${o.label}</option>`).join("");
-  $("q").placeholder = mode === "all" ? "filter projects (name or grade)…" : "filter rules…";
+  sel.innerHTML = Object.entries(SORTS[mode]).map(([k, o]) => `<option value="${k}"${k === sortKey[mode] ? " selected" : ""}>↕ ${esc(t(o.label))}</option>`).join("");
+  $("q").placeholder = mode === "all" ? t("filter_projects_ph") : t("filter_rules_ph");
   $("toolbar").hidden = false;
 }
 
@@ -397,14 +558,14 @@ async function applyRoute(force) {
     const name = decodeURIComponent(raw.slice(2));
     if ([...sel.options].some((o) => o.value === name)) { sel.value = name; return runScan(name); }
   }
-  return force ? runScan() : pollHealth(null).catch(() => showRowsError("Could not load the scan."));
+  return force ? runScan() : pollHealth(null).catch(() => showRowsError(t("could_not_load")));
 }
 
-async function runScan(project) { return _scan(project ? { project } : null, "Scanning the project…"); }
-async function runScanFolder(path) { return _scan({ path }, "Scanning the folder…"); }
+async function runScan(project) { return _scan(project ? { project } : null, t("scanning_project")); }
+async function runScanFolder(path) { return _scan({ path }, t("scanning_folder")); }
 
 async function _scan(payload, msg) {
-  $("scan").disabled = true; $("scan").textContent = "Scanning…";
+  $("scan").disabled = true; $("scan").textContent = t("scanning");
   showLoading(msg);
   try {
     const prev = (await api("/api/rules-health").catch(() => ({}))).timestamp || null;
@@ -412,7 +573,7 @@ async function _scan(payload, msg) {
     await api("/api/scan", Object.assign({ method: "POST" }, body));
     await pollHealth(prev);
   } catch (e) { showRowsError(e.message); toast(e.message, true); }
-  finally { $("scan").disabled = false; $("scan").textContent = "Scan"; }
+  finally { $("scan").disabled = false; $("scan").textContent = t("scan"); }
 }
 
 // ── Folder browser ────────────────────────────────────────────────────────────
@@ -427,12 +588,12 @@ async function loadBrowse(path) {
   browseCwd = d.cwd;
   $("browser-cwd").textContent = d.cwd;
   const hint = $("browser-hint");
-  hint.textContent = d.scannable ? "✓ carries rule sources" : "no rule sources here — scan finds nothing";
+  hint.textContent = d.scannable ? t("browser_scannable") : t("browser_not_scannable");
   hint.classList.toggle("ok", !!d.scannable);
   const rows = [];
   if (d.parent) rows.push(`<button class="entry up" type="button" data-path="${esc(d.parent)}"><span class="ico" aria-hidden="true">↰</span>..</button>`);
   for (const e of d.entries) rows.push(`<button class="entry" type="button" data-path="${esc(e.path)}"><span class="ico" aria-hidden="true">▸</span>${esc(e.name)}</button>`);
-  list.innerHTML = rows.length ? rows.join("") : `<div class="empty">No sub-folders here.</div>`;
+  list.innerHTML = rows.length ? rows.join("") : `<div class="empty">${esc(t("browser_empty"))}</div>`;
   list.setAttribute("aria-busy", "false");
   list.querySelectorAll(".entry").forEach((el) => el.addEventListener("click", () => loadBrowse(el.dataset.path)));
 }
@@ -449,8 +610,8 @@ async function runScanAll(force) {
     const cached = await api("/api/health-all").catch(() => ({}));
     if (!cached.running && cached.projects && cached.projects.length) { renderAll(cached); return; }
   }
-  $("scan").disabled = true; $("scan").textContent = "Scanning fleet…";
-  showLoading("Scanning every project… (first run is slow)");
+  $("scan").disabled = true; $("scan").textContent = t("scanning_fleet");
+  showLoading(t("scanning_every"));
   try {
     await api("/api/scan-all", { method: "POST" });
     for (let i = 0; i < 240; i++) {
@@ -458,9 +619,9 @@ async function runScanAll(force) {
       if (!d.running && d.projects && d.projects.length) { renderAll(d); return; }
       await new Promise((r) => setTimeout(r, 1000));
     }
-    showRowsError("The fleet scan did not finish in time.");
+    showRowsError(t("fleet_timeout"));
   } catch (e) { showRowsError(e.message); toast(e.message, true); }
-  finally { $("scan").disabled = false; $("scan").textContent = "Scan"; }
+  finally { $("scan").disabled = false; $("scan").textContent = t("scan"); }
 }
 
 // ── Compliance grade hero ────────────────────────────────────────────────────
@@ -468,8 +629,8 @@ function setGrade(c) {
   const el = $("grade-hero");
   if (!c || !c.grade || c.grade === "n/a") { el.className = "grade-hero"; el.innerHTML = ""; el.removeAttribute("title"); return; }
   el.className = `grade-hero show g${c.grade}`;
-  el.innerHTML = `<div class="g">${c.grade}</div>${c.score != null ? `<div class="score">${c.score}/100</div>` : ""}<div class="lbl">compliance</div>`;
-  el.title = `Compliance grade ${c.grade}${c.score != null ? ` (${c.score}/100)` : ""} — ${c.errors || 0} error(s), ${c.warnings || 0} warning(s)`;
+  el.innerHTML = `<div class="g">${c.grade}</div>${c.score != null ? `<div class="score">${c.score}/100</div>` : ""}<div class="lbl">${esc(t("compliance"))}</div>`;
+  el.title = `${t("compliance")} ${c.grade}${c.score != null ? ` (${c.score}/100)` : ""} — ${c.errors || 0} error(s), ${c.warnings || 0} warning(s)`;
 }
 
 // ── Health tiles + distribution bar ──────────────────────────────────────────
@@ -496,8 +657,8 @@ function syncTiles() {
 function render(d) {
   health = d.rules || [];
   setGrade(d.compliance);
-  const stamp = d.timestamp ? "Scanned " + fmtTime(d.timestamp) : "Scanned";
-  $("stamp").textContent = d.resolvable ? `${stamp} · ${d.resolvable} resolvable` : stamp;
+  const stamp = d.timestamp ? t("scanned_at", { t: fmtTime(d.timestamp) }) : t("scanned");
+  $("stamp").textContent = d.resolvable ? t("resolvable_suffix", { stamp, n: d.resolvable }) : stamp;
   renderTiles(d.summary || {}, true);
   showToolbar("single");
   renderRules();
@@ -509,15 +670,15 @@ function renderRules() {
   let rows = activeFilter ? health.filter((r) => r.state === activeFilter) : health.slice();
   if (term) rows = rows.filter((r) => r.rule.toLowerCase().includes(term) || r.instruction.toLowerCase().includes(term) || (r.provenance || "").toLowerCase().includes(term));
   rows.sort(SORTS.single[sortKey.single].cmp);
-  const label = activeFilter ? `Rules · ${activeFilter}` : "Rules";
+  const label = activeFilter ? `${t("rules")} · ${activeFilter}` : t("rules");
   $("rules-title").textContent = `${label} (${rows.length}${rows.length !== health.length ? "/" + health.length : ""})`;
-  if (!health.length) { showEmpty("No rules found for this project.", "The engine derives rules from CLAUDE.md, AGENTS.md, .github/instructions and guidelines/."); return; }
-  if (!rows.length) { showEmpty("No rules match this filter."); return; }
+  if (!health.length) { showEmpty(t("no_rules_found"), t("no_rules_hint")); return; }
+  if (!rows.length) { showEmpty(t("no_rules_match")); return; }
   $("rules").innerHTML = rows.slice(0, 300).map((r) =>
-    `<div class="row" data-rule="${esc(r.rule)}" role="button" tabindex="0" aria-label="${esc(r.state)}: ${esc(r.rule)} — click to load into the workshop">
+    `<div class="row" data-rule="${esc(r.rule)}" role="button" tabindex="0" aria-label="${esc(r.state)}: ${esc(r.rule)} — ${esc(t("row_load_hint"))}">
        <span class="chip ${r.state}">${r.state}</span>
        <div><div class="rule">${esc(r.rule)}</div><div class="src">${esc(r.instruction)}${r.kind && r.kind !== "advisory" ? ` · <span class="kind">${esc(r.kind)}</span>` : ""}${r.provenance ? ` · from “${esc(r.provenance)}”` : ""}</div></div>
-       ${r.resolvable ? `<button class="resolve" data-rule="${esc(r.rule)}" title="Derive, prove and arm a detector">Resolve</button>` : `<span class="fires">${r.fire_count ? "×" + r.fire_count : ""}</span>`}
+       ${r.resolvable ? `<button class="resolve" data-rule="${esc(r.rule)}" title="${esc(t("resolve_title"))}">${esc(t("resolve"))}</button>` : `<span class="fires">${r.fire_count ? "×" + r.fire_count : ""}</span>`}
      </div>`).join("");
   document.querySelectorAll("#rules .row").forEach((el) => {
     const open = () => { $("rule").value = el.dataset.rule; $("rule").focus(); };
@@ -532,7 +693,7 @@ function renderRules() {
 function renderAll(d) {
   allProjects = d.projects || [];
   setGrade(d.compliance);
-  $("stamp").textContent = d.timestamp ? "Fleet scanned " + fmtTime(d.timestamp) : "Fleet";
+  $("stamp").textContent = d.timestamp ? t("fleet_scanned_at", { t: fmtTime(d.timestamp) }) : t("fleet");
   renderTiles(d.combined || {}, false);
   showToolbar("all");
   renderAllRows();
@@ -545,14 +706,14 @@ function renderAllRows() {
   if (term) projects = projects.filter((p) => (p.name || "").toLowerCase().includes(term) || ((p.compliance || {}).grade || "").toLowerCase() === term);
   projects.sort(SORTS.all[sortKey.all].cmp);
   $("rules-title").textContent = `Projects (${projects.length}${projects.length !== allProjects.length ? "/" + allProjects.length : ""})`;
-  if (!projects.length) { showEmpty("No projects match this filter."); return; }
+  if (!projects.length) { showEmpty(t("no_projects_match")); return; }
   $("rules").innerHTML = projects.map((p) => {
-    if (p.error) return `<div class="row"><span class="chip dead">error</span><div><div class="rule">${esc(p.name)}</div><div class="src">${esc(p.error)}</div></div></div>`;
+    if (p.error) return `<div class="row"><span class="chip dead">${esc(t("error_grade"))}</span><div><div class="rule">${esc(p.name)}</div><div class="src">${esc(p.error)}</div></div></div>`;
     const s = p.summary || {};
     const g = p.compliance || {};
-    const gradeChip = g.grade && g.grade !== "n/a" ? `<span class="grade g${g.grade}">${g.grade}${g.score != null ? " · " + g.score : ""}</span>` : `<span class="chip advisory">n/a</span>`;
+    const gradeChip = g.grade && g.grade !== "n/a" ? `<span class="grade g${g.grade}">${g.grade}${g.score != null ? " · " + g.score : ""}</span>` : `<span class="chip advisory">${esc(t("na"))}</span>`;
     const badges = STATES.filter((k) => s[k]).map((k) => `<span class="chip ${k}">${k} ${s[k]}</span>`).join(" ");
-    return `<a class="row" href="#p=${encodeURIComponent(p.name)}" aria-label="Open ${esc(p.name)}, grade ${esc((g.grade || "n/a"))}">${gradeChip}<div><div class="rule">${esc(p.name)}</div><div class="src">${badges}${p.resolvable ? ` · <b>${p.resolvable}</b> resolvable` : ""}</div></div><span class="fires" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></a>`;
+    return `<a class="row" href="#p=${encodeURIComponent(p.name)}" aria-label="${esc(t("open_project", { name: p.name, grade: (g.grade || t("na")) }))}">${gradeChip}<div><div class="rule">${esc(p.name)}</div><div class="src">${badges}${p.resolvable ? ` · <b>${p.resolvable}</b> resolvable` : ""}</div></div><span class="fires" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" focusable="false"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></a>`;
   }).join("");
   // The row is a real link, so keyboard activation, middle-click and cmd-click come
   // from the browser and the existing hashchange handler routes it. One case a link
@@ -573,7 +734,7 @@ async function loadProjects() {
     const opts = d.projects
       .map((p) => `<option value="${esc(p.name)}"${p.path === d.active ? " selected" : ""}>${esc(p.name)}</option>`)
       .join("");
-    sel.innerHTML = `<option value="__all__">◇ All projects (${d.projects.length})</option>` + opts;
+    sel.innerHTML = `<option value="__all__">${esc(t("all_projects", { n: d.projects.length }))}</option>` + opts;
   } catch { $("project").style.display = "none"; }
 }
 
@@ -587,16 +748,16 @@ async function pollHealth(prev) {
 
 // ── Verbose one-click resolution: narrate derive → prove → arm ───────────────
 function resolveStep(rule, lines) {
-  $("result").innerHTML = `<div class="proof"><div class="head">Resolving “${esc(rule)}”</div>${lines.join("")}</div>`;
+  $("result").innerHTML = `<div class="proof"><div class="head">${t("resolving_head", { rule: esc(rule) })}</div>${lines.join("")}</div>`;
 }
 function wireRePropose(rule, btn) {
   const el = $("re-propose");
   if (el) el.addEventListener("click", () => resolveRule(rule, btn));
 }
 async function resolveRule(rule, btn) {
-  btn.disabled = true; btn.textContent = "Resolving…";
+  btn.disabled = true; btn.textContent = t("resolving");
   $("rule").value = rule;
-  resolveStep(rule, [`<div class="note"><span class="spinner" aria-hidden="true"></span>① Deriving a detector (free heuristic → LLM if needed)…</div>`]);
+  resolveStep(rule, [`<div class="note"><span class="spinner" aria-hidden="true"></span>${t("derive_step")}</div>`]);
   try {
     const d = await api("/api/rules/resolve", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -605,42 +766,42 @@ async function resolveRule(rule, btn) {
     if (!d.resolved) {
       // The LLM is non-deterministic — offer an inline re-propose (another attempt).
       resolveStep(rule, [
-        `<div class="note bad">✗ No detector could be derived — ${esc(d.reason || "the rule is not mechanically detectable")}.</div>`,
-        `<button class="btn primary" id="re-propose" type="button" style="width:100%">↻ Re-propose</button>`,
+        `<div class="note bad">${t("no_detector", { reason: esc(d.reason || t("not_detectable")) })}</div>`,
+        `<button class="btn primary" id="re-propose" type="button" style="width:100%">${esc(t("re_propose"))}</button>`,
       ]);
       wireRePropose(rule, btn);
-      btn.textContent = "Resolve"; btn.disabled = false; return;
+      btn.textContent = t("resolve"); btn.disabled = false; return;
     }
     const patterns = [...(d.proposal.forbid || []), ...(d.proposal.forbid_regex || []).map((r) => r + " (regex)"), ...(d.proposal.file_regex || []).map((r) => r + " (file)")];
     const hitRows = (d.proof.hits || []).slice(0, 40).map((h) =>
       `<div class="hit"><span class="loc">${esc(h.file)}:${h.line}</span><span class="ex">${esc(h.excerpt)}</span></div>`).join("");
     const base = [
-      `<div class="note">① Proposed by <b>${esc(d.proposal.source)}</b>: ${esc(JSON.stringify(patterns))}${d.proposal.rationale ? `<br><span class="src">${esc(d.proposal.rationale)}</span>` : ""}</div>`,
-      `<div class="head" style="margin-top:.6rem">② Proven in sandbox → <b>${d.proof.match_count}</b> hit(s) across ${d.proof.files_scanned} files</div>`,
-      `<div class="hits">${hitRows || '<div class="state">no matches</div>'}</div>`,
+      `<div class="note">${t("proposed_by", { source: esc(d.proposal.source), patterns: esc(JSON.stringify(patterns)) })}${d.proposal.rationale ? `<br><span class="src">${esc(d.proposal.rationale)}</span>` : ""}</div>`,
+      `<div class="head" style="margin-top:.6rem">${t("proven_head", { n: d.proof.match_count, files: d.proof.files_scanned })}</div>`,
+      `<div class="hits">${hitRows || `<div class="state">${esc(t("no_matches"))}</div>`}</div>`,
     ];
     if (!d.armed) {
       resolveStep(rule, [...base,
-        `<div class="note">③ ${esc(d.note || "Markdown-sourced rule")} — proposed &amp; proven only, nothing to persist.</div>`,
-        `<button class="btn" id="re-propose" type="button" style="width:100%">↻ Re-propose (try another detector)</button>`,
+        `<div class="note">${t("step_proved_only", { note: esc(d.note || t("markdown_sourced")) })}</div>`,
+        `<button class="btn" id="re-propose" type="button" style="width:100%">${esc(t("re_propose_try"))}</button>`,
       ]);
       wireRePropose(rule, btn);
-      btn.textContent = "Resolve"; btn.disabled = false; return;
+      btn.textContent = t("resolve"); btn.disabled = false; return;
     }
-    resolveStep(rule, [...base, `<div class="note">③ Ready to arm → writes the detector into <b>${esc(d.file)}</b>.</div><button class="btn primary" id="arm-confirm" type="button" style="width:100%">Arm this rule</button>`]);
+    resolveStep(rule, [...base, `<div class="note">${t("step_ready_arm", { file: esc(d.file) })}</div><button class="btn primary" id="arm-confirm" type="button" style="width:100%">${esc(t("arm_this_rule"))}</button>`]);
     $("arm-confirm").addEventListener("click", async () => {
-      $("arm-confirm").disabled = true; $("arm-confirm").textContent = "Arming…";
+      $("arm-confirm").disabled = true; $("arm-confirm").textContent = t("arming");
       try {
         await api("/api/rules/resolve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rule, dry_run: false }) });
-        resolveStep(rule, [...base, `<div class="note ok">✓ Armed — detector written into <b>${esc(d.file)}</b>. Rescanning…</div>`]);
-        btn.textContent = "Armed ✓";
+        resolveStep(rule, [...base, `<div class="note ok">${t("step_armed", { file: esc(d.file) })}</div>`]);
+        btn.textContent = t("armed_ok");
         runScan($("project").value && $("project").value !== "__all__" ? $("project").value : undefined);
-      } catch (e) { toast(e.message, true); $("arm-confirm").disabled = false; $("arm-confirm").textContent = "Arm this rule"; }
+      } catch (e) { toast(e.message, true); $("arm-confirm").disabled = false; $("arm-confirm").textContent = t("arm_this_rule"); }
     });
   } catch (e) {
-    resolveStep(rule, [`<div class="note bad">✗ ${esc(e.message)}</div>`, `<button class="btn primary" id="re-propose" type="button" style="width:100%">↻ Re-propose</button>`]);
+    resolveStep(rule, [`<div class="note bad">✗ ${esc(e.message)}</div>`, `<button class="btn primary" id="re-propose" type="button" style="width:100%">${esc(t("re_propose"))}</button>`]);
     wireRePropose(rule, btn);
-    btn.textContent = "Resolve"; btn.disabled = false;
+    btn.textContent = t("resolve"); btn.disabled = false;
   }
 }
 
@@ -648,9 +809,9 @@ async function resolveRule(rule, btn) {
 $("propose").addEventListener("click", propose);
 async function propose() {
   const rule = $("rule").value.trim();
-  if (!rule) { toast("Enter a rule first"); $("rule").focus(); return; }
-  $("propose").disabled = true; $("propose").textContent = "Replaying…";
-  $("result").innerHTML = `<div class="note"><span class="spinner" aria-hidden="true"></span>Deriving &amp; proving a detector…</div>`;
+  if (!rule) { toast(t("enter_rule_first")); $("rule").focus(); return; }
+  $("propose").disabled = true; $("propose").textContent = t("replaying");
+  $("result").innerHTML = `<div class="note"><span class="spinner" aria-hidden="true"></span>${esc(t("deriving_proving"))}</div>`;
   try {
     const d = await api("/api/propose", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -659,7 +820,7 @@ async function propose() {
     lastProposal = d.proposal;
     renderResult(d);
   } catch (e) { $("result").innerHTML = `<div class="note bad">✗ ${esc(e.message)}</div>`; toast(e.message, true); }
-  finally { $("propose").disabled = false; $("propose").textContent = "Propose & replay"; }
+  finally { $("propose").disabled = false; $("propose").textContent = t("propose"); }
 }
 
 // Interpret-once: derive detectors for the project's advisory prose (LLM, bounded),
@@ -667,8 +828,8 @@ async function propose() {
 $("interpret").addEventListener("click", interpret);
 async function interpret() {
   const btn = $("interpret");
-  btn.disabled = true; btn.textContent = "Interpreting…";
-  $("result").innerHTML = `<div class="note"><span class="spinner" aria-hidden="true"></span>Reading advisory prose and deriving detectors (LLM, bounded)…</div>`;
+  btn.disabled = true; btn.textContent = t("interpreting");
+  $("result").innerHTML = `<div class="note"><span class="spinner" aria-hidden="true"></span>${esc(t("interpret_reading"))}</div>`;
   try {
     await api("/api/interpret", { method: "POST" });
     let d = { running: true };
@@ -678,18 +839,18 @@ async function interpret() {
     }
     renderDerived(d.derived || []);
   } catch (e) { $("result").innerHTML = `<div class="note bad">✗ ${esc(e.message)}</div>`; toast(e.message, true); }
-  finally { btn.disabled = false; btn.textContent = "Interpret advisory prose →"; }
+  finally { btn.disabled = false; btn.textContent = t("interpret"); }
 }
 function renderDerived(derived) {
-  if (!derived.length) { $("result").innerHTML = `<div class="note">No detectors could be derived from the advisory prose (it is semantic, or no LLM backend is available).</div>`; return; }
+  if (!derived.length) { $("result").innerHTML = `<div class="note">${esc(t("no_derived"))}</div>`; return; }
   const rows = derived.map((d) =>
     `<div class="hit"><span class="loc"><span class="kind">${esc(d.kind)}</span> ·${d.match_count} hit(s)</span><span class="ex">${esc(d.rule)}</span></div>`).join("");
   $("result").innerHTML =
     `<div class="proof">
-       <div class="head">Interpreted <b>${derived.length}</b> advisory rule(s) into proven detectors</div>
+       <div class="head">${t("interpreted_head", { n: derived.length })}</div>
        <div class="hits">${rows}</div>
-       <p class="note">Derived from host prose (ADR D-0016). Persist them as the per-repo cache CI applies cold.</p>
-       <button class="btn primary" id="persist-derived" type="button" style="width:100%">Persist to cache (guidelines/derived) →</button>
+       <p class="note">${esc(t("derived_note"))}</p>
+       <button class="btn primary" id="persist-derived" type="button" style="width:100%">${esc(t("persist_cache"))}</button>
      </div>`;
   $("persist-derived").addEventListener("click", persistDerived);
 }
@@ -697,28 +858,28 @@ function renderDerived(derived) {
 // Cache the derived ruleset: preview the diff, confirm, then write it (ADR D-0016).
 async function persistDerived() {
   const btn = $("persist-derived");
-  btn.disabled = true; btn.textContent = "Previewing…";
+  btn.disabled = true; btn.textContent = t("previewing");
   try {
     const preview = await api("/api/interpret/persist", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dry_run: true }),
     });
-    if (!preview.count) { toast(preview.note || "Nothing to persist"); btn.disabled = false; btn.textContent = "Persist to cache (guidelines/derived) →"; return; }
-    if (!confirm(`Write ${preview.count} derived rule(s) into\n${preview.file}?\n\nThis is a regenerable per-repo cache — re-running interpret replaces it.`)) {
-      btn.disabled = false; btn.textContent = "Persist to cache (guidelines/derived) →"; return;
+    if (!preview.count) { toast(preview.note || t("nothing_to_persist")); btn.disabled = false; btn.textContent = t("persist_cache"); return; }
+    if (!confirm(t("confirm_persist", { n: preview.count, file: preview.file }))) {
+      btn.disabled = false; btn.textContent = t("persist_cache"); return;
     }
     const done = await api("/api/interpret/persist", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dry_run: false }),
     });
-    btn.textContent = `Cached ${done.count} rule(s) ✓`;
-    toast(`Wrote ${done.count} rule(s) to ${done.file}`);
+    btn.textContent = t("cached_ok", { n: done.count });
+    toast(t("wrote_rules", { n: done.count, file: done.file }));
     runScan($("project").value && $("project").value !== "__all__" ? $("project").value : undefined);
-  } catch (e) { toast(e.message, true); btn.disabled = false; btn.textContent = "Persist to cache (guidelines/derived) →"; }
+  } catch (e) { toast(e.message, true); btn.disabled = false; btn.textContent = t("persist_cache"); }
 }
 
 function renderResult(d) {
   const box = $("result");
   if (!d.proposal) {
-    box.innerHTML = `<div class="note">${esc(d.note || "No proposal.")}</div>`;
+    box.innerHTML = `<div class="note">${esc(d.note || t("no_proposal"))}</div>`;
     return;
   }
   const p = d.proposal, proof = d.proof;
@@ -727,10 +888,10 @@ function renderResult(d) {
   const patterns = [...(p.forbid || []), ...(p.forbid_regex || []).map((r) => r + " (regex)"), ...(p.file_regex || []).map((r) => r + " (file)")];
   box.innerHTML =
     `<div class="proof">
-       <div class="head">Proposed by <span class="src-tag">${esc(p.source)}</span> · ${esc(JSON.stringify(patterns))}
-         → <b>${proof.match_count}</b> hit(s) across ${proof.files_scanned} files</div>
-       <div class="hits">${hits || '<div class="state">no matches</div>'}</div>
-       <p class="note">Review the hits for false positives before arming.</p>
+       <div class="head">${esc(t("proposed_tag"))} <span class="src-tag">${esc(p.source)}</span> · ${esc(JSON.stringify(patterns))}
+         ${t("hits_across", { n: proof.match_count, files: proof.files_scanned })}</div>
+       <div class="hits">${hits || `<div class="state">${esc(t("no_matches"))}</div>`}</div>
+       <p class="note">${esc(t("review_hits"))}</p>
      </div>`;
 }
 
