@@ -131,3 +131,22 @@ def test_browse_listing_flags_a_scannable_directory(tmp_path) -> None:  # type: 
     base = tmp_path.resolve()
     (base / "CLAUDE.md").write_text("# rules", encoding="utf-8")
     assert _browse_listing(base, None)["scannable"] is True
+
+
+# ── Browse root default: native runs reach the whole machine ─────────────────
+
+
+def test_browse_root_defaults_to_home_when_unset(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from guideline_checker.web.app import _default_browse_root
+
+    home = tmp_path / "home"
+    home.mkdir()
+    assert _default_browse_root(None, home) == home.resolve()
+
+
+def test_browse_root_honours_an_explicit_env(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from guideline_checker.web.app import _default_browse_root
+
+    explicit = tmp_path / "elsewhere"
+    explicit.mkdir()
+    assert _default_browse_root(str(explicit), tmp_path / "home") == explicit.resolve()

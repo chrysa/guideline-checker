@@ -43,10 +43,19 @@ _SCAN_ROOT: Path = Path(os.environ.get("SCAN_ROOT", "."))
 # Defaults to the scan root's parent so the fleet shows up with zero config; set
 # GC_WORKSPACE to point elsewhere. Single-repo installs simply list one project.
 _WORKSPACE: Path = Path(os.environ.get("GC_WORKSPACE") or _SCAN_ROOT.resolve().parent)
-# Directory-browser root: the user may pick any folder beneath it to scan. Bounded on
-# purpose — the workshop must never scan arbitrary host paths (see _within_base). Set
-# GC_BROWSE_ROOT to widen or narrow it; defaults to the workspace.
-_BROWSE_ROOT: Path = Path(os.environ.get("GC_BROWSE_ROOT") or _WORKSPACE).resolve()
+
+
+# Directory-browser root: the user may pick any folder beneath it to scan, bounded by
+# _within_base (no traversal above it). GC_BROWSE_ROOT sets it explicitly; unset, a
+# native run defaults to the user's home so the Browse… dialog reaches any folder on
+# the machine (a local, loopback dev tool). The container sets GC_BROWSE_ROOT to
+# /workspace, so this home default never widens a container's view.
+def _default_browse_root(env: str | None, home: Path) -> Path:
+    """GC_BROWSE_ROOT if set, else the user's home directory."""
+    return Path(env or home).resolve()
+
+
+_BROWSE_ROOT: Path = _default_browse_root(os.environ.get("GC_BROWSE_ROOT"), Path.home())
 
 
 def _active_root() -> Path:
