@@ -16,7 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
@@ -34,7 +34,7 @@ from guideline_checker.proposer import (
 from guideline_checker.rule_health import RuleHealth, compute_rule_health, summarize
 from guideline_checker.sandbox import replay
 from guideline_checker.web.auth import require_auth
-from guideline_checker.workspace import discover_projects
+from guideline_checker.workspace import discover_projects, has_rule_source
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
@@ -43,6 +43,10 @@ _SCAN_ROOT: Path = Path(os.environ.get("SCAN_ROOT", "."))
 # Defaults to the scan root's parent so the fleet shows up with zero config; set
 # GC_WORKSPACE to point elsewhere. Single-repo installs simply list one project.
 _WORKSPACE: Path = Path(os.environ.get("GC_WORKSPACE") or _SCAN_ROOT.resolve().parent)
+# Directory-browser root: the user may pick any folder beneath it to scan. Bounded on
+# purpose — the workshop must never scan arbitrary host paths (see _within_base). Set
+# GC_BROWSE_ROOT to widen or narrow it; defaults to the workspace.
+_BROWSE_ROOT: Path = Path(os.environ.get("GC_BROWSE_ROOT") or _WORKSPACE).resolve()
 
 
 def _active_root() -> Path:
@@ -338,9 +342,10 @@ def dashboard() -> str:
 
 
 class _ScanRequest(BaseModel):
-    """Optionally switch to another workspace project before scanning."""
+    """Optionally switch to another target before scanning."""
 
     project: str | None = None  # a discovered project's name or absolute path
+    path: str | None = None  # an arbitrary directory under the browse root (folder browser)
 
 
 def _resolve_project(ident: str) -> str | None:
@@ -349,6 +354,43 @@ def _resolve_project(ident: str) -> str | None:
         if ident in (project.name, project.path):
             return project.path
     return None
+
+
+def _within_base(base: Path, candidate: str | Path) -> Path | None:
+    """Resolve ``candidate`` under ``base`` and return it only if it stays inside — else None.
+
+    A relative candidate resolves against ``base``; an absolute one is taken as given. The
+    resolved path must equal ``base`` or live beneath it, which is what stops ``..`` and
+    symlink traversal from reaching arbitrary host directories.
+    """
+    raw = Path(candidate)
+    target = (raw if raw.is_absolute() else base / raw).resolve()
+    if target == base or base in target.parents:
+        return target
+    return None
+
+
+def _browse_listing(base: Path, path: str | None) -> dict[str, Any]:
+    """List the sub-directories of ``path`` (default ``base``), bounded to ``base``.
+
+    Returns the current directory, its parent (``None`` at the root so the UI cannot
+    climb out), whether it carries rule sources, and its visible sub-directories.
+    """
+    cwd = _within_base(base, path) if path else base
+    if cwd is None or not cwd.is_dir():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Path outside the browse root")
+    entries = [
+        {"name": child.name, "path": str(child)}
+        for child in sorted(cwd.iterdir())
+        if child.is_dir() and not child.name.startswith(".")
+    ]
+    return {
+        "base": str(base),
+        "cwd": str(cwd),
+        "parent": None if cwd == base else str(cwd.parent),
+        "scannable": has_rule_source(cwd),
+        "entries": entries,
+    }
 
 
 @app.get("/api/projects", response_model=None, dependencies=[Depends(require_auth)])
@@ -365,13 +407,31 @@ def get_projects() -> JSONResponse:
     )
 
 
+@app.get("/api/browse", response_model=None, dependencies=[Depends(require_auth)])
+def browse_dirs(path: str | None = None) -> JSONResponse:
+    """List sub-directories under the browse root so the UI can pick any folder to scan."""
+    return JSONResponse(_browse_listing(_BROWSE_ROOT, path))
+
+
 @app.post("/api/scan", response_model=dict[str, str], dependencies=[Depends(require_auth)])
 def trigger_scan(background_tasks: BackgroundTasks, req: _ScanRequest | None = None) -> dict[str, str]:
-    """Trigger a scan in the background, optionally switching to another project first."""
-    if req is not None and req.project:
+    """Trigger a scan in the background, optionally switching to another target first.
+
+    A ``path`` (folder browser) is honoured over a ``project`` (discovered-repo dropdown);
+    both are validated server-side so a scan never reaches outside the allowed roots.
+    """
+    if req is not None and req.path:
+        resolved_path = _within_base(_BROWSE_ROOT, req.path)
+        if resolved_path is None or not resolved_path.is_dir():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Path outside the browse root: {req.path!r}",
+            )
+        _state.active_project = str(resolved_path)
+    elif req is not None and req.project:
         resolved = _resolve_project(req.project)
         if resolved is None:
-            raise HTTPException(status_code=404, detail=f"Unknown project: {req.project!r}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown project: {req.project!r}")
         _state.active_project = resolved
     if _state.running:
         return {"status": "already_running"}

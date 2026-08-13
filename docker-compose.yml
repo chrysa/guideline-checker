@@ -9,6 +9,9 @@ services:
     - PYTHONDONTWRITEBYTECODE=1
     - PYTHONUNBUFFERED=1
     - SCAN_ROOT=/workspace
+    # Bound the folder browser to the mounted repo, not the container root (which is
+    # what the default workspace=/ would give here). See app._BROWSE_ROOT.
+    - GC_BROWSE_ROOT=/workspace
     - HOME=/tmp
     - PYTHONPYCACHEPREFIX=/tmp/.toolcache/pycache
     - RUFF_CACHE_DIR=/tmp/.toolcache/ruff

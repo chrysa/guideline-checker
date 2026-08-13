@@ -166,6 +166,21 @@
   textarea, input[type=text] { width: 100%; font-family: var(--mono); font-size: 0.82rem; background: var(--panel-2); border: 1px solid var(--edge); border-radius: var(--radius-sm); color: var(--ink); padding: 0.55rem 0.65rem; resize: vertical; }
   textarea::placeholder, input::placeholder { color: var(--ink-faint); }
   .field { margin-bottom: 0.8rem; }
+  /* ── Folder browser dialog ── */
+  .browser { width: min(560px, 92vw); max-height: 80vh; padding: 0; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
+  .browser::backdrop { background: rgba(0,0,0,.5); }
+  .browser-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: var(--sp-3) 1.1rem; border-bottom: 1px solid var(--edge); }
+  .browser-head h2 { font-size: 0.95rem; margin: 0; }
+  .browser-cwd { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-dim); padding: 0.6rem 1.1rem 0; word-break: break-all; }
+  .browser-list { padding: 0.5rem 0.6rem; overflow-y: auto; max-height: 48vh; }
+  .browser-list .entry { display: flex; align-items: center; gap: 0.55rem; width: 100%; text-align: left; font-family: var(--mono); font-size: 0.8rem; padding: 0.5rem 0.6rem; border: none; border-radius: var(--radius-sm); background: none; color: var(--ink); cursor: pointer; }
+  .browser-list .entry:hover, .browser-list .entry:focus-visible { background: var(--panel-2); }
+  .browser-list .entry .ico { color: var(--ink-faint); flex: none; }
+  .browser-list .entry.up { color: var(--ink-dim); }
+  .browser-list .empty { padding: 0.8rem 0.6rem; font-size: 0.8rem; color: var(--ink-faint); }
+  .browser-foot { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: var(--sp-3) 1.1rem; border-top: 1px solid var(--edge); }
+  .browser-hint { font-family: var(--mono); font-size: 0.68rem; color: var(--ink-dim); }
+  .browser-hint.ok { color: var(--proven); }
   .proof { margin-top: 0.9rem; font-size: 0.82rem; }
   .proof .head { font-family: var(--mono); font-size: 0.76rem; color: var(--ink-dim); margin-bottom: 0.5rem; }
   .proof .head b { color: var(--ink); }
@@ -200,6 +215,7 @@
     <div class="actions" role="group" aria-label="Scan controls">
       <label class="sr-only" for="project">Project to scan</label>
       <select class="select" id="project" title="Project to scan"></select>
+      <button class="btn" id="browse" type="button" title="Browse for any folder to scan">Browse…</button>
       <button class="btn icon" id="theme" type="button" aria-label="Toggle light or dark theme"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 0 0 13z" fill="currentColor"/></svg></button>
       <button class="btn primary" id="scan" type="button">Scan</button>
     </div>
@@ -241,6 +257,18 @@
     </section>
   </main>
 </div>
+<dialog class="browser" id="browser" aria-labelledby="browser-title">
+  <form method="dialog" class="browser-head">
+    <h2 id="browser-title">Choose a folder to scan</h2>
+    <button class="btn icon" value="cancel" aria-label="Close folder browser">✕</button>
+  </form>
+  <p class="browser-cwd" id="browser-cwd" aria-live="polite"></p>
+  <div class="browser-list" id="browser-list" role="listbox" aria-label="Sub-folders" aria-busy="false"></div>
+  <div class="browser-foot">
+    <span class="browser-hint" id="browser-hint"></span>
+    <button class="btn primary" id="browser-scan" type="button">Scan this folder</button>
+  </div>
+</dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -349,6 +377,12 @@ function showToolbar(mode) {
 // ── URL-addressable navigation (deep-link · reload · Back/Forward) ───────────
 $("scan").addEventListener("click", () => applyRoute(true));
 $("project").addEventListener("change", () => setRoute($("project").value));
+$("browse").addEventListener("click", openBrowser);
+$("browser-scan").addEventListener("click", () => {
+  const dlg = $("browser");
+  if (typeof dlg.close === "function") dlg.close(); else dlg.removeAttribute("open");
+  if (browseCwd) runScanFolder(browseCwd);
+});
 window.addEventListener("hashchange", () => applyRoute(false));
 
 function setRoute(value) {
@@ -366,16 +400,47 @@ async function applyRoute(force) {
   return force ? runScan() : pollHealth(null).catch(() => showRowsError("Could not load the scan."));
 }
 
-async function runScan(project) {
+async function runScan(project) { return _scan(project ? { project } : null, "Scanning the project…"); }
+async function runScanFolder(path) { return _scan({ path }, "Scanning the folder…"); }
+
+async function _scan(payload, msg) {
   $("scan").disabled = true; $("scan").textContent = "Scanning…";
-  showLoading("Scanning the project…");
+  showLoading(msg);
   try {
     const prev = (await api("/api/rules-health").catch(() => ({}))).timestamp || null;
-    const body = project ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project }) } : {};
+    const body = payload ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) } : {};
     await api("/api/scan", Object.assign({ method: "POST" }, body));
     await pollHealth(prev);
   } catch (e) { showRowsError(e.message); toast(e.message, true); }
   finally { $("scan").disabled = false; $("scan").textContent = "Scan"; }
+}
+
+// ── Folder browser ────────────────────────────────────────────────────────────
+let browseCwd = null;
+
+async function loadBrowse(path) {
+  const list = $("browser-list");
+  list.setAttribute("aria-busy", "true");
+  let d;
+  try { d = await api("/api/browse" + (path ? "?path=" + encodeURIComponent(path) : "")); }
+  catch (e) { toast(e.message, true); list.setAttribute("aria-busy", "false"); return; }
+  browseCwd = d.cwd;
+  $("browser-cwd").textContent = d.cwd;
+  const hint = $("browser-hint");
+  hint.textContent = d.scannable ? "✓ carries rule sources" : "no rule sources here — scan finds nothing";
+  hint.classList.toggle("ok", !!d.scannable);
+  const rows = [];
+  if (d.parent) rows.push(`<button class="entry up" type="button" data-path="${esc(d.parent)}"><span class="ico" aria-hidden="true">↰</span>..</button>`);
+  for (const e of d.entries) rows.push(`<button class="entry" type="button" data-path="${esc(e.path)}"><span class="ico" aria-hidden="true">▸</span>${esc(e.name)}</button>`);
+  list.innerHTML = rows.length ? rows.join("") : `<div class="empty">No sub-folders here.</div>`;
+  list.setAttribute("aria-busy", "false");
+  list.querySelectorAll(".entry").forEach((el) => el.addEventListener("click", () => loadBrowse(el.dataset.path)));
+}
+
+function openBrowser() {
+  const dlg = $("browser");
+  loadBrowse(null);
+  if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
 }
 
 async function runScanAll(force) {
