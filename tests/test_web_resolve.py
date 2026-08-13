@@ -65,3 +65,69 @@ def test_compliance_note_na_when_no_rules() -> None:
 
     note = _compliance_note(0, 0, 0, 0)
     assert note["grade"] == "n/a" and note["score"] is None
+
+
+# ── Folder browser: the path stays bounded to the browse root ────────────────
+
+
+def test_within_base_accepts_the_base_and_its_children(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from guideline_checker.web.app import _within_base
+
+    base = tmp_path.resolve()
+    (base / "sub").mkdir()
+    assert _within_base(base, ".") == base
+    assert _within_base(base, "sub") == base / "sub"
+
+
+def test_within_base_rejects_traversal_and_outside_paths(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from guideline_checker.web.app import _within_base
+
+    base = (tmp_path / "root").resolve()
+    base.mkdir()
+    (tmp_path / "sibling").mkdir()
+    assert _within_base(base, "../sibling") is None
+    assert _within_base(base, str(tmp_path / "sibling")) is None
+    assert _within_base(base, "..") is None
+
+
+def test_browse_listing_lists_visible_subdirs_only(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from guideline_checker.web.app import _browse_listing
+
+    base = tmp_path.resolve()
+    (base / "keep").mkdir()
+    (base / ".hidden").mkdir()
+    (base / "a-file.txt").write_text("x", encoding="utf-8")
+    listing = _browse_listing(base, None)
+    assert [e["name"] for e in listing["entries"]] == ["keep"]
+    assert listing["parent"] is None  # at the root the UI cannot climb out
+    assert listing["cwd"] == str(base)
+
+
+def test_browse_listing_reports_parent_below_the_root(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from guideline_checker.web.app import _browse_listing
+
+    base = tmp_path.resolve()
+    (base / "sub").mkdir()
+    listing = _browse_listing(base, "sub")
+    assert listing["parent"] == str(base)
+
+
+def test_browse_listing_rejects_a_path_outside_the_root(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    import pytest
+    from fastapi import HTTPException
+
+    from guideline_checker.web.app import _browse_listing
+
+    base = (tmp_path / "root").resolve()
+    base.mkdir()
+    (tmp_path / "sibling").mkdir()
+    with pytest.raises(HTTPException):
+        _browse_listing(base, "../sibling")
+
+
+def test_browse_listing_flags_a_scannable_directory(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from guideline_checker.web.app import _browse_listing
+
+    base = tmp_path.resolve()
+    (base / "CLAUDE.md").write_text("# rules", encoding="utf-8")
+    assert _browse_listing(base, None)["scannable"] is True
