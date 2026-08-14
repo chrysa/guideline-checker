@@ -16,7 +16,7 @@ permissions:
 
 jobs:
     deploy:
-        uses: chrysa/github-actions/.github/workflows/deploy.yml@v1.6.0
+        uses: chrysa/github-actions/.github/workflows/deploy.yml@v1.8.0
         with:
             image-base: ghcr.io/chrysa/guideline-checker
             tag: ${{ inputs.tag }}
