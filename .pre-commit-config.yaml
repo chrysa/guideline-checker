@@ -50,10 +50,7 @@ repos:
   - id: python-logger-detection
     exclude: (^|/)tests?/|^(README\.md|docs/)
   - id: no-sync-in-async
-  # DECISIONS.md / CHANGELOG.md are documentation that legitimately quotes code
-  # patterns (an ADR shows a debugger call as the thing a fixer removes) — same
-  # reason README and docs/ are excluded.
-  - exclude: (^|/)tests?/|^(README\.md|DECISIONS\.md|CHANGELOG\.md|docs/)
+  - exclude: (^|/)tests?/|^(README\.md|docs/)
     id: debugger-detection
   - id: fastapi-missing-response-model
     exclude: (^|/)tests/
@@ -138,13 +135,6 @@ repos:
   rev: v0.49.1
 - repo: local
   hooks:
-  # Self-hosting: guideline-checker lints itself with its OWN in-tree code, not a
-  # pinned published tag. A pinned tag cannot parse a referential that uses a
-  # detect.* key newer than that release — every new key would red the gate until a
-  # release ships (the D-0021 bootstrap deadlock). Running the working tree ends it:
-  # the tool always understands the rules it ships. Host-native (language: python,
-  # no Docker); `python -m` puts the repo root on sys.path so the current package
-  # wins over any installed copy.
   - id: guideline-check
     name: guideline-check (in-tree, self-hosting)
     entry: python -m guideline_checker.cli check --fail-on error
@@ -156,3 +146,13 @@ repos:
     - tree-sitter-javascript>=0.23
     pass_filenames: false
     always_run: true
+- repo: https://github.com/chrysa/guideline-checker
+  rev: v1.30.10
+  hooks:
+  - id: guideline-check
+    args:
+    - check
+    - --fail-on
+    - error
+    - --baseline
+    - .guideline-baseline.json
