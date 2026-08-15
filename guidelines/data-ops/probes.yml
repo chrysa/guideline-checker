@@ -1,0 +1,17 @@
+apply_to_glob: '**/docker-compose.yml, **/docker-compose.yaml, **/compose.yml, **/compose.yaml'
+language_target: docker-compose
+rules:
+- category: observability
+  detect:
+    require_regex:
+    - '(?im)^\s*healthcheck\s*:'
+  id: OP-000
+  rationale: "OP-000 (annexe OBSERVABILITY-OPS.md) \u2014 a deployable service exposes\
+    \ startup, liveness AND readiness probes. In a Compose stack the service's probe\
+    \ is its `healthcheck:`; its absence from the canonical compose file is the finding.\
+    \ Scoped to the canonical compose file because a repo-level \"probe present in\
+    \ compose OR k8s manifests OR a Dockerfile HEALTHCHECK\" cannot be expressed as\
+    \ one whole-file require_regex without firing on every unrelated file. Lands at\
+    \ info under GV-020. CheckKind: file-content (require_regex, absence is the violation)."
+  rule: A deployable service declares startup, liveness and readiness probes
+  severity: info
