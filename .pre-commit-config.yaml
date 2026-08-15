@@ -147,7 +147,7 @@ repos:
     pass_filenames: false
     always_run: true
 - repo: https://github.com/chrysa/guideline-checker
-  rev: v1.30.10
+  rev: v1.31.0-14
   hooks:
   - id: guideline-check
     args:
