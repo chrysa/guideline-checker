@@ -1,0 +1,17 @@
+apply_to_glob: '**/main.py, **/app.py, **/asgi.py'
+language_target: service-entrypoint
+rules:
+- category: observability
+  detect:
+    require_regex:
+    - (?i)["']/version(?:["'/]|$)
+  id: OP-040
+  rationale: "OP-040 (annexe OBSERVABILITY-OPS.md) \u2014 the service publishes a\
+    \ `/version` endpoint. Scoped to the application entrypoint (main.py / app.py\
+    \ / asgi.py) because a repo-level \"/version defined anywhere\" require_regex\
+    \ over every source file would flag every file that is not the router \u2014 mass\
+    \ false positives. Absence of a `/version` route path from the entrypoint is the\
+    \ finding. Lands at info under GV-020. CheckKind: file-content (require_regex,\
+    \ absence is the violation)."
+  rule: The service publishes a /version endpoint
+  severity: info

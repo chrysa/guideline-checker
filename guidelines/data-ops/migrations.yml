@@ -1,0 +1,23 @@
+apply_to_glob: '**/*.sql, **/*.py'
+language_target: sql-migrations
+rules:
+- category: data
+  detect:
+    forbid_regex:
+    - (?i)\bDROP\s+TABLE\b
+    - (?i)\bDROP\s+COLUMN\b
+    - (?i)\bALTER\s+TABLE\b.*\bDROP\b
+    - op\.drop_table\(
+    - op\.drop_column\(
+  id: DA-022
+  rationale: "DA-022 (annexe DATA-MIGRATIONS.md) \u2014 a destructive schema change\
+    \ ships with a migration plan. A DROP TABLE / DROP COLUMN / ALTER ... DROP (SQL)\
+    \ or an alembic op.drop_table/op.drop_column (ORM) is destructive; flagging the\
+    \ marker prompts a reviewer to confirm the accompanying migration plan exists.\
+    \ Lands at info under GV-020 (a new automated check lands as info, then warning,\
+    \ then error only after the debt is cleared). Scanned across SQL and Python files;\
+    \ the destructive marker itself is the finding, so a broad file scope stays low\
+    \ false-positive (the markers occur essentially only in migrations, models and\
+    \ raw SQL). CheckKind: forbidden-pattern."
+  rule: A destructive DB change must ship with a migration plan
+  severity: info
