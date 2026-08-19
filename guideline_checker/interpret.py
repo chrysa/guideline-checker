@@ -2,7 +2,7 @@
 
 The founding loop of the tool (D-0010→D-0016): read the host's prose **once**,
 let the proposer map each sentence onto a mechanism (a detector, classified into
-a :class:`~guideline_checker.kinds.CheckKind`), and **replay it in the sandbox for
+a :class:`~guideline_checker.core.detection.CheckKind`), and **replay it in the sandbox for
 proof** — before anything is written. The LLM only proposes; the sandbox proves;
 detection stays deterministic.
 
@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
-from guideline_checker.kinds import CheckKind, kind_of_detector
+from guideline_checker.core.detection import CheckKind, kind_of_detector
 from guideline_checker.loader import RuleDetector
 from guideline_checker.proposer import Proposal
 

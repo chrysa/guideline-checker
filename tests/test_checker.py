@@ -7,18 +7,20 @@ from pathlib import Path
 import pytest
 from pytest_mock import MockerFixture
 
-from guideline_checker.checker import (
+from guideline_checker.core.detection import (
     IGNORE_FILES,
-    PatternCheck,
     _collect_files,
-    _expand_brace_pattern,
     _is_text_file,
-    _line_matches,
-    _matches_pattern,
     _narrow_apply_to,
     _resolve_max_file_size,
-    _split_patterns,
     run_checks,
+)
+from guideline_checker.core.detection.pattern import (
+    PatternCheck,
+    _expand_brace_pattern,
+    _line_matches,
+    _matches_pattern,
+    _split_patterns,
 )
 from guideline_checker.loader import InstructionFile
 
@@ -315,7 +317,7 @@ class TestRuleEngineV02:
     def test_check_file_oserror_returns_empty(self, tmp_path: Path, mocker: MockerFixture) -> None:
         """_check_file should return [] when a file cannot be read (OSError)."""
 
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         instr = InstructionFile(
@@ -334,7 +336,7 @@ class TestRuleEngineV02:
 
     def test_debug_output_console_log_in_python_context(self, tmp_path: Path) -> None:
         """_debug_output_checks: no console.log rule detected in non-TS file."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         instr = InstructionFile(
@@ -351,7 +353,7 @@ class TestRuleEngineV02:
 
     def test_import_relative_import_check(self, tmp_path: Path) -> None:
         """_import_checks: relative import detection."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         instr = InstructionFile(
@@ -370,7 +372,7 @@ class TestRuleEngineV02:
 
     def test_annotation_check_future_annotations(self, tmp_path: Path) -> None:
         """_annotation_checks: __future__ import annotations rule."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         instr = InstructionFile(
@@ -394,7 +396,7 @@ class TestRuleEngineV02:
 
     def test_typescript_console_debug_check(self, tmp_path: Path) -> None:
         """_typescript_checks: no console.debug in TS files."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         instr = InstructionFile(
@@ -411,7 +413,7 @@ class TestRuleEngineV02:
 
     def test_python_strict_no_pass_in_except(self, tmp_path: Path) -> None:
         """_python_strict_checks: no pass in except / silent exception."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         instr = InstructionFile(
@@ -621,7 +623,7 @@ class TestLengthRules:
         long_func = "\n".join(["def long_func():"] + ["    x = 1"] * 15)
         f = tmp_path / "long.py"
         f.write_text(long_func)
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
 
         instr = InstructionFile(
             path=tmp_path / "rules.md",
@@ -635,7 +637,7 @@ class TestLengthRules:
 
     def test_function_length_two_functions_second_too_long(self, tmp_path: Path) -> None:
         """Multiple functions: only the one exceeding the limit is flagged."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         code = "def short():\n    return 1\n\n" + "def long_fn():\n" + "    x = 1\n" * 12
@@ -653,7 +655,7 @@ class TestLengthRules:
 
     def test_file_length_rule_flags_long_file(self, tmp_path: Path) -> None:
         """A file exceeding the max line count should produce a warning."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         f = tmp_path / "big.py"
@@ -678,7 +680,7 @@ class TestSecurityPatternChecks:
 
     def test_docker_no_root_user(self, tmp_path: Path) -> None:
         """Docker check: 'run as non-root' flags USER root."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         f = tmp_path / "Dockerfile"
@@ -695,7 +697,7 @@ class TestSecurityPatternChecks:
 
     def test_docker_no_latest_tag(self, tmp_path: Path) -> None:
         """Docker check: 'no latest tag' flags :latest usage."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         f = tmp_path / "Dockerfile"
@@ -712,7 +714,7 @@ class TestSecurityPatternChecks:
 
     def test_credential_hardcoded_secret_literal(self, tmp_path: Path) -> None:
         """Credential check: a high-entropy hardcoded secret literal is an error."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         f = tmp_path / "config.py"
@@ -730,7 +732,7 @@ class TestSecurityPatternChecks:
 
     def test_credential_ignores_value_read_from_a_call(self, tmp_path: Path) -> None:
         """Credential check: reading a token from a call is not a hardcoded secret."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         f = tmp_path / "auth.py"

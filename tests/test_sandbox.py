@@ -1,7 +1,7 @@
 """Tests for the sandbox — replay a proposed detector for proof.
 
 The sandbox runs a candidate detector through the *real* per-file detection path
-(``checker._check_file``) against the working tree, writing nothing, and returns
+(``core.detection._check_file``) against the working tree, writing nothing, and returns
 exactly what it catches: file, line, excerpt. This is the proof the workshop
 shows before any write — the user never has to trust a proposal blind.
 """

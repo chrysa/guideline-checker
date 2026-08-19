@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from guideline_checker.checker import RuleResult, Violation
+from guideline_checker.core.detection import RuleResult, Violation
 from guideline_checker.loader import InstructionFile
 from guideline_checker.reporters.json_reporter import JsonReporter
 

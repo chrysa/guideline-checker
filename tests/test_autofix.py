@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from guideline_checker.autofix import apply_local_fixes
-from guideline_checker.checker import RuleResult, Violation
 from guideline_checker.cli import main
+from guideline_checker.core.detection import RuleResult, Violation
 from guideline_checker.guidelines import GuidelineError, load_yaml_guidelines
 from guideline_checker.loader import InstructionFile, RuleFix, SourceType
 

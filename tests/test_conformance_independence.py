@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from guideline_checker.checker import run_checks
+from guideline_checker.core.detection import run_checks
 from guideline_checker.guidelines import load_yaml_guidelines
 from guideline_checker.loader import load_all_sources
 from guideline_checker.rule_health import HealthState, compute_rule_health

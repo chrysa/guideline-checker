@@ -17,3 +17,7 @@ rules:
       # FIXME lives in comments — scan them too, unlike the code-pattern rules.
       match_in_comments: true
       forbid_regex: ['\bFIXME\b']
+      exclude:
+      # A pattern detector's own literal "FIXME" trigger string is data, not a
+      # live marker (see the same reasoning for py-no-eval-exec below).
+      - guideline_checker/core/detection/pattern.py

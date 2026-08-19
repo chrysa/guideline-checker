@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
-from guideline_checker.checker import RuleResult, Violation
+from guideline_checker.core.detection import RuleResult, Violation
 
 _SEVERITY_EMOJI = {
     "error": "🔴",

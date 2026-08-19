@@ -12,8 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from guideline_checker.baseline import fingerprint
-from guideline_checker.checker import RuleResult, Violation
-from guideline_checker.kinds import kind_of_detector, kind_of_phrase
+from guideline_checker.core.detection import RuleResult, Violation, kind_of_detector, kind_of_phrase
 from guideline_checker.loader import InstructionFile
 
 # The result contract's own version, independent of the tool's release version.

@@ -2,7 +2,7 @@
 
 The workshop never asks the user to trust a proposal blind: it replays the
 candidate detector through the *real* per-file detection path
-(``checker._check_file``) against the working tree and returns exactly what it
+(``core.detection._check_file``) against the working tree and returns exactly what it
 catches — file, line, excerpt. Deterministic, offline, read-only. This is the
 proof shown before the proposal is ever written to ``guidelines/*.yml``
 (see ADR D-0012).
@@ -13,7 +13,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from guideline_checker.checker import _collect_files, _declared_violations, _matches_pattern
+from guideline_checker.core.detection import _collect_files
+from guideline_checker.core.detection.pattern import _matches_pattern
+from guideline_checker.core.detection.presence import _declared_violations
 from guideline_checker.loader import RuleDetector
 
 _MAX_HITS = 100

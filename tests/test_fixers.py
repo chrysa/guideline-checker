@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from guideline_checker.checker import RuleResult, Violation
+from guideline_checker.core.detection import RuleResult, Violation
 from guideline_checker.distribution import Expectations
 from guideline_checker.fixers import ARTIFACT_PATH, FIX_CONTENT, apply_fix, plan_fixes
 from guideline_checker.loader import InstructionFile, SourceType

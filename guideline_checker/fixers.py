@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from guideline_checker.checker import RuleResult
+from guideline_checker.core.detection import RuleResult
 from guideline_checker.distribution import (
     LICENSE_PATH,
     STANDARDS_PATH,

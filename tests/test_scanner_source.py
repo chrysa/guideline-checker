@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from guideline_checker.core.detection.scanner_source import LocalScanner, OriginScanner
 from guideline_checker.gh_client import GhClient, GhResult
-from guideline_checker.scanner_source import LocalScanner, OriginScanner
 
 
 class TestLocalScanner:

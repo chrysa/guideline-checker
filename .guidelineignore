@@ -15,9 +15,10 @@ guideline_checker/proposer.py
 guideline_checker/init_cmd.py
 scripts
 
-# checker.py and cli.py are NOT excluded here (D-0021): a file-level blanket also
-# blinds the numeric measurement rules (py-file-length, py-function-length) to
-# the two longest files in the repo. The pattern rules that legitimately match
-# them carry a per-rule `detect.exclude` instead — `py-no-eval-exec` excludes
-# checker.py (its detector tables hold `eval(`/`exec(`), `py-structured-logging`
-# excludes cli.py (a CLI's stdout IS its interface, so `print(` is correct).
+# core/detection/pattern.py and cli.py are NOT excluded here (D-0021): a file-level
+# blanket also blinds the numeric measurement rules (py-file-length,
+# py-function-length) to the repo's longest files. The pattern rules that
+# legitimately match them carry a per-rule `detect.exclude` instead —
+# `py-no-eval-exec` excludes core/detection/pattern.py (its detector tables hold
+# `eval(`/`exec(`), `py-structured-logging` excludes cli.py (a CLI's stdout IS its
+# interface, so `print(` is correct).

@@ -192,7 +192,7 @@ def test_serialize_results_empty() -> None:
 def test_serialize_results_maps_fields(mocker: MockerFixture) -> None:
     from pathlib import Path
 
-    from guideline_checker.checker import RuleResult, Violation
+    from guideline_checker.core.detection import RuleResult, Violation
     from guideline_checker.web.app import _serialize_results
 
     instr = mocker.MagicMock()

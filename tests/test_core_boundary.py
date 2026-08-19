@@ -40,6 +40,4 @@ def test_core_module_does_not_import_workshop_or_fleet(core_file: Path) -> None:
 
 
 def test_boundary_test_covers_at_least_one_core_file_once_core_is_populated() -> None:
-    # Guards against a silent no-op: once Task 2 lands, this must find real files.
-    # Skipped until core/ has content — flip to a hard assertion after Task 2.
-    pass
+    assert len(_core_python_files()) >= 5, "core/detection/ should now contain multiple modules"

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pytest_mock import MockerFixture
 
-from guideline_checker.checker import RuleResult, Violation
+from guideline_checker.core.detection import RuleResult, Violation
 from guideline_checker.loader import InstructionFile
 from guideline_checker.reporters.sarif import SarifReporter, _sanitize_rule_id
 

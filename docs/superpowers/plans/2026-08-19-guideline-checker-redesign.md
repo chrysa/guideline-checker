@@ -213,6 +213,19 @@ already used in `checker.py`): `PatternCheck`, `_split_patterns`, `_expand_brace
 `_matches_pattern`, `_is_excluded`, `_compile_regex`, `_line_matches`, `_line_passes_regex`,
 `_per_line_violations`, `_file_regex_violations`, `_require_regex_violations`.
 
+Also copy the phrase-table dispatcher and every phrase family it calls into `pattern.py`
+(confirmed by reading `checker.py`: `_build_checks` at line 899 is called from `_evaluate_rule`
+at line 549 — the main per-rule dispatcher that lands in the orchestrator, Step 4 below — and
+aggregates every phrase family into one `tuple[PatternCheck, ...]`; it belongs beside
+`PatternCheck` itself, not in `presence.py`): `_build_checks`, `_debug_output_checks`,
+`_exception_checks`, `_mentions`, `_dangerous_builtin_checks`, `_import_checks`,
+`_annotation_checks`, `_hygiene_checks`, `_docker_checks`, `_typescript_checks`,
+`_python_strict_checks`, `_security_checks`, `_django_checks`. These survive here only as long
+as Task 3, which relocates them out of `pattern.py` into the `derive/` seed translator — do not
+also copy them into `presence.py`, and do not skip copying them here on the assumption Task 3
+will introduce them from scratch: Task 3's diff is a *move*, and it moves them from this exact
+file.
+
 Create `core/detection/crossref.py` containing: `_cross_reference_violations`,
 `_definition_text`.
 
@@ -221,12 +234,9 @@ overwrite it): `_measurement_text`, `_numeric_threshold_violations`, `_function_
 `_check_function_lengths`, `_check_length_rules`.
 
 Create `core/detection/presence.py` containing: `_check_presence_rules`, `_declared_violations`,
-`_freshness_violations`, `_build_checks` (the presence/length dispatcher — **not** the phrase
-dispatcher; `_build_checks` here only wires presence/length rule_lower checks, verify against
-the current body before copying, since `_build_checks` in current `checker.py` line 899 calls
-into the phrase-family functions moved in Task 3 — those calls become imports from
-`guideline_checker.core.derive` once Task 3 lands; leave a `# TODO(Task 3)` comment at each
-call site so Task 3 has an exact grep target).
+`_freshness_violations` — no phrase-family functions here (they all landed in `pattern.py`
+above). If `_check_presence_rules` calls `_build_checks` or any phrase family internally (check
+its body before copying), import that name from `.pattern` rather than duplicating it.
 
 - [ ] **Step 4: Write the orchestrator in `core/detection/__init__.py`**
 
@@ -342,11 +352,14 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'guideline_checker.core
 
 - [ ] **Step 3: Move the phrase functions into `core/derive/seed.py`, changed to emit `RuleDetector`**
 
-Relocate from `core/detection/presence.py` (where Task 2 parked them):
-`_debug_output_checks`, `_exception_checks`, `_mentions`, `_dangerous_builtin_checks`,
-`_import_checks`, `_annotation_checks`, `_hygiene_checks`, `_docker_checks`,
-`_is_hardcoded_credential_rule` (keep only the boolean check here; the scan itself stays in
-`core/detection/scanners.py`), `_typescript_checks`, `_python_strict_checks`,
+Relocate from `core/detection/pattern.py` (where Task 2 parked them — **not** `presence.py`;
+`_build_checks` and its phrase families are pattern-table code, kept beside `PatternCheck` in
+Task 2 specifically so this task moves them once, from one place):
+`_build_checks` (dissolved — its body becomes this step's `derive_seed_rules`, not a
+verbatim copy; see below), `_debug_output_checks`, `_exception_checks`, `_mentions`,
+`_dangerous_builtin_checks`, `_import_checks`, `_annotation_checks`, `_hygiene_checks`,
+`_docker_checks`, `_is_hardcoded_credential_rule` (keep only the boolean check here; the scan
+itself stays in `core/detection/scanners.py`), `_typescript_checks`, `_python_strict_checks`,
 `_security_checks`, `_django_checks`. Each currently returns `tuple[PatternCheck, ...]`; change
 each to return `RuleDetector | None` built from the same forbid/forbid_regex phrase table
 (read the exact `RuleDetector` field names from `guideline_checker/loader.py` first). Add the
@@ -376,11 +389,40 @@ def derive_seed_rules(prose_rule: str) -> RuleDetector | None:
 Run: `pytest tests/test_derive_seed.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Remove the now-dead phrase dispatch from `core/detection/`**
+- [ ] **Step 5: Replace the phrase dispatch call with a direct (uncached) seed-translator call**
 
-Delete the `# TODO(Task 3)` call sites in `core/detection/presence.py` — the orchestrator
-(`core/detection/__init__.py`) no longer calls the phrase functions directly; it only consumes
-`RuleDetector` objects (from YAML or from `derive_seed_rules`, wired in Task 6).
+In `core/detection/__init__.py`'s `_evaluate_rule` (the function that, per Task 2 Step 1's
+grep-confirmed call graph, calls `_build_checks(rule_lower)` at the old `checker.py` line 549),
+replace `checks = _build_checks(rule_lower)` with a call into the seed translator whenever the
+instruction carries no declarative `detector`:
+
+```python
+from guideline_checker.core.derive.seed import derive_seed_rules
+...
+detector = instruction.detector or derive_seed_rules(instruction.rule)
+```
+
+then feed `detector`'s pattern fields into the same per-line/whole-file check path Task 2 built
+in `pattern.py` (`_per_line_violations`/`_file_regex_violations`, which already consume a
+`RuleDetector`-shaped input — verify the exact call signature `_evaluate_rule` used before this
+change and preserve it). This direct, uncached call is intentionally temporary: it keeps
+Task 3's own migration kill-test (Step 6 below) green without waiting on Task 6. Task 6 replaces
+this in-line call with the cache-aware `resolve_rule_detectors` pre-pass and removes the
+`derive_seed_rules(instruction.rule)` fallback from inside `_evaluate_rule` at that point — leave
+a `# TODO(Task 6): replace with cached resolve_rule_detectors pre-pass` comment on this line so
+Task 6 has an exact target. Delete `_build_checks` and the phrase-family functions from
+`core/detection/pattern.py` now that Step 3 relocated their logic into `derive/seed.py`.
+
+- [ ] **Step 5b: Fix `proposer.py`'s now-broken import of the deleted `_build_checks`**
+
+Task 2 pointed `guideline_checker/proposer.py`'s `from guideline_checker.checker import
+_build_checks` at `from guideline_checker.core.detection.pattern import _build_checks` (Task 2
+Step 5's blanket importer fix). This step's deletion of `_build_checks` from `pattern.py` breaks
+that import. Fix it now: change `proposer.py`'s import to
+`from guideline_checker.core.derive.seed import derive_seed_rules` and adapt its call site from
+`_build_checks(rule_lower)` to `derive_seed_rules(rule)`, matching the signature change Step 3
+made. (`proposer.py` still lives at its pre-Task-8 path here — Task 8 only moves the file to
+`workshop/`, it does not touch this particular import again.)
 
 - [ ] **Step 6: Run the full suite — this is the spec's migration kill-test**
 
@@ -697,7 +739,15 @@ match the real dataclass if different.
 Run: `pytest tests/test_generation_loop.py -v`
 Expected: FAIL — `ImportError: cannot import name 'resolve_rule_detectors'`.
 
-- [ ] **Step 3: Implement `resolve_rule_detectors` in `core/detection/__init__.py`**
+- [ ] **Step 3: Remove Task 3's interim direct call, implement `resolve_rule_detectors`**
+
+Find the `# TODO(Task 6): replace with cached resolve_rule_detectors pre-pass` comment Task 3
+left on `_evaluate_rule`'s `detector = instruction.detector or derive_seed_rules(instruction.rule)`
+line. Delete that fallback — `_evaluate_rule` goes back to only reading `instruction.detector`
+(never calling `derive_seed_rules` itself); resolution moves to the pre-pass below, called once
+by `_cmd_check` (Step 5) before `run_checks`/`_evaluate_rule` ever runs, so every instruction
+`_evaluate_rule` sees already carries its final detector (declarative, cached, or freshly
+derived-and-cached) or `None` (genuinely advisory).
 
 ```python
 def resolve_rule_detectors(
@@ -886,12 +936,11 @@ git mv guideline_checker/persist.py guideline_checker/workshop/persist.py
 git mv guideline_checker/interpret.py guideline_checker/workshop/interpret.py
 ```
 
-`proposer.py` currently imports `from guideline_checker.checker import _build_checks` (dead
-after Task 2/3 — `_build_checks`'s phrase logic is now `derive.seed.derive_seed_rules`).
-Update this import to `from guideline_checker.core.derive.seed import derive_seed_rules` and
-fix the call site to match the new function's signature (`derive_seed_rules(rule: str) ->
-RuleDetector | None`, not `_build_checks(rule_lower: str) -> tuple[PatternCheck, ...]` — read
-how `proposer.py` used the old return value and adapt).
+`proposer.py`'s import of the phrase translator was already fixed to
+`from guideline_checker.core.derive.seed import derive_seed_rules` by Task 3 Step 5b — this
+task only relocates the file itself; no further change to that particular import is needed
+here. Just confirm it after the move: `grep -n "derive.seed\|_build_checks" workshop/proposer.py`
+should show only the `core.derive.seed` import, never `_build_checks`.
 
 - [ ] **Step 3: Fix every other importer from Step 1's list**
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from guideline_checker.kinds import CheckKind, kind_of_detector, kind_of_phrase
+from guideline_checker.core.detection.kinds import CheckKind, kind_of_detector, kind_of_phrase
 from guideline_checker.loader import RuleDetector
 
 

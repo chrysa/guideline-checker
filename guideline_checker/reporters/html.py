@@ -9,7 +9,7 @@ from datetime import UTC
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from guideline_checker.checker import RuleResult, Violation
+from guideline_checker.core.detection import RuleResult, Violation
 
 if TYPE_CHECKING:
     from guideline_checker.linters import LinterResult, LinterViolation

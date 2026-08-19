@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from guideline_checker.checker import Violation
+from guideline_checker.core.detection import Violation
 
 CHECK_IDS: tuple[str, ...] = (
     "repo-inactive",

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from guideline_checker.checker import RuleResult, Violation
+from guideline_checker.core.detection import RuleResult, Violation
 from guideline_checker.loader import InstructionFile, RuleDetector, SourceType
 from guideline_checker.rule_health import (
     HealthState,
@@ -197,7 +197,7 @@ def test_missing_provenance_defaults_to_empty() -> None:
 
 def test_health_carries_the_check_kind() -> None:
     """ADR D-0020: every rule reports its generic mechanism (kind)."""
-    from guideline_checker.kinds import CheckKind
+    from guideline_checker.core.detection import CheckKind
 
     rule = "no pickle loads"
     instr = _instruction("python", [rule], {rule: RuleDetector(forbid=("pickle.loads(",))})
@@ -206,7 +206,7 @@ def test_health_carries_the_check_kind() -> None:
 
 
 def test_dead_rule_kind_is_advisory() -> None:
-    from guideline_checker.kinds import CheckKind
+    from guideline_checker.core.detection import CheckKind
 
     rule = "Structure prompts with XML tags"  # YAML rule, no detector -> dead
     instr = _instruction("ai", [rule])

@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
-from guideline_checker.checker import RuleResult, run_checks
+from guideline_checker.core.detection import RuleResult, run_checks
 from guideline_checker.gh_client import GhClient
 from guideline_checker.reporters.html import HtmlReporter
 

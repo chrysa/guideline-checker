@@ -48,6 +48,7 @@ rules:
   detect:
     exclude:
     - guideline_checker/cli.py
+    - guideline_checker/core/detection/pattern.py
     forbid:
     - print(
     - pprint(
@@ -84,7 +85,7 @@ rules:
 - category: security
   detect:
     exclude:
-    - guideline_checker/checker.py
+    - guideline_checker/core/detection/pattern.py
     forbid:
     - eval(
     - exec(
@@ -94,6 +95,8 @@ rules:
   severity: error
 - category: security
   detect:
+    exclude:
+    - guideline_checker/core/detection/pattern.py
     forbid_regex:
     - shell\s*=\s*True
   id: py-no-shell-true

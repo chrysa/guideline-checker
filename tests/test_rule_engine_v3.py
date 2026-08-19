@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from guideline_checker.checker import (
+from guideline_checker.core.detection import run_checks
+from guideline_checker.core.detection.numeric import _check_length_rules
+from guideline_checker.core.detection.pattern import (
     DISABLE_COMMENT,
     _build_checks,
-    _check_length_rules,
     _python_strict_checks,
     _security_checks,
     _typescript_checks,
-    run_checks,
 )
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────

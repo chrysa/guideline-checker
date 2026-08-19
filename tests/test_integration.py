@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.checker import run_checks
 from guideline_checker.cli import main
+from guideline_checker.core.detection import run_checks
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "real_project"
 FIXTURE_INSTRUCTIONS = FIXTURE_ROOT / ".github" / "instructions"

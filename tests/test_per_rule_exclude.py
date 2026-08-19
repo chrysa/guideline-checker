@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from guideline_checker.checker import run_checks
+from guideline_checker.core.detection import run_checks
 
 _CATEGORIES = "categories:\n  - id: correctness\n    description: x\n"
 

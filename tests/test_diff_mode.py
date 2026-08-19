@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 from pytest_mock import MockerFixture
 
-from guideline_checker.checker import run_checks
 from guideline_checker.cli import _get_diff_files, main
+from guideline_checker.core.detection import run_checks
 
 
 def _make_project(tmp_path: Path) -> tuple[Path, Path]:

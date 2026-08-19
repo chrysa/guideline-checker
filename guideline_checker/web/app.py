@@ -20,7 +20,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from guideline_checker.checker import RuleResult, run_checks
+from guideline_checker.core.detection import RuleResult, run_checks
 from guideline_checker.interpret import DerivedRule, interpret_rules
 from guideline_checker.loader import InstructionFile, RuleDetector, load_all_sources
 from guideline_checker.persist import apply_detector, find_rule_id_for_text, write_derived_ruleset

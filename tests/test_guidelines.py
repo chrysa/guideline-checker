@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.checker import run_checks
+from guideline_checker.core.detection import run_checks
 from guideline_checker.guidelines import (
     GuidelineError,
     _target_to_glob,

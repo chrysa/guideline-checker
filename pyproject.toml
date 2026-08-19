@@ -146,8 +146,12 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN", "S101", "S104"]
 "tests/fixtures/**" = ["ANN", "S101", "S104", "S307", "S110", "E722", "S108"]
-# checker.py embeds detection patterns (e.g. "0.0.0.0") intentionally — not a real binding
-"guideline_checker/checker.py" = ["S104"]
+# pattern.py embeds detection patterns (e.g. "0.0.0.0") intentionally — not a real binding
+"guideline_checker/core/detection/pattern.py" = ["S104"]
+# __init__.py defines Violation/RuleResult before importing .pattern/.numeric/.presence,
+# which themselves construct Violation — the submodule imports must come after those
+# classes are defined to avoid a real circular import, hence E402 here is deliberate.
+"guideline_checker/core/detection/__init__.py" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"

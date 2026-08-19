@@ -21,7 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-from guideline_checker.checker import _build_checks
+from guideline_checker.core.detection.pattern import _build_checks
 from guideline_checker.loader import RuleDetector
 
 _JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
