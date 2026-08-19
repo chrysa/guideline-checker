@@ -270,6 +270,9 @@ graphify-out/
 .claude/settings.local.json
 .claude/*.local.md
 
+# Superpowers SDD isolated workspaces
+.worktrees/
+
 # OS / editor
 .DS_Store
 Thumbs.db
