@@ -65,6 +65,10 @@ dev = [
     "uvicorn[standard]>=0.34",
 ]
 e2e = ["playwright>=1.48", "pytest-playwright>=0.5"]
+workshop = []  # LLM detector authoring (proposer/persist/interpret) — no extra deps today;
+               # reserved for a future LLM SDK so it never lands in the default install.
+fleet = []     # gh-backed multi-repo governance — no extra deps today (gh_client shells to
+               # the `gh` CLI); reserved so a future PyGithub dependency never lands by default.
 
 [project.scripts]
 guideline-checker = "guideline_checker.cli:main"
