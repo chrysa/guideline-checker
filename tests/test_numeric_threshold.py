@@ -8,13 +8,12 @@ against.
 
 from __future__ import annotations
 
-import inspect
+import re
 from pathlib import Path
 
 import pytest
 
 from guideline_checker.core.detection import CheckKind, Violation, kind_of_detector
-from guideline_checker.core.detection import numeric as numeric_module
 from guideline_checker.core.detection.numeric import _numeric_threshold_violations
 from guideline_checker.guidelines import GuidelineError, load_yaml_guidelines
 from guideline_checker.loader import NumericThreshold, RuleDetector
@@ -185,20 +184,19 @@ def test_the_shipped_referential_arms_the_numeric_threshold_kind() -> None:
 def test_the_engine_states_no_bound_of_its_own() -> None:
     """The bounds live in the host referential; restating one in engine code is the drift.
 
-    Scoped to the pure measurers (the ``metrics.py``-era primitives, now merged into
-    ``core/detection/numeric.py``): they take only ``source`` and answer *how much*,
+    The pure measurers (the ``metrics.py``-era primitives, now merged into
+    ``core/detection/numeric.py``) take only ``source`` and answer *how much*,
     never *too much*. The violation-building functions merged alongside them
     (``_numeric_threshold_violations`` and friends) legitimately read the host's own
-    ``max_value``/``limit`` to compare against — that is ADR D-0021, not drift.
+    ``max_value`` as an attribute (``threshold.max_value``) to compare against — that is
+    ADR D-0021, not drift. This test asserts that no hardcoded bound constant exists in
+    the engine file, and that bare ``max_value`` (not preceded by a dot) never appears.
     """
-    for measurer in (
-        numeric_module.measure_file_lines,
-        numeric_module.measure_function_lines,
-        numeric_module.measure_branches,
-    ):
-        source = inspect.getsource(measurer)
-        assert "500" not in source
-        assert "max_value" not in source
+    engine_source = (_REPO_ROOT / "guideline_checker" / "core" / "detection" / "numeric.py").read_text(encoding="utf-8")
+    # No hardcoded bound constant anywhere in the file.
+    assert "500" not in engine_source
+    # The bare word ``max_value`` must not appear; only ``.max_value`` (attribute access) is allowed.
+    assert not re.search(r"(?<!\.)\bmax_value\b", engine_source)
 
 
 # ─── D-0021 blind spot: the numeric rules must see the repo's longest files ────
