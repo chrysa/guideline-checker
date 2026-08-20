@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from guideline_checker.core.detection import RuleResult, Violation
+from guideline_checker.core.health import HealthState, RuleHealth
 from guideline_checker.loader import InstructionFile
 from guideline_checker.reporters.json_reporter import JsonReporter
 
@@ -30,6 +31,44 @@ def test_json_reporter_creates_file(tmp_path: Path) -> None:
     output = tmp_path / "report.json"
     reporter.write(results=[result], output_path=output, root=tmp_path)
     assert output.exists()
+
+
+def test_json_reporter_includes_health(tmp_path: Path) -> None:
+    """A passed health list must appear in result["health"]["rules"] (Task 6
+    fix round 1, Finding 3)."""
+    instruction = _make_instruction(tmp_path)
+    result = RuleResult(instruction=instruction, violations=[], files_checked=1)
+    health = [
+        RuleHealth(
+            rule="No print() calls",
+            instruction="test.instructions.md",
+            state=HealthState.ARMED,
+            has_declarative_detector=False,
+            has_phrase_detection=True,
+            fire_count=0,
+            reason="Valid phrase-derived check, no match in the current scan.",
+        ),
+        RuleHealth(
+            rule="No bare except",
+            instruction="test.instructions.md",
+            state=HealthState.DEAD,
+            has_declarative_detector=False,
+            has_phrase_detection=False,
+            fire_count=0,
+            reason="YAML rule advertised as enforceable but carries no detector — fix or remove it.",
+        ),
+    ]
+    reporter = JsonReporter()
+    output = tmp_path / "report.json"
+    reporter.write(results=[result], output_path=output, root=tmp_path, health=health)
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert len(data["health"]["rules"]) == 2
+    rules_by_name = {r["rule"]: r for r in data["health"]["rules"]}
+    assert rules_by_name["No print() calls"]["state"] == "armed"
+    assert rules_by_name["No bare except"]["state"] == "dead"
+    assert data["health"]["summary"]["armed"] == 1
+    assert data["health"]["summary"]["dead"] == 1
 
 
 def test_json_reporter_valid_json(tmp_path: Path) -> None:

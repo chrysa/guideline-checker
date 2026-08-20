@@ -15,6 +15,10 @@ guideline_checker/proposer.py
 guideline_checker/init_cmd.py
 scripts
 
+# resolve_rule_detectors' local ephemeral cache (core/derive/cache.py) — its
+# JSON entries contain the raw pattern strings they cache, not source code.
+.guideline-cache
+
 # core/derive/seed.py and cli.py are NOT excluded here (D-0021): a file-level
 # blanket also blinds the numeric measurement rules (py-file-length,
 # py-function-length) to the repo's longest files. The pattern rules that

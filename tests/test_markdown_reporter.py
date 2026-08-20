@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from guideline_checker.core.detection import RuleResult, Violation
+from guideline_checker.core.health import HealthState, RuleHealth
 from guideline_checker.loader import InstructionFile
 from guideline_checker.reporters.markdown import MarkdownReporter
 
@@ -27,6 +28,45 @@ def test_markdown_reporter_creates_file(tmp_path: Path) -> None:
     out = tmp_path / "report.md"
     MarkdownReporter().write(results=[result], output_path=out, root=tmp_path)
     assert out.exists()
+
+
+def test_markdown_reporter_renders_health_before_violations(tmp_path: Path) -> None:
+    """Rule health must render, and must lead the violation sections (Task 6
+    fix round 1, Finding 3)."""
+    instr = _make_instruction(tmp_path)
+    violation = _make_violation(tmp_path)
+    result = RuleResult(instruction=instr, violations=[violation], files_checked=1)
+    health = [
+        RuleHealth(
+            rule="No eval",
+            instruction="python.instructions.md",
+            state=HealthState.PROVEN,
+            has_declarative_detector=False,
+            has_phrase_detection=True,
+            fire_count=1,
+            reason="Fires on 1 line(s) via phrase-derived check.",
+        ),
+        RuleHealth(
+            rule="No bare except",
+            instruction="python.instructions.md",
+            state=HealthState.DEAD,
+            has_declarative_detector=False,
+            has_phrase_detection=False,
+            fire_count=0,
+            reason="YAML rule advertised as enforceable but carries no detector — fix or remove it.",
+        ),
+    ]
+    out = tmp_path / "report.md"
+    MarkdownReporter().write(results=[result], output_path=out, root=tmp_path, health=health)
+    content = out.read_text(encoding="utf-8")
+
+    assert "## 🩺 Rule Health" in content
+    assert "No eval" in content
+    assert "No bare except" in content
+
+    health_pos = content.index("## 🩺 Rule Health")
+    violations_pos = content.index("## 📋 Details by Guideline")
+    assert health_pos < violations_pos
 
 
 def test_markdown_report_has_header(tmp_path: Path) -> None:

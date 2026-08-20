@@ -62,6 +62,11 @@ IGNORE_DIRS = {
     ".fleet",
     # git worktree copies (e.g. .claude/worktrees/) — full repo duplicates, not source
     "worktrees",
+    # resolve_rule_detectors' local ephemeral cache (core/derive/cache.py) — its
+    # JSON entries literally contain the pattern strings they cache (e.g. the
+    # print-call forbid pattern), which would otherwise flag the cache as a
+    # violation of the very rules it caches detectors for.
+    ".guideline-cache",
 }
 
 
@@ -510,8 +515,8 @@ def _evaluate_rule(
     root: Path | None = None,
 ) -> list[Violation]:
     """Evaluate a rule against file lines: a seed-derived detector from its prose
-    plus, when the rule carries one, its declarative detector. Both paths can
-    fire."""
+    plus, when the rule carries a declarative detector that is not merely that
+    same seed derivation, the declarative detector too."""
     violations: list[Violation] = []
     rule_lower = rule.lower()
 
@@ -525,9 +530,9 @@ def _evaluate_rule(
 
     # Supplementary seed check — always runs alongside instruction.detector
     # (whether YAML-declared or filled in by resolve_rule_detectors' cache-first
-    # pre-pass), never replaced by it (Task 6 controller ruling). See
-    # tests/test_guidelines.py::TestRuleInheritance::test_abstract_scalar_only_template,
-    # which depends on the declared detector and this seed check firing together.
+    # pre-pass). See tests/test_guidelines.py::TestRuleInheritance::
+    # test_abstract_scalar_only_template, which depends on the declared
+    # detector and this seed check firing together.
     #
     # Evaluated as independent per-pattern checks (own severity/match_in_comments
     # each), not merged into one RuleDetector: merging would collapse per-pattern
@@ -538,7 +543,7 @@ def _evaluate_rule(
     # Imported here, not at module level: core.derive.seed imports PatternCheck
     # from core.detection.pattern, and core.detection (this package) is pattern's
     # parent — a module-level import here would form a genuine load-order cycle.
-    from guideline_checker.core.derive.seed import derive_seed_pattern_checks
+    from guideline_checker.core.derive.seed import derive_seed_pattern_checks, derive_seed_rules
 
     seed_checks = derive_seed_pattern_checks(rule)
     if seed_checks:
@@ -546,7 +551,27 @@ def _evaluate_rule(
 
     violations.extend(_credential_scan_violations(file_path, lines, rule, root))
 
-    if detector is not None:
+    # A primary detector that is *content-equal* to what the seed table would
+    # derive for this exact prose is, by construction, exactly what
+    # resolve_rule_detectors' cache-first pre-pass filled in (spec §3.3) —
+    # never a genuinely distinct YAML/cache declaration. Running the
+    # declarative path on top of the seed check above in that case would
+    # double-count every match (Task 6 fix round 1 finding) and — because
+    # derive_seed_rules collapses each pattern's own match_in_comments into
+    # a single OR'd flag on the merged RuleDetector — would also falsely let
+    # a code-only pattern (e.g. a print call) match inside comments whenever
+    # the same rule also arms a comment-scoped pattern (e.g. TODO). Skipping it
+    # here leaves the per-pattern seed check above as the sole (and correct)
+    # evaluation for this rule.
+    #
+    # A detector that differs from the seed derivation — a real YAML/cache
+    # override carrying its own forbid/regex/ast/scan/cross-reference rules,
+    # or the same phrase with different match_in_comments/severity — still
+    # runs here in full: see test_abstract_scalar_only_template, which relies
+    # on exactly this branch to fire both the declared detector (a plain
+    # ``forbid=("TODO",)`` with no ``match_in_comments``) and this seed check
+    # together.
+    if detector is not None and detector != derive_seed_rules(rule):
         violations.extend(_declared_violations(file_path, lines, rule, detector, root))
 
     return violations

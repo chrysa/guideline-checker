@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 from pytest_mock import MockerFixture
 
-from guideline_checker.cli import build_parser, main
+from guideline_checker.cli import _scan, build_parser, main
+from guideline_checker.core.derive.seed import derive_seed_rules
 
 
 def _make_project(tmp_path: Path, *, violation: bool = True) -> Path:
@@ -162,6 +163,27 @@ def test_main_check_fail_on_warning_with_warning_only(tmp_path: Path) -> None:
     root = _make_project(tmp_path, violation=True)  # print() → severity warning
     code = main(["check", "--root", str(root), "--fail-on", "warning"])
     assert code == 1
+
+
+def test_scan_resolves_rule_detectors_like_cmd_check(tmp_path: Path) -> None:
+    """_scan (the --fix post-fix re-check path) must resolve missing primary
+    detectors the same way _cmd_check does, so both paths agree on which
+    rules are detectable (Task 6 fix round 1, Finding 4).
+
+    "No print() calls" has no YAML detect: block (it's a markdown instruction)
+    but is recognised by the seed table — resolve_rule_detectors should fill
+    its primary detector during _scan, not leave it missing.
+    """
+    root = _make_project(tmp_path, violation=True)
+    args = build_parser().parse_args(["check", "--root", str(root)])
+
+    results = _scan(args, root)
+
+    matching = [r for r in results if "No print() calls" in r.instruction.rules]
+    assert matching
+    detector = matching[0].instruction.rule_detectors.get("No print() calls")
+    assert detector is not None
+    assert detector == derive_seed_rules("No print() calls")
 
 
 # ─── web subcommand ────────────────────────────────────────────────────────────

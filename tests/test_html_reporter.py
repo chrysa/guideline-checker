@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from guideline_checker.core.detection import RuleResult, Violation
+from guideline_checker.core.health import HealthState, RuleHealth
 from guideline_checker.loader import InstructionFile
 from guideline_checker.reporters.html import HtmlReporter
 
@@ -32,6 +33,52 @@ def test_html_reporter_creates_file(tmp_path: Path) -> None:
     content = output.read_text(encoding="utf-8")
     assert "<!DOCTYPE html>" in content
     assert "Guideline Compliance Report" in content
+
+
+def test_html_reporter_renders_health_before_violations(tmp_path: Path) -> None:
+    """Rule health must render, and must lead the violation sections (Task 6
+    fix round 1, Finding 3)."""
+    instruction = _make_instruction(tmp_path)
+    violation = Violation(
+        file=tmp_path / "src" / "app.py",
+        line_number=5,
+        line_content='    print("hello")',
+        rule="No print() calls",
+        severity="warning",
+    )
+    result = RuleResult(instruction=instruction, violations=[violation], files_checked=1)
+    health = [
+        RuleHealth(
+            rule="No print() calls",
+            instruction="test.instructions.md",
+            state=HealthState.PROVEN,
+            has_declarative_detector=False,
+            has_phrase_detection=True,
+            fire_count=1,
+            reason="Fires on 1 line(s) via phrase-derived check.",
+        ),
+        RuleHealth(
+            rule="No bare except",
+            instruction="test.instructions.md",
+            state=HealthState.DEAD,
+            has_declarative_detector=False,
+            has_phrase_detection=False,
+            fire_count=0,
+            reason="YAML rule advertised as enforceable but carries no detector — fix or remove it.",
+        ),
+    ]
+    reporter = HtmlReporter()
+    output = tmp_path / "report.html"
+    reporter.write(results=[result], output_path=output, root=tmp_path, health=health)
+    content = output.read_text(encoding="utf-8")
+
+    assert 'id="rule-health"' in content
+    assert "No print() calls" in content
+    assert "No bare except" in content
+
+    health_pos = content.index('id="rule-health"')
+    violations_pos = content.index('id="rule-0"')
+    assert health_pos < violations_pos
 
 
 def test_html_reporter_shows_violations(tmp_path: Path) -> None:

@@ -593,11 +593,22 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 
 def _scan(args: argparse.Namespace, root: Path) -> list[RuleResult]:
-    """Run a full (non-diff) scan with the current args — used to re-check after autofix."""
+    """Run a full (non-diff) scan with the current args — used to re-check after autofix.
+
+    Runs the same resolve_rule_detectors pre-pass as _cmd_check (spec §3.3) before
+    checking, so the post-fix gate sees the same resolved detector set as the
+    initial check — otherwise the two could disagree on which rules are actually
+    detectable (Task 6 fix round 1, Finding 4).
+    """
+    use_all_sources = not args.no_multi_source
+    instructions_dir = args.instructions or root / ".github" / "instructions"
+    instructions: list[InstructionFile] = (
+        load_all_sources(root) if use_all_sources else load_instructions(instructions_dir)
+    )
+    instructions = resolve_rule_detectors(root, instructions, _ENGINE_VERSION)
     return run_checks(
         root=root,
-        instructions_dir=args.instructions or root / ".github" / "instructions",
-        all_sources=not args.no_multi_source,
+        instructions=instructions,
         exclude=args.exclude,
         max_file_size=args.max_file_size,
     )

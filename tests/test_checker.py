@@ -499,6 +499,38 @@ class TestCollectFiles:
         assert not any("node_modules" in s for s in paths_str)
         assert any("src.py" in s for s in paths_str)
 
+    def test_collect_files_skips_guideline_cache(self, tmp_path: Path) -> None:
+        """_collect_files should not descend into .guideline-cache (Task 6 fix round 1,
+        Finding 2): its JSON entries hold raw pattern strings, not source code."""
+        cache_dir = tmp_path / ".guideline-cache"
+        cache_dir.mkdir()
+        (cache_dir / "deadbeef.json").write_text('{"forbid": ["print("]}', encoding="utf-8")
+        (tmp_path / "src.py").write_text("x = 1\n")
+        result = _collect_files(tmp_path)
+        paths_str = [str(p) for p in result]
+        assert not any(".guideline-cache" in s for s in paths_str)
+        assert any("src.py" in s for s in paths_str)
+
+    def test_run_checks_ignores_guideline_cache_contents(self, tmp_path: Path) -> None:
+        """A cached detector's own pattern literal (e.g. "print(") must not be
+        flagged as a violation of the rule it was cached for."""
+        from guideline_checker.core.derive.cache import store
+        from guideline_checker.loader import RuleDetector
+
+        root = tmp_path / "project"
+        root.mkdir()
+        inst_dir = root / ".github" / "instructions"
+        inst_dir.mkdir(parents=True)
+        (inst_dir / "no_print.instructions.md").write_text(
+            '---\napplyTo: "**/*"\ndescription: "no print"\n---\n\n- No print() calls\n',
+            encoding="utf-8",
+        )
+        (root / "app.py").write_text("def hello():\n    return 1\n", encoding="utf-8")
+        store(root, "some-cache-key", RuleDetector(forbid=("print(",)))
+        results = run_checks(root=root, instructions_dir=inst_dir, all_sources=False)
+        violations = [v for r in results for v in r.violations]
+        assert not any(".guideline-cache" in str(v.file) for v in violations)
+
     def test_run_checks_ignores_generated_report_files(self, tmp_path: Path) -> None:
         """run_checks should not flag violations inside guideline-report.md."""
         root = tmp_path / "project"
