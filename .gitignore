@@ -264,6 +264,7 @@ playwright-report/
 graphify-out/
 .codegraph/
 .import_linter_cache/
+.guideline-cache/
 
 # Claude Code local state
 .claude/worktrees/
