@@ -15,7 +15,7 @@ from typing import NamedTuple
 
 from guideline_checker import __version__
 from guideline_checker.core.detection import RuleResult, resolve_rule_detectors, run_checks
-from guideline_checker.core.health import RuleHealth, compute_rule_health
+from guideline_checker.core.health import RuleHealth, compute_rule_health, summarize
 from guideline_checker.gh_client import GhClient
 from guideline_checker.loader import InstructionFile, load_all_sources, load_instructions
 from guideline_checker.reporters.html import HtmlReporter
@@ -192,6 +192,15 @@ def build_parser() -> argparse.ArgumentParser:
     _add_check_subcommand(sub)
 
     _add_fix_subcommand(sub)
+
+    # ── health subcommand ────────────────────────────────────────────────────
+    health_cmd = sub.add_parser("health", help="Report rule-health only — no violation scan.")
+    health_cmd.add_argument(
+        "--root",
+        type=Path,
+        default=Path("."),
+        help="Project root directory (default: current directory).",
+    )
 
     # ── synthesize subcommand ────────────────────────────────────────────────
     syn_cmd = sub.add_parser(
@@ -529,6 +538,25 @@ def _add_fix_subcommand(sub: argparse._SubParsersAction) -> None:  # type: ignor
     )
     # Reporting/gating knobs the check flow reads but the fix path does not surface.
     fix_cmd.set_defaults(fix=True, fail_on=None, diff=False, baseline=None, write_baseline=None, linters=None)
+
+
+def _cmd_health(args: argparse.Namespace) -> int:
+    """Report the rule-health audit only — no violation scan (spec §3.5).
+
+    Informational, not a gate: always exits 0. Runs the same
+    ``resolve_rule_detectors`` cache-first pre-pass as ``check`` so the health
+    matrix reflects cache-filled detectors, not just declared ones — a rule
+    that ``check`` arms via a derived detector must not show up here as dead
+    or advisory.
+    """
+    root: Path = args.root.resolve()
+    instructions = load_all_sources(root)
+    instructions = resolve_rule_detectors(root, instructions, _ENGINE_VERSION)
+    health = compute_rule_health(instructions, results=[])
+    counts = summarize(health)
+    for state, count in counts.items():
+        print(f"{state}: {count}")
+    return 0
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
@@ -1133,6 +1161,7 @@ def _cmd_push(args: argparse.Namespace) -> int:
 # and `fix` sharing `check`'s handler is visible here instead of buried in control flow.
 _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "init": _cmd_init,
+    "health": _cmd_health,
     "synthesize": _cmd_synthesize,
     "web": _cmd_web,
     "central": _cmd_central,

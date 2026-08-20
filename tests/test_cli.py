@@ -543,3 +543,22 @@ class TestConfigCli:
         # Backlog is baselined via the config-provided path -> gate passes despite fail_on=warning.
         code = main(["check", "--root", str(root), "--output", str(tmp_path / "r2.html")])
         assert code == 0
+
+
+def test_health_command_never_fails_and_prints_state_counts(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / "CLAUDE.md").write_text(
+        "# Rules\n\n- No print statements.\n- Follow the style guide.\n",
+        encoding="utf-8",
+    )
+    exit_code = main(["health", "--root", str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    # "No print statements." maps to a phrase-derived detector -> armed (no scan run).
+    assert "armed: 1" in captured.out
+    # "Follow the style guide." has no recognised detector on a Markdown source -> advisory.
+    assert "advisory: 1" in captured.out
+    # No scan results are passed in, so nothing can be proven, and CLAUDE.md rules
+    # are never reported dead (dead is reserved for the YAML referential).
+    assert "proven: 0" in captured.out
+    assert "dead: 0" in captured.out
