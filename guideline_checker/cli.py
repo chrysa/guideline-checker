@@ -13,9 +13,17 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
-from guideline_checker.core.detection import RuleResult, run_checks
+from guideline_checker import __version__
+from guideline_checker.core.detection import RuleResult, resolve_rule_detectors, run_checks
+from guideline_checker.core.health import RuleHealth, compute_rule_health
 from guideline_checker.gh_client import GhClient
+from guideline_checker.loader import InstructionFile, load_all_sources, load_instructions
 from guideline_checker.reporters.html import HtmlReporter
+
+# The generation loop's cache key includes this so a tool upgrade that changes
+# derivation heuristics invalidates stale cache entries (spec §3.3/§3.4)
+# instead of silently reusing a detector an older engine derived.
+_ENGINE_VERSION = __version__
 
 
 def _add_check_subcommand(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
@@ -449,24 +457,29 @@ def _run_linters_for_check(args: argparse.Namespace, root: Path) -> list:  # typ
     return linter_results
 
 
-def _write_extra_reports(args: argparse.Namespace, results: list, root: Path) -> None:  # type: ignore[type-arg]
+def _write_extra_reports(
+    args: argparse.Namespace,
+    results: list,  # type: ignore[type-arg]
+    root: Path,
+    health: list[RuleHealth] | None = None,
+) -> None:
     """Write JSON / SARIF / Markdown reports when the corresponding flags are set."""
     if args.json:
         from guideline_checker.reporters.json_reporter import JsonReporter
 
-        JsonReporter().write(results=results, output_path=args.json, root=root)
+        JsonReporter().write(results=results, output_path=args.json, root=root, health=health)
         print(f"[guideline-checker] JSON report written to: {args.json}")
 
     if args.sarif:
         from guideline_checker.reporters.sarif import SarifReporter
 
-        SarifReporter().write(results=results, output_path=args.sarif, root=root)
+        SarifReporter().write(results=results, output_path=args.sarif, root=root, health=health)
         print(f"[guideline-checker] SARIF report written to: {args.sarif}")
 
     if args.markdown:
         from guideline_checker.reporters.markdown import MarkdownReporter
 
-        MarkdownReporter().write(results=results, output_path=args.markdown, root=root)
+        MarkdownReporter().write(results=results, output_path=args.markdown, root=root, health=health)
         print(f"[guideline-checker] Markdown report written to: {args.markdown}")
 
 
@@ -550,11 +563,19 @@ def _cmd_check(args: argparse.Namespace) -> int:
     if diff_files is not None and len(diff_files) == 0:
         return 0
 
+    # Generation loop pre-pass (spec §3.3): fill in each rule's missing
+    # primary detector, cache-first, before checking. run_checks then reuses
+    # this exact (resolved) instruction list instead of reloading its own —
+    # reporting below reuses it again for the rule-health matrix.
+    instructions: list[InstructionFile] = (
+        load_all_sources(root) if use_all_sources else load_instructions(instructions_dir)
+    )
+    instructions = resolve_rule_detectors(root, instructions, _ENGINE_VERSION)
+
     results = run_checks(
         root=root,
-        instructions_dir=instructions_dir,
+        instructions=instructions,
         diff_files=diff_files,
-        all_sources=use_all_sources,
         exclude=args.exclude,
         max_file_size=args.max_file_size,
     )
@@ -676,17 +697,22 @@ def _report_and_gate(args: argparse.Namespace, results: list[RuleResult], root: 
     """Write reports for ``results`` and return the exit code per ``--fail-on``."""
     linter_results = _run_linters_for_check(args, root)
 
+    # Rule health leads the report (spec: it's the headline, not a tile) — computed
+    # and handed to every reporter ahead of the violation list.
+    health = compute_rule_health([r.instruction for r in results], results)
+
     reporter = HtmlReporter()
     report_path: Path = args.output
     reporter.write(
         results=results,
         output_path=report_path,
         root=root,
+        health=health,
         linter_results=linter_results,
     )
     print(f"[guideline-checker] Report written to: {report_path}")
 
-    _write_extra_reports(args, results, root)
+    _write_extra_reports(args, results, root, health)
 
     violation_count = sum(len(r.violations) for r in results)
     error_count = sum(sum(1 for v in r.violations if v.severity == "error") for r in results)

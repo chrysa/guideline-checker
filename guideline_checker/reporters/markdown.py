@@ -7,11 +7,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from guideline_checker.core.detection import RuleResult, Violation
+from guideline_checker.core.health import HealthState, RuleHealth, summarize
 
 _SEVERITY_EMOJI = {
     "error": "🔴",
     "warning": "🟡",
     "info": "🔵",
+}
+
+_HEALTH_EMOJI = {
+    HealthState.PROVEN: "✅",
+    HealthState.ARMED: "🔵",
+    HealthState.DEAD: "💀",
+    HealthState.ADVISORY: "⚪",
+    HealthState.SUSPECT: "🟠",
 }
 
 
@@ -47,6 +56,37 @@ class MarkdownReporter:
             f"| **Total violations** | **{total_violations}** |",
             "",
         ]
+
+    @staticmethod
+    def _health_lines(health: list[RuleHealth] | None) -> list[str]:
+        """Build the rule-health matrix lines — leads the report, ahead of violations.
+
+        Renders nothing when no health data was computed (backward compatible).
+        """
+        if not health:
+            return []
+
+        counts = summarize(health)
+        state_order = {state: i for i, state in enumerate(HealthState)}
+        ranked = sorted(health, key=lambda h: (state_order[h.state], h.instruction, h.rule))
+
+        lines: list[str] = [
+            "## 🩺 Rule Health",
+            "",
+            " ".join(f"**{counts.get(state.value, 0)} {_HEALTH_EMOJI[state]} {state.value}**" for state in HealthState),
+            "",
+            "| State | Instruction | Rule | Kind | Fires | Reason |",
+            "|-------|-------------|------|------|------:|--------|",
+        ]
+        for h in ranked:
+            rule = h.rule.replace("|", "\\|")
+            reason = h.reason.replace("|", "\\|")
+            lines.append(
+                f"| {_HEALTH_EMOJI[h.state]} {h.state.value} | {h.instruction} | {rule} | {h.kind} | "
+                f"{h.fire_count} | {reason} |"
+            )
+        lines.append("")
+        return lines
 
     @staticmethod
     def _audit_overview_lines(results: list[RuleResult]) -> list[str]:
@@ -125,10 +165,17 @@ class MarkdownReporter:
             lines.append("")
         return lines
 
-    def write(self, results: list[RuleResult], output_path: Path, root: Path) -> None:
+    def write(
+        self,
+        results: list[RuleResult],
+        output_path: Path,
+        root: Path,
+        health: list[RuleHealth] | None = None,
+    ) -> None:
         """Write the Markdown report to output_path."""
         generated_at = datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M UTC")
         lines = self._summary_lines(results, root, generated_at)
+        lines += self._health_lines(health)
         lines += self._audit_overview_lines(results)
         lines += ["## 📋 Details by Guideline", ""]
         for result in results:

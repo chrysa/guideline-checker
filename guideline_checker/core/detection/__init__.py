@@ -197,6 +197,7 @@ def run_checks(
     all_sources: bool = True,
     exclude: list[str] | None = None,
     max_file_size: int | None = None,
+    instructions: list[InstructionFile] | None = None,
 ) -> list[RuleResult]:
     """Check all files in root against instruction files.
 
@@ -218,8 +219,16 @@ def run_checks(
             resolved from the ``GUIDELINE_MAX_FILE_SIZE`` env var, else the 200 KiB
             default. Files above the limit are skipped as generated/compiled artefacts.
             Ignored when ``diff_files`` is provided (the diff list is checked as-is).
+        instructions: Pre-loaded instructions to use as-is, skipping this
+            function's own discovery. Lets a caller run :func:`resolve_rule_detectors`
+            (the generation loop's cache-first primary-detector pre-pass, spec §3.3)
+            over the loaded set before checking, and reuse that same resolved list
+            for reporting (e.g. rule-health). When ``None`` (default), loads
+            per ``all_sources``/``instructions_dir`` as before.
     """
-    if all_sources:
+    if instructions is not None:
+        pass
+    elif all_sources:
         instructions = load_all_sources(root)
     elif instructions_dir is not None:
         instructions = load_instructions(instructions_dir)
@@ -250,6 +259,52 @@ def run_checks(
         results = [_instruction_worker(root, instr, all_files) for instr in instructions]
 
     return results
+
+
+def resolve_rule_detectors(
+    root: Path, instructions: list[InstructionFile], engine_version: str
+) -> list[InstructionFile]:
+    """Fill in each instruction's missing *primary* detectors, cache-first (spec §3.3).
+
+    For every rule with no declared ``detect:`` block (absent from
+    ``rule_detectors``), resolves a detector cache-first: a cache hit is reused
+    as-is, a cache miss falls back to :func:`core.derive.seed.derive_seed_rules`
+    and, when that recognises the prose, stores the result for reuse. Prose
+    neither the cache nor the derivation recognises is left out of
+    ``rule_detectors`` — the rule stays advisory (spec §3.3 step 4).
+
+    This is the primary-detector-filling pass. It is distinct from, and does
+    not replace, ``_evaluate_rule``'s always-on *supplementary* seed check
+    below, which never touches ``rule_detectors`` and keeps firing even once
+    this pass has filled a rule in (Task 6 controller ruling).
+    """
+    # Imported here, not at module level: core.derive.seed imports PatternCheck
+    # from core.detection.pattern, and core.detection (this package) is pattern's
+    # parent — a module-level import here would form a genuine load-order cycle.
+    from guideline_checker.core.derive.cache import load, prose_hash, store
+    from guideline_checker.core.derive.seed import derive_seed_rules
+
+    resolved: list[InstructionFile] = []
+    for instruction in instructions:
+        missing = [rule for rule in instruction.rules if rule not in instruction.rule_detectors]
+        if not missing:
+            resolved.append(instruction)
+            continue
+
+        new_detectors = dict(instruction.rule_detectors)
+        for rule in missing:
+            key = prose_hash(rule, engine_version)
+            cached = load(root, key)
+            if cached is not None:
+                new_detectors[rule] = cached
+                continue
+            derived = derive_seed_rules(rule)
+            if derived is not None:
+                store(root, key, derived)
+                new_detectors[rule] = derived
+        resolved.append(dataclass_replace(instruction, rule_detectors=new_detectors))
+
+    return resolved
 
 
 # Keywords that indicate an instruction targets Python source files only.
@@ -468,7 +523,11 @@ def _evaluate_rule(
             length_violations.extend(_declared_violations(file_path, lines, rule, detector, root))
         return length_violations
 
-    # TODO(Task 6): replace with cached resolve_rule_detectors pre-pass
+    # Supplementary seed check — always runs alongside instruction.detector
+    # (whether YAML-declared or filled in by resolve_rule_detectors' cache-first
+    # pre-pass), never replaced by it (Task 6 controller ruling). See
+    # tests/test_guidelines.py::TestRuleInheritance::test_abstract_scalar_only_template,
+    # which depends on the declared detector and this seed check firing together.
     #
     # Evaluated as independent per-pattern checks (own severity/match_in_comments
     # each), not merged into one RuleDetector: merging would collapse per-pattern

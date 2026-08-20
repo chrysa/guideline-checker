@@ -7,9 +7,10 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import UTC
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from guideline_checker.core.detection import RuleResult, Violation
+from guideline_checker.core.health import HealthState, RuleHealth, summarize
 
 if TYPE_CHECKING:
     from guideline_checker.linters import LinterResult, LinterViolation
@@ -200,6 +201,7 @@ footer {{ text-align: center; color: var(--clr-muted); font-size: .78rem;
   {linter_nav}
 </nav>
 <main>
+{health}
 <div class="summary">
   <div class="stat ok"><div class="value">{total_files}</div><div class="label">Files scanned</div></div>
   <div class="stat error"><div class="value">{total_errors}</div><div class="label">Errors</div></div>
@@ -260,6 +262,7 @@ class HtmlReporter:
         results: list[RuleResult],
         output_path: Path,
         root: Path,
+        health: list[RuleHealth] | None = None,
         linter_results: list[LinterResult] | None = None,
     ) -> None:
         """Write the HTML report to *output_path*."""
@@ -276,6 +279,9 @@ class HtmlReporter:
         linter_results = linter_results or []
         linter_errors = sum(sum(1 for v in lr.violations if v.severity == "error") for lr in linter_results)
         linter_warnings = sum(sum(1 for v in lr.violations if v.severity == "warning") for lr in linter_results)
+
+        # Rule health leads the report — rendered ahead of the violation sections.
+        health_html = self._render_health_section(health)
 
         nav_items_html = self._render_nav_items(results, root)
         linter_nav_html = self._render_linter_nav(linter_results)
@@ -306,12 +312,67 @@ class HtmlReporter:
             nav_items=nav_items_html,
             linter_nav=linter_nav_html,
             audit_rows=audit_rows_html,
+            health=health_html,
             sections=sections_html,
             linter_stats=linter_stats_html,
         )
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(html, encoding="utf-8")
+
+    # ── Rule health ──────────────────────────────────────────────────────────
+
+    _HEALTH_BADGE_CLASS: ClassVar[dict[HealthState, str]] = {
+        HealthState.PROVEN: "badge-ok",
+        HealthState.ARMED: "badge-info",
+        HealthState.DEAD: "badge-error",
+        HealthState.ADVISORY: "badge-neutral",
+        HealthState.SUSPECT: "badge-warning",
+    }
+
+    def _render_health_section(self, health: list[RuleHealth] | None) -> str:
+        """Render the rule-health matrix — the report's headline, not a tile.
+
+        Placed ahead of the summary stats and violation sections: whether a
+        rule can even detect anything is the fact a green scan hides, and the
+        report says so before it says anything else. Renders nothing when no
+        health data was computed (backward compatible).
+        """
+        if not health:
+            return ""
+
+        counts = summarize(health)
+        state_order = {state: i for i, state in enumerate(HealthState)}
+        ranked = sorted(health, key=lambda h: (state_order[h.state], h.instruction, h.rule))
+
+        summary_html = "".join(
+            f'<span class="badge {self._HEALTH_BADGE_CLASS[state]}">{counts.get(state.value, 0)} {state.value}</span>'
+            for state in HealthState
+        )
+
+        rows_html = "".join(
+            "<tr>"
+            f'<td><span class="badge {self._HEALTH_BADGE_CLASS[h.state]}">{_escape_html(h.state.value)}</span></td>'
+            f"<td>{_escape_html(h.instruction)}</td>"
+            f"<td class='rule-text'>{_escape_html(h.rule)}</td>"
+            f"<td>{_escape_html(h.kind)}</td>"
+            f"<td>{h.fire_count}</td>"
+            f"<td>{_escape_html(h.reason)}</td>"
+            "</tr>"
+            for h in ranked
+        )
+
+        return (
+            '<div class="audit-table-wrap" id="rule-health">'
+            '<div class="audit-table-title">&#129517; Rule Health — detection capability, not just a green scan</div>'
+            f'<div style="padding:.6rem 1rem;display:flex;gap:.4rem;flex-wrap:wrap">{summary_html}</div>'
+            "<table><thead><tr>"
+            "<th>State</th><th>Instruction</th><th>Rule</th><th>Kind</th><th>Fires</th><th>Reason</th>"
+            "</tr></thead><tbody>"
+            f"{rows_html}"
+            "</tbody></table>"
+            "</div>"
+        )
 
     # ── Linter sections ────────────────────────────────────────────────────────
 

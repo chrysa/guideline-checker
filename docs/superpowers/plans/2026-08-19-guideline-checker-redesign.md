@@ -311,8 +311,10 @@ git commit -m "refactor(core): dissolve checker.py into core/detection/*"
 ### Task 3: Demote the phrase table to `core/derive/` (seed translator)
 
 **Files:**
-- Modify: `guideline_checker/core/detection/presence.py` (remove the `# TODO(Task 3)` phrase
-  dispatch calls left by Task 2)
+- Modify: `guideline_checker/core/detection/pattern.py` (delete `_build_checks` and the phrase
+  families once Step 3 relocates their logic — this stale header used to say `presence.py`,
+  corrected during Task 2's implementation: the phrase table landed in `pattern.py`, not
+  `presence.py`; there is no `# TODO(Task 3)` marker anywhere, per Task 2's actual output)
 - Create: `guideline_checker/core/derive/seed.py` (the relocated phrase functions, changed to
   return in-memory YAML-shaped rules instead of `PatternCheck` tuples)
 - Modify: `guideline_checker/core/derive/__init__.py` (exposes `derive_seed_rules`)
@@ -739,15 +741,33 @@ match the real dataclass if different.
 Run: `pytest tests/test_generation_loop.py -v`
 Expected: FAIL — `ImportError: cannot import name 'resolve_rule_detectors'`.
 
-- [ ] **Step 3: Remove Task 3's interim direct call, implement `resolve_rule_detectors`**
+- [ ] **Step 3: Implement `resolve_rule_detectors` — but do NOT remove Task 3's supplementary seed call**
 
-Find the `# TODO(Task 6): replace with cached resolve_rule_detectors pre-pass` comment Task 3
-left on `_evaluate_rule`'s `detector = instruction.detector or derive_seed_rules(instruction.rule)`
-line. Delete that fallback — `_evaluate_rule` goes back to only reading `instruction.detector`
-(never calling `derive_seed_rules` itself); resolution moves to the pre-pass below, called once
-by `_cmd_check` (Step 5) before `run_checks`/`_evaluate_rule` ever runs, so every instruction
-`_evaluate_rule` sees already carries its final detector (declarative, cached, or freshly
-derived-and-cached) or `None` (genuinely advisory).
+**Ruling (controller, post-Task-3 review):** Task 3's actual implementation of
+`_evaluate_rule` does not do a simple `detector = instruction.detector or
+derive_seed_rules(instruction.rule)` fallback — it runs the seed check *in addition to* the
+declared detector and merges their violations, because a real pre-existing test
+(`tests/test_guidelines.py::TestRuleInheritance::test_abstract_scalar_only_template`) ships a
+rule with a declared `forbid: ["TODO"]` detector (no `match_in_comments`) whose prose *also*
+matches the seed phrase table's `_hygiene_checks` (which sets `match_in_comments=True`) — the
+declared detector alone can't see `# TODO fix` in a comment, and this only worked before
+Task 3 because the phrase path ran *alongside* the declared one, not instead of it. This is
+correct, permanent behavior, not an interim shim: **leave Task 3's supplementary
+`derive_seed_rules(instruction.rule)` call in `_evaluate_rule` in place.** Update or remove its
+`# TODO(Task 6)` comment to instead read `# supplementary seed check — always runs alongside
+instruction.detector, see D-0024 / test_abstract_scalar_only_template` so a future reader
+doesn't delete it by mistake.
+
+What Task 6 actually adds is narrower than the original brief text implied: `resolve_rule_detectors`
+below only handles the case where `instruction.detector is None` (no declared YAML detector at
+all) — it fills that gap from the cache-or-derive path so a *primary* detector exists where
+possible, cached for reuse. It does not touch or replace `_evaluate_rule`'s always-on
+supplementary seed call, which keeps combining with whatever primary detector ends up set
+(YAML-declared, cache-filled, or still `None`). This split is intentional: the cache exists for
+future non-deterministic (LLM, `[workshop]`) derivation reuse (spec §3.4), not because today's
+deterministic `derive_seed_rules` needs caching for its own sake — so it is correct for the
+always-on supplementary path to stay direct and uncached while the primary-detector-filling
+path gets the cache.
 
 ```python
 def resolve_rule_detectors(

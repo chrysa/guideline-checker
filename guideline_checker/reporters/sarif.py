@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from guideline_checker.core.detection import RuleResult
+from guideline_checker.core.health import RuleHealth, summarize
 
 _SARIF_VERSION = "2.1.0"
 _SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
@@ -28,30 +29,41 @@ _SEVERITY_MAP = {
 class SarifReporter:
     """Generate a SARIF 2.1.0 compliance report (GitHub Code Scanning compatible)."""
 
-    def write(self, results: list[RuleResult], output_path: Path, root: Path) -> None:
+    def write(
+        self,
+        results: list[RuleResult],
+        output_path: Path,
+        root: Path,
+        health: list[RuleHealth] | None = None,
+    ) -> None:
         """Write the SARIF report to output_path."""
         rules = self._build_rules(results)
         rule_index: dict[str, int] = {str(r["id"]): i for i, r in enumerate(rules)}
-        runs = [
-            {
-                "tool": {
-                    "driver": {
-                        "name": "guideline-checker",
-                        "version": self._get_version(),
-                        "informationUri": "https://github.com/chrysa/guideline-checker",
-                        "rules": rules,
-                    }
-                },
-                "originalUriBaseIds": {"SRCROOT": {"uri": root.as_uri() + "/"}},
-                "results": self._build_results(results, root, rule_index),
-                "invocations": [
-                    {
-                        "executionSuccessful": True,
-                        "endTimeUtc": datetime.now(tz=UTC).isoformat(),
-                    }
-                ],
-            }
-        ]
+        run: dict[str, object] = {
+            "tool": {
+                "driver": {
+                    "name": "guideline-checker",
+                    "version": self._get_version(),
+                    "informationUri": "https://github.com/chrysa/guideline-checker",
+                    "rules": rules,
+                }
+            },
+            "originalUriBaseIds": {"SRCROOT": {"uri": root.as_uri() + "/"}},
+            "results": self._build_results(results, root, rule_index),
+            "invocations": [
+                {
+                    "executionSuccessful": True,
+                    "endTimeUtc": datetime.now(tz=UTC).isoformat(),
+                }
+            ],
+        }
+        if health:
+            # SARIF has no first-class slot for detection-capability data; the spec's
+            # "properties" bag is the documented extension point (§3.8). Rule health
+            # leads the report elsewhere (HTML/Markdown/JSON) — carried here too, for
+            # a SARIF-only consumer, rather than silently dropped.
+            run["properties"] = {"ruleHealth": summarize(health)}
+        runs = [run]
 
         sarif: dict[str, object] = {
             "$schema": _SARIF_SCHEMA,
