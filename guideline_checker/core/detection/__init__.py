@@ -180,18 +180,12 @@ class RuleResult:
     files_checked: int = 0
 
 
-from guideline_checker.core.derive.seed import (
-    _is_hardcoded_credential_rule,
-    derive_seed_rules,
-    seed_violation_severity,
-)
 from guideline_checker.core.detection.numeric import _check_length_rules
 from guideline_checker.core.detection.pattern import (
     DISABLE_COMMENT,
-    _file_regex_violations,
     _is_excluded,
     _matches_pattern,
-    _per_line_violations,
+    _pattern_check_violations,
     _split_patterns,
 )
 
@@ -475,16 +469,21 @@ def _evaluate_rule(
         return length_violations
 
     # TODO(Task 6): replace with cached resolve_rule_detectors pre-pass
-    seed_detector = derive_seed_rules(rule)
-    if seed_detector is not None:
-        seed_violations = _per_line_violations(file_path, lines, rule, seed_detector)
-        seed_violations.extend(_file_regex_violations(file_path, lines, rule, seed_detector))
-        # RuleDetector carries no severity of its own; recover the phrase
-        # table's per-pattern severity (an eval call was "error", a print
-        # statement "warning").
-        for violation in seed_violations:
-            violation.severity = seed_violation_severity(seed_detector.forbid, violation.line_content)
-        violations.extend(seed_violations)
+    #
+    # Evaluated as independent per-pattern checks (own severity/match_in_comments
+    # each), not merged into one RuleDetector: merging would collapse per-pattern
+    # fidelity a single RuleDetector cannot represent (e.g. a rule arming both a
+    # comment-scoped pattern like TODO and a code-only pattern like `assert`
+    # would let `assert` match inside comments too).
+    #
+    # Imported here, not at module level: core.derive.seed imports PatternCheck
+    # from core.detection.pattern, and core.detection (this package) is pattern's
+    # parent — a module-level import here would form a genuine load-order cycle.
+    from guideline_checker.core.derive.seed import derive_seed_pattern_checks
+
+    seed_checks = derive_seed_pattern_checks(rule)
+    if seed_checks:
+        violations.extend(_pattern_check_violations(file_path, lines, rule, seed_checks))
 
     violations.extend(_credential_scan_violations(file_path, lines, rule, root))
 
@@ -575,6 +574,8 @@ def _credential_scan_violations(
     fires only on a high-entropy quoted literal, so the rule is usable in a
     blocking CI (596 -> ~6 findings on a real repo). See ADR D-0008.
     """
+    from guideline_checker.core.derive.seed import _is_hardcoded_credential_rule
+
     if not _is_hardcoded_credential_rule(rule.lower()):
         return []
     allow_paths, allow_values = _load_secrets_allowlist(root) if root is not None else ((), frozenset())

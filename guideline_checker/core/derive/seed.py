@@ -9,11 +9,21 @@ LLM involved; a rule it cannot map returns ``None`` so the caller can escalate
 (to an LLM, if ``[workshop]`` is installed) or leave the rule advisory.
 
 Each family function recognises one cluster of related phrases and returns a
-populated ``RuleDetector`` (pattern-kind fields only: ``forbid`` /
-``match_in_comments``) or ``None`` when it finds nothing. ``derive_seed_rules``
-runs every family and merges their results — a rule's prose can trip more than
-one family at once (e.g. "no print calls and no eval and no any"), and losing
-that aggregation would silently drop coverage the old phrase table had.
+tuple of ``PatternCheck`` (pattern + its own ``severity`` / ``match_in_comments``
+— the same per-pattern metadata the pre-Task-3 phrase table carried) or an
+empty tuple when it finds nothing. ``derive_seed_pattern_checks`` runs every
+family and aggregates their results — a rule's prose can trip more than one
+family at once (e.g. "no print calls and no eval and no any"), and losing that
+aggregation would silently drop coverage the old phrase table had.
+
+``derive_seed_rules`` is a thin wrapper around ``derive_seed_pattern_checks``
+that merges the per-pattern checks into a single ``RuleDetector``. This
+collapses per-pattern ``severity``/``match_in_comments`` into one shared value
+— fine for its two callers (``proposer.py``, ``rule_health.py``), which only
+check truthiness or read ``.forbid`` and never evaluate the detector per-line.
+Callers that *do* evaluate per-line (``core/detection/__init__.py``) must use
+``derive_seed_pattern_checks`` directly to keep each pattern's own severity and
+comment scope — see that function's docstring for why.
 """
 
 from __future__ import annotations
@@ -21,6 +31,7 @@ from __future__ import annotations
 import functools
 import re
 
+from guideline_checker.core.detection.pattern import PatternCheck
 from guideline_checker.loader import RuleDetector
 
 # Text-only recognition for "no hardcoded credential/secret/API key" rules. The
@@ -49,147 +60,135 @@ def _mentions(rule_lower: str, phrase: str) -> bool:
     return re.search(rf"\b{re.escape(phrase)}\b", rule_lower) is not None
 
 
-def _debug_output_checks(rule_lower: str) -> RuleDetector | None:
-    forbid: list[str] = []
+def _debug_output_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
+    checks: list[PatternCheck] = []
     if "no print" in rule_lower or "print()" in rule_lower or "never use print" in rule_lower:
-        forbid.append("print(")
+        checks.append(PatternCheck("print(", "warning"))
     if "no pprint" in rule_lower or "pprint()" in rule_lower:
-        forbid.append("pprint(")
+        checks.append(PatternCheck("pprint(", "warning"))
     if any(phrase in rule_lower for phrase in ("no console.log", "no `console.log`", "never console.log")):
-        forbid.append("console.log(")
+        checks.append(PatternCheck("console.log(", "warning"))
     if any(phrase in rule_lower for phrase in ("no console.debug", "no `console.debug`")):
-        forbid.append("console.debug(")
+        checks.append(PatternCheck("console.debug(", "warning"))
     if any(phrase in rule_lower for phrase in ("no debugger", "no `debugger`")):
-        forbid.append("debugger")
-    return RuleDetector(forbid=tuple(forbid)) if forbid else None
+        checks.append(PatternCheck("debugger", "warning"))
+    return tuple(checks)
 
 
-def _exception_checks(rule_lower: str) -> RuleDetector | None:
+def _exception_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
     if "no bare except" in rule_lower or "bare `except`" in rule_lower:
-        return RuleDetector(forbid=("except:",))
-    return None
+        return (PatternCheck("except:", "error"),)
+    return ()
 
 
-def _dangerous_builtin_checks(rule_lower: str) -> RuleDetector | None:
+def _dangerous_builtin_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
     # Word-bounded: a rule like "no executable runtime" or "no evaluation of X"
     # must NOT be read as "no exec()" / "no eval()". A plain substring test
     # matched "no exec" inside "no executable" and flagged every JS
     # ``RegExp.prototype.exec()`` call across the fleet.
-    forbid: list[str] = []
+    checks: list[PatternCheck] = []
     if re.search(r"\bno eval\b", rule_lower):
-        forbid.append("eval(")
+        checks.append(PatternCheck("eval(", "error"))
     if re.search(r"\bno exec\b", rule_lower):
-        forbid.append("exec(")
-    return RuleDetector(forbid=tuple(forbid)) if forbid else None
+        checks.append(PatternCheck("exec(", "error"))
+    return tuple(checks)
 
 
-def _import_checks(rule_lower: str) -> RuleDetector | None:
-    forbid: list[str] = []
+def _import_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
+    checks: list[PatternCheck] = []
     if any(phrase in rule_lower for phrase in ("no import *", "no wildcard import", "no star import")):
-        forbid.append("import *")
+        checks.append(PatternCheck("import *", "error"))
     if any(phrase in rule_lower for phrase in ("no relative import", "absolute import")):
-        forbid.append("from . import")
-        forbid.append("from .. import")
-    return RuleDetector(forbid=tuple(forbid)) if forbid else None
+        checks.append(PatternCheck("from . import", "warning"))
+        checks.append(PatternCheck("from .. import", "warning"))
+    return tuple(checks)
 
 
-def _annotation_checks(_rule_lower: str) -> RuleDetector | None:
+def _annotation_checks(_rule_lower: str) -> tuple[PatternCheck, ...]:
     # Handled by _check_presence_rules (whole-file absence check) — no per-line pattern needed.
-    return None
+    return ()
 
 
-def _hygiene_checks(rule_lower: str) -> RuleDetector | None:
-    comment_forbid: list[str] = []
-    forbid: list[str] = []
+def _hygiene_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
+    checks: list[PatternCheck] = []
     if any(phrase in rule_lower for phrase in ("no todo", "no todos", "avoid todo")):
-        comment_forbid.append("TODO")
+        checks.append(PatternCheck("TODO", "warning", match_in_comments=True))
     if any(phrase in rule_lower for phrase in ("no fixme", "avoid fixme")):
-        comment_forbid.append("FIXME")
+        checks.append(PatternCheck("FIXME", "warning", match_in_comments=True))
     if any(phrase in rule_lower for phrase in ("no hack", "avoid hack")):
-        comment_forbid.append("HACK")
+        checks.append(PatternCheck("HACK", "warning", match_in_comments=True))
     if "no assert" in rule_lower and "test" not in rule_lower:
-        forbid.append("assert ")
-    all_forbid = comment_forbid + forbid
-    if not all_forbid:
-        return None
-    return RuleDetector(forbid=tuple(all_forbid), match_in_comments=bool(comment_forbid))
+        checks.append(PatternCheck("assert ", "warning"))
+    return tuple(checks)
 
 
-def _docker_checks(rule_lower: str) -> RuleDetector | None:
+def _docker_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
     """Docker / container checks."""
-    forbid: list[str] = []
+    checks: list[PatternCheck] = []
     if any(phrase in rule_lower for phrase in ("run as non-root", "non-root user", "no root")):
-        forbid.append("USER root")
+        checks.append(PatternCheck("USER root", "error"))
     if "no latest tag" in rule_lower or "never use :latest" in rule_lower:
-        forbid.append(":latest")
+        checks.append(PatternCheck(":latest", "warning"))
     if "no add instruction" in rule_lower or "use copy not add" in rule_lower:
-        forbid.append("\nADD ")
-    return RuleDetector(forbid=tuple(forbid)) if forbid else None
+        checks.append(PatternCheck("\nADD ", "warning"))
+    return tuple(checks)
 
 
-def _typescript_checks(rule_lower: str) -> RuleDetector | None:
+def _typescript_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
     """TypeScript / React anti-pattern checks."""
-    comment_forbid: list[str] = []
-    forbid: list[str] = []
+    checks: list[PatternCheck] = []
     if "no any" in rule_lower or "no `any`" in rule_lower or "avoid any" in rule_lower:
-        forbid.append(": any")
-        forbid.append("as any")
+        checks.append(PatternCheck(": any", "error"))
+        checks.append(PatternCheck("as any", "error"))
     if "no ts-ignore" in rule_lower or "no @ts-ignore" in rule_lower:
-        comment_forbid.append("@ts-ignore")
+        checks.append(PatternCheck("@ts-ignore", "error", match_in_comments=True))
     if "no ts-nocheck" in rule_lower or "no @ts-nocheck" in rule_lower:
-        comment_forbid.append("@ts-nocheck")
+        checks.append(PatternCheck("@ts-nocheck", "error", match_in_comments=True))
     if "no console.log" in rule_lower:
-        forbid.append("console.log(")
+        checks.append(PatternCheck("console.log(", "warning"))
     if "no console.debug" in rule_lower:
-        forbid.append("console.debug(")
+        checks.append(PatternCheck("console.debug(", "warning"))
     if "no console.warn" in rule_lower:
-        forbid.append("console.warn(")
+        checks.append(PatternCheck("console.warn(", "warning"))
     if "no inline style" in rule_lower or "no inline styles" in rule_lower:
-        forbid.append("style={{")
-    all_forbid = comment_forbid + forbid
-    if not all_forbid:
-        return None
-    return RuleDetector(forbid=tuple(all_forbid), match_in_comments=bool(comment_forbid))
+        checks.append(PatternCheck("style={{", "warning"))
+    return tuple(checks)
 
 
-def _python_strict_checks(rule_lower: str) -> RuleDetector | None:
+def _python_strict_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
     """Strict Python quality checks."""
-    comment_forbid: list[str] = []
-    forbid: list[str] = []
+    checks: list[PatternCheck] = []
     if "no global" in rule_lower and "global statement" in rule_lower:
-        forbid.append("global ")
+        checks.append(PatternCheck("global ", "error"))
     if "no pass in except" in rule_lower or "no silent exception" in rule_lower:
-        forbid.append("except:")
+        checks.append(PatternCheck("except:", "error"))
     if "no mutable default" in rule_lower:
-        forbid.append("=[]")
-        forbid.append("={}")
+        checks.append(PatternCheck("=[]", "warning"))
+        checks.append(PatternCheck("={}", "warning"))
     if "no type: ignore" in rule_lower or "no type:ignore" in rule_lower:
-        comment_forbid.append("type: ignore")
-        comment_forbid.append("type:ignore")
-    all_forbid = comment_forbid + forbid
-    if not all_forbid:
-        return None
-    return RuleDetector(forbid=tuple(all_forbid), match_in_comments=bool(comment_forbid))
+        checks.append(PatternCheck("type: ignore", "error", match_in_comments=True))
+        checks.append(PatternCheck("type:ignore", "error", match_in_comments=True))
+    return tuple(checks)
 
 
-def _security_checks(rule_lower: str) -> RuleDetector | None:
+def _security_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
     """Security-oriented checks (OWASP-aligned)."""
-    forbid: list[str] = []
+    checks: list[PatternCheck] = []
     if "no hardcoded url" in rule_lower or "no hardcoded urls" in rule_lower:
-        forbid.append("http://")
-        forbid.append("https://")
+        checks.append(PatternCheck("http://", "warning"))
+        checks.append(PatternCheck("https://", "info"))
     if "no hardcoded ip" in rule_lower:
-        forbid.append("127.0.0.1")
-        forbid.append("0.0.0.0")
+        checks.append(PatternCheck("127.0.0.1", "warning"))
+        checks.append(PatternCheck("0.0.0.0", "warning"))
     if "no shell=true" in rule_lower or "no shell injection" in rule_lower:
-        forbid.append("shell=True")
+        checks.append(PatternCheck("shell=True", "error"))
     if "no pickle" in rule_lower:
-        forbid.append("import pickle")
-        forbid.append("pickle.load")
-    return RuleDetector(forbid=tuple(forbid)) if forbid else None
+        checks.append(PatternCheck("import pickle", "error"))
+        checks.append(PatternCheck("pickle.load", "error"))
+    return tuple(checks)
 
 
-def _django_checks(rule_lower: str) -> RuleDetector | None:
+def _django_checks(rule_lower: str) -> tuple[PatternCheck, ...]:
     """Django / DRF anti-pattern checks (settings hardening + ORM safety).
 
     The markdown rule loader strips underscores from rule text (``ALLOWED_HOSTS``
@@ -197,123 +196,99 @@ def _django_checks(rule_lower: str) -> RuleDetector | None:
     underscore-stripped copy. The emitted patterns keep underscores because they
     are matched against source lines, which retain them.
     """
-    forbid: list[str] = []
+    checks: list[PatternCheck] = []
     compact = rule_lower.replace("_", "")
     if "no debug = true" in compact or "debug must be false" in compact:
-        forbid.append("debug = true")
-        forbid.append("debug=true")
+        checks.append(PatternCheck("debug = true", "error"))
+        checks.append(PatternCheck("debug=true", "error"))
     if "no wildcard allowedhosts" in compact or "allowedhosts wildcard" in compact:
-        forbid.append('allowed_hosts = ["*"')
-        forbid.append("allowed_hosts = ['*'")
-        forbid.append('allowed_hosts=["*"')
-        forbid.append("allowed_hosts=['*'")
+        checks.append(PatternCheck('allowed_hosts = ["*"', "error"))
+        checks.append(PatternCheck("allowed_hosts = ['*'", "error"))
+        checks.append(PatternCheck('allowed_hosts=["*"', "error"))
+        checks.append(PatternCheck("allowed_hosts=['*'", "error"))
     if "no corsallowall" in compact or "corsallowallorigins" in compact:
-        forbid.append("cors_allow_all_origins = true")
-        forbid.append("cors_allow_all_origins=true")
+        checks.append(PatternCheck("cors_allow_all_origins = true", "error"))
+        checks.append(PatternCheck("cors_allow_all_origins=true", "error"))
     if "no raw sql" in compact or "no .raw(" in compact or "no queryset.raw" in compact:
-        forbid.append(".raw(")
-        forbid.append(".extra(")
+        checks.append(PatternCheck(".raw(", "warning"))
+        checks.append(PatternCheck(".extra(", "warning"))
     if "no hardcoded secretkey" in compact or "secretkey from env" in compact:
-        forbid.append('secret_key = "')
-        forbid.append("secret_key = '")
-    return RuleDetector(forbid=tuple(forbid)) if forbid else None
+        checks.append(PatternCheck('secret_key = "', "error"))
+        checks.append(PatternCheck("secret_key = '", "error"))
+    return tuple(checks)
+
+
+_FAMILIES = (
+    _debug_output_checks,
+    _exception_checks,
+    _dangerous_builtin_checks,
+    _import_checks,
+    _annotation_checks,
+    _hygiene_checks,
+    _docker_checks,
+    _typescript_checks,
+    _python_strict_checks,
+    _security_checks,
+    _django_checks,
+)
+
+
+@functools.cache
+def derive_seed_pattern_checks(prose_rule: str) -> tuple[PatternCheck, ...]:
+    """Turn a recognised prose sentence into its per-pattern ``PatternCheck``s.
+
+    Returns an empty tuple when no phrase family in the table recognises the
+    sentence — the caller (core/derive, Task 4) then falls back to the LLM path
+    if [workshop] is installed, or leaves the rule advisory otherwise.
+
+    Runs every family (rather than stopping at the first match) and aggregates
+    their checks: a single rule's prose can trip more than one family (e.g.
+    "no print calls and no eval and no any" arms both the debug-output and
+    dangerous-builtin families), and short-circuiting on the first match would
+    silently lose the phrase table's original multi-family coverage.
+
+    Each returned ``PatternCheck`` keeps its own ``severity`` and
+    ``match_in_comments`` — callers that evaluate per-line (see
+    :func:`core.detection.pattern._pattern_check_violations`) must honour these
+    per-pattern, not collapse them into one shared value the way a single
+    ``RuleDetector`` would (that merge is exactly what :func:`derive_seed_rules`
+    below does, and is only safe for callers that never evaluate per-line).
+
+    Deduplicated by pattern text, first occurrence wins (family-priority
+    order), matching the old phrase table's tie-break.
+    """
+    rule_lower = prose_rule.lower()
+    checks: list[PatternCheck] = []
+    for family in _FAMILIES:
+        checks.extend(family(rule_lower))
+    seen: set[str] = set()
+    deduped: list[PatternCheck] = []
+    for check in checks:
+        if check.pattern in seen:
+            continue
+        seen.add(check.pattern)
+        deduped.append(check)
+    return tuple(deduped)
 
 
 @functools.cache
 def derive_seed_rules(prose_rule: str) -> RuleDetector | None:
     """Turn a recognised prose sentence into an in-memory pattern detector.
 
-    Returns ``None`` when no phrase family in the table recognises the sentence —
-    the caller (core/derive, Task 4) then falls back to the LLM path if [workshop]
-    is installed, or leaves the rule advisory otherwise.
-
-    Runs every family (rather than stopping at the first match) and merges their
-    ``forbid`` patterns: a single rule's prose can trip more than one family
-    (e.g. "no print calls and no eval and no any" arms both the debug-output and
-    dangerous-builtin families), and short-circuiting on the first match would
-    silently lose the phrase table's original multi-family coverage.
+    A thin wrapper around :func:`derive_seed_pattern_checks` that merges its
+    per-pattern checks into a single ``RuleDetector``. This collapses each
+    pattern's own ``severity``/``match_in_comments`` into one shared value —
+    acceptable here because this function's only two callers
+    (``proposer.py``, ``rule_health.py``) only check truthiness or read
+    ``.forbid``; neither evaluates the detector per-line, so the coalesced view
+    costs them nothing. A caller that *does* evaluate per-line must call
+    :func:`derive_seed_pattern_checks` directly instead (see
+    ``core/detection/__init__.py``'s ``_evaluate_rule``) to avoid re-introducing
+    the ``match_in_comments``/severity fidelity bugs this split fixes.
     """
-    rule_lower = prose_rule.lower()
-    forbid: list[str] = []
-    match_in_comments = False
-    for family in (
-        _debug_output_checks,
-        _exception_checks,
-        _dangerous_builtin_checks,
-        _import_checks,
-        _annotation_checks,
-        _hygiene_checks,
-        _docker_checks,
-        _typescript_checks,
-        _python_strict_checks,
-        _security_checks,
-        _django_checks,
-    ):
-        detector = family(rule_lower)
-        if detector is None:
-            continue
-        forbid.extend(detector.forbid)
-        match_in_comments = match_in_comments or detector.match_in_comments
-    if not forbid:
+    checks = derive_seed_pattern_checks(prose_rule)
+    if not checks:
         return None
-    return RuleDetector(forbid=tuple(dict.fromkeys(forbid)), match_in_comments=match_in_comments)
-
-
-# ``RuleDetector`` carries no severity of its own — see its docstring in
-# loader.py: "the detector inherits the rule's own severity". A YAML rule gets
-# that severity from its own ``severity:`` field; a markdown/phrase-derived rule
-# has none, so the old phrase table baked a severity into each pattern itself
-# (``eval(`` was "error", ``print(`` was "warning"). Merging every family's
-# patterns into one detector (above) loses that per-pattern distinction unless
-# something recovers it — this table is that something, consulted only for
-# seed-derived violations (declared detectors are unaffected).
-_ERROR_PATTERNS = frozenset(
-    {
-        "except:",
-        "eval(",
-        "exec(",
-        "import *",
-        "USER root",
-        ": any",
-        "as any",
-        "@ts-ignore",
-        "@ts-nocheck",
-        "global ",
-        "type: ignore",
-        "type:ignore",
-        "shell=True",
-        "import pickle",
-        "pickle.load",
-        "debug = true",
-        "debug=true",
-        'allowed_hosts = ["*"',
-        "allowed_hosts = ['*'",
-        'allowed_hosts=["*"',
-        "allowed_hosts=['*'",
-        "cors_allow_all_origins = true",
-        "cors_allow_all_origins=true",
-        'secret_key = "',
-        "secret_key = '",
-    }
-)
-_INFO_PATTERNS = frozenset({"https://"})
-
-
-def seed_violation_severity(matched_forbid: tuple[str, ...], line_content: str) -> str:
-    """Recover the old phrase table's per-pattern severity for a seed-derived violation.
-
-    ``matched_forbid`` is a detector's ``forbid`` tuple, in the phrase table's
-    original family-priority order. Scans it for the first pattern present on
-    ``line_content`` and returns that pattern's severity — same tie-break the old
-    per-line loop used (``break`` at the first matching check).
-    """
-    low = line_content.lower()
-    for pattern in matched_forbid:
-        if pattern.lower() not in low:
-            continue
-        if pattern in _INFO_PATTERNS:
-            return "info"
-        if pattern in _ERROR_PATTERNS:
-            return "error"
-        return "warning"
-    return "warning"
+    forbid = tuple(check.pattern for check in checks)
+    match_in_comments = any(check.match_in_comments for check in checks)
+    return RuleDetector(forbid=forbid, match_in_comments=match_in_comments)

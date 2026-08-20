@@ -68,13 +68,12 @@ class TestTypeScriptChecks:
         assert any("style={{" in v.line_content for r in results for v in r.violations)
 
     def test_typescript_checks_no_match(self) -> None:
-        detector = _typescript_checks("no print calls")
-        assert detector is None
+        checks = _typescript_checks("no print calls")
+        assert checks == ()
 
     def test_avoid_any_variant(self) -> None:
-        detector = _typescript_checks("avoid any usage")
-        assert detector is not None
-        assert ": any" in detector.forbid
+        checks = _typescript_checks("avoid any usage")
+        assert any(c.pattern == ": any" for c in checks)
 
 
 # ─── Python strict checks ─────────────────────────────────────────────────────
@@ -107,8 +106,8 @@ class TestPythonStrictChecks:
         assert any("={}" in v.line_content for r in results for v in r.violations)
 
     def test_python_strict_no_match(self) -> None:
-        detector = _python_strict_checks("no print calls")
-        assert detector is None
+        checks = _python_strict_checks("no print calls")
+        assert checks == ()
 
 
 # ─── Security checks ──────────────────────────────────────────────────────────
@@ -141,8 +140,8 @@ class TestSecurityChecks:
         assert any("pickle.load" in v.line_content for r in results for v in r.violations)
 
     def test_security_checks_no_match(self) -> None:
-        detector = _security_checks("no eval calls")
-        assert detector is None
+        checks = _security_checks("no eval calls")
+        assert checks == ()
 
     def test_detects_zero_zero_ip(self, tmp_path: Path) -> None:
         root, inst = _make_project(tmp_path, "app.py", 'HOST = "0.0.0.0"\n', "No hardcoded IP addresses")

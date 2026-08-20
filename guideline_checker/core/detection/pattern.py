@@ -152,6 +152,44 @@ def _per_line_violations(
     return violations
 
 
+def _pattern_check_violations(
+    file_path: Path,
+    lines: list[str],
+    rule: str,
+    checks: tuple[PatternCheck, ...],
+) -> list[Violation]:
+    """Evaluate independent per-pattern ``PatternCheck``s against file lines.
+
+    Unlike :func:`_per_line_violations` (which applies one shared
+    ``match_in_comments`` from a merged ``RuleDetector`` to every pattern),
+    each check here keeps its own ``match_in_comments`` and ``severity`` — a
+    rule that arms both a comment-scoped pattern (e.g. ``TODO``) and a
+    code-only pattern (e.g. ``assert``) at once must not let the code-only
+    pattern match inside comments.
+
+    One violation per line: the first matching check (in the seed table's
+    family-priority order) wins and the rest are skipped for that line — same
+    tie-break the pre-Task-3 phrase table used.
+    """
+    violations: list[Violation] = []
+    for lineno, line in enumerate(lines, start=1):
+        if DISABLE_COMMENT in line:
+            continue
+        for check in checks:
+            if _line_matches(line, check.pattern, match_in_comments=check.match_in_comments):
+                violations.append(
+                    Violation(
+                        file=file_path,
+                        line_number=lineno,
+                        line_content=line.strip()[:120],
+                        rule=rule,
+                        severity=check.severity,
+                    ),
+                )
+                break
+    return violations
+
+
 def _file_regex_violations(
     file_path: Path,
     lines: list[str],
