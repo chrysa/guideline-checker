@@ -180,13 +180,18 @@ class RuleResult:
     files_checked: int = 0
 
 
+from guideline_checker.core.derive.seed import (
+    _is_hardcoded_credential_rule,
+    derive_seed_rules,
+    seed_violation_severity,
+)
 from guideline_checker.core.detection.numeric import _check_length_rules
 from guideline_checker.core.detection.pattern import (
     DISABLE_COMMENT,
-    _build_checks,
+    _file_regex_violations,
     _is_excluded,
-    _line_matches,
     _matches_pattern,
+    _per_line_violations,
     _split_patterns,
 )
 
@@ -455,8 +460,9 @@ def _evaluate_rule(
     detector: RuleDetector | None = None,
     root: Path | None = None,
 ) -> list[Violation]:
-    """Evaluate a rule against file lines: phrase-derived checks plus, when the
-    rule carries one, its declarative detector. Both paths can fire."""
+    """Evaluate a rule against file lines: a seed-derived detector from its prose
+    plus, when the rule carries one, its declarative detector. Both paths can
+    fire."""
     violations: list[Violation] = []
     rule_lower = rule.lower()
 
@@ -468,25 +474,17 @@ def _evaluate_rule(
             length_violations.extend(_declared_violations(file_path, lines, rule, detector, root))
         return length_violations
 
-    # Detect common anti-patterns based on rule text
-    checks = _build_checks(rule_lower)
-
-    for lineno, line in enumerate(lines, start=1):
-        # Inline suppression: skip lines marked with the disable comment
-        if DISABLE_COMMENT in line:
-            continue
-        for check in checks:
-            if _line_matches(line, check.pattern, match_in_comments=check.match_in_comments):
-                violations.append(
-                    Violation(
-                        file=file_path,
-                        line_number=lineno,
-                        line_content=line.strip()[:120],
-                        rule=rule,
-                        severity=check.severity,
-                    ),
-                )
-                break  # one violation per line per rule
+    # TODO(Task 6): replace with cached resolve_rule_detectors pre-pass
+    seed_detector = derive_seed_rules(rule)
+    if seed_detector is not None:
+        seed_violations = _per_line_violations(file_path, lines, rule, seed_detector)
+        seed_violations.extend(_file_regex_violations(file_path, lines, rule, seed_detector))
+        # RuleDetector carries no severity of its own; recover the phrase
+        # table's per-pattern severity (an eval call was "error", a print
+        # statement "warning").
+        for violation in seed_violations:
+            violation.severity = seed_violation_severity(seed_detector.forbid, violation.line_content)
+        violations.extend(seed_violations)
 
     violations.extend(_credential_scan_violations(file_path, lines, rule, root))
 
@@ -561,16 +559,6 @@ def _scan_violations(
 
 
 from guideline_checker.core.detection.presence import _check_presence_rules, _declared_violations
-
-_CREDENTIAL_TRIGGERS = ("no hardcoded", "hardcoded api", "hardcoded secret", "never hardcode", "all via env")
-
-
-_CREDENTIAL_KEYWORDS = ("secret", "password", "credential", "key", "token", "api key", "api_key")
-
-
-def _is_hardcoded_credential_rule(rule_lower: str) -> bool:
-    """True when a rule forbids hardcoded credentials/secrets/API keys."""
-    return any(t in rule_lower for t in _CREDENTIAL_TRIGGERS) and any(kw in rule_lower for kw in _CREDENTIAL_KEYWORDS)
 
 
 def _credential_scan_violations(

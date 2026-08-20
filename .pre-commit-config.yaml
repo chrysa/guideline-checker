@@ -37,9 +37,9 @@ repos:
   rev: v2.3.0
 - hooks:
   - id: makefile-check
-  - exclude: (^|/)tests?/|^(README\.md|docs/)|^guideline_checker/(cli\.py$|core/detection/pattern\.py$)
+  - exclude: (^|/)tests?/|^(README\.md|docs/)|^guideline_checker/(cli\.py$|core/derive/seed\.py$)
     id: python-print-detection
-  - exclude: (^|/)tests?/|^(README\.md|docs/)|^guideline_checker/core/detection/pattern\.py$
+  - exclude: (^|/)tests?/|^(README\.md|docs/)|^guideline_checker/core/derive/seed\.py$
     id: python-pprint-detection
   - id: python-unreachable-code
   - exclude: ^\.github/(workflows|ISSUE_TEMPLATE)/|^\.github/dependabot\.yml$

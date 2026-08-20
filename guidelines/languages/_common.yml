@@ -20,4 +20,4 @@ rules:
       exclude:
       # A pattern detector's own literal "FIXME" trigger string is data, not a
       # live marker (see the same reasoning for py-no-eval-exec below).
-      - guideline_checker/core/detection/pattern.py
+      - guideline_checker/core/derive/seed.py

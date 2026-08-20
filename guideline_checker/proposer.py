@@ -21,7 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-from guideline_checker.core.detection.pattern import _build_checks
+from guideline_checker.core.derive.seed import derive_seed_rules
 from guideline_checker.loader import RuleDetector
 
 _JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
@@ -49,24 +49,23 @@ class Proposer(Protocol):
 class HeuristicProposer:
     """Propose a detector by recycling the checker's phrase table — no LLM.
 
-    If ``_build_checks`` recognises the rule's prose, its anti-pattern substrings
-    become the proposal's ``forbid`` list. Rules the table cannot map (semantic or
-    provider-specific conventions) return ``None`` so the router escalates to an LLM.
+    If ``derive_seed_rules`` recognises the rule's prose, its anti-pattern
+    substrings become the proposal's ``forbid`` list. Rules the table cannot map
+    (semantic or provider-specific conventions) return ``None`` so the router
+    escalates to an LLM.
     """
 
     source = "heuristic"
 
     def propose(self, rule: str, apply_to: str = "**/*") -> Proposal | None:
-        checks = _build_checks(rule.lower())
-        if not checks:
+        detector = derive_seed_rules(rule)
+        if detector is None:
             return None
-        forbid = tuple(dict.fromkeys(check.pattern for check in checks))
-        match_in_comments = any(check.match_in_comments for check in checks)
-        joined = ", ".join(forbid)
+        joined = ", ".join(detector.forbid)
         return Proposal(
             rule=rule,
-            detector=RuleDetector(forbid=forbid, match_in_comments=match_in_comments),
-            rationale=f"Recognised {len(forbid)} known anti-pattern substring(s): {joined}.",
+            detector=detector,
+            rationale=f"Recognised {len(detector.forbid)} known anti-pattern substring(s): {joined}.",
             source=self.source,
         )
 

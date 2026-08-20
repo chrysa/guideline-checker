@@ -4,7 +4,7 @@ Answers the question a green scan never can: *is a rule capable of detecting
 anything, and does it actually fire?* Computed with no LLM and no network.
 
 A rule is detectable when it carries a declarative ``detect:`` block **or** its
-prose maps to a phrase-derived check (the ``_build_checks`` family, plus the
+prose maps to a phrase-derived check (``derive_seed_rules``, plus the
 presence/length triggers). A rule with neither is ``DEAD``: it can never flag a
 violation, however green the scan looks. This is what makes the referential
 honest — a YAML rule advertised as enforceable but carrying no detector surfaces
@@ -21,16 +21,16 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from guideline_checker.core.derive.seed import derive_seed_rules
 from guideline_checker.core.detection import CheckKind, kind_of_detector, kind_of_phrase
-from guideline_checker.core.detection.pattern import _build_checks
 from guideline_checker.loader import SourceType
 
 if TYPE_CHECKING:
     from guideline_checker.core.detection import RuleResult
     from guideline_checker.loader import InstructionFile
 
-# Text-only triggers for the presence/length checks that ``_build_checks`` does
-# not cover. Kept in sync with ``presence._check_presence_rules`` /
+# Text-only triggers for the presence/length checks that ``derive_seed_rules``
+# does not cover. Kept in sync with ``presence._check_presence_rules`` /
 # ``numeric._check_length_rules`` — they gate on file suffix/content at scan
 # time, but the rule text alone is enough to know the rule is *armed*.
 _FUTURE_ANNOTATIONS = "from __future__ import annotations"
@@ -107,7 +107,7 @@ def _fired_counts(results: list[RuleResult]) -> Counter[str]:
 def _has_phrase_detection(rule: str) -> bool:
     """True when the rule's prose maps to any phrase-derived check."""
     low = rule.lower()
-    if _build_checks(low):
+    if derive_seed_rules(low) is not None:
         return True
     if _FUTURE_ANNOTATIONS in low:
         return True

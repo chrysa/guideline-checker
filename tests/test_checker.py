@@ -335,7 +335,7 @@ class TestRuleEngineV02:
         assert violations == []
 
     def test_debug_output_console_log_in_python_context(self, tmp_path: Path) -> None:
-        """_debug_output_checks: no console.log rule detected in non-TS file."""
+        """derive.seed._debug_output_checks: no console.log rule detected in non-TS file."""
         from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
@@ -352,7 +352,7 @@ class TestRuleEngineV02:
         assert any("console.log" in v.line_content for v in violations)
 
     def test_import_relative_import_check(self, tmp_path: Path) -> None:
-        """_import_checks: relative import detection."""
+        """derive.seed._import_checks: relative import detection."""
         from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
@@ -371,7 +371,7 @@ class TestRuleEngineV02:
         assert any("from .. import" in c for c in contents)
 
     def test_annotation_check_future_annotations(self, tmp_path: Path) -> None:
-        """_annotation_checks: __future__ import annotations rule."""
+        """derive.seed._annotation_checks: __future__ import annotations rule."""
         from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
@@ -395,7 +395,7 @@ class TestRuleEngineV02:
         assert violations2 == []
 
     def test_typescript_console_debug_check(self, tmp_path: Path) -> None:
-        """_typescript_checks: no console.debug in TS files."""
+        """derive.seed._typescript_checks: no console.debug in TS files."""
         from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
@@ -412,7 +412,7 @@ class TestRuleEngineV02:
         assert any("console.debug" in v.line_content for v in violations)
 
     def test_python_strict_no_pass_in_except(self, tmp_path: Path) -> None:
-        """_python_strict_checks: no pass in except / silent exception."""
+        """derive.seed._python_strict_checks: no pass in except / silent exception."""
         from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
@@ -672,7 +672,7 @@ class TestLengthRules:
         assert "lines" in violations[0].line_content
 
 
-# --- credential (entropy scan) / _docker_checks tests ---
+# --- credential (entropy scan) / derive.seed._docker_checks tests ---
 
 
 class TestSecurityPatternChecks:

@@ -201,13 +201,13 @@ def test_the_engine_states_no_bound_of_its_own() -> None:
 
 # ─── D-0021 blind spot: the numeric rules must see the repo's longest files ────
 #
-# ``.guidelineignore`` blanket-excluded core/detection/pattern.py and cli.py because
+# ``.guidelineignore`` blanket-excluded core/derive/seed.py and cli.py because
 # a *pattern* detector's own tables hold the patterns it flags. That same blanket
 # blinded the *measurement* rules to the two longest files in the repo — the exact
 # silent-green this project refuses. The fix scopes the exclusion per-rule instead
 # of per-file.
 
-_BLIND_SPOT_FILES = ("guideline_checker/core/detection/pattern.py", "guideline_checker/cli.py")
+_BLIND_SPOT_FILES = ("guideline_checker/core/derive/seed.py", "guideline_checker/cli.py")
 
 
 def _shipped_detectors() -> dict[str, RuleDetector]:
@@ -226,9 +226,7 @@ def test_the_numeric_rules_do_not_exclude_the_longest_files() -> None:
 
 
 def test_the_pattern_rules_scope_the_exclusion_per_rule() -> None:
-    """core/detection/pattern.py and cli.py leave the blanket only because the pattern rules that match them opt out."""
+    """core/derive/seed.py and cli.py leave the blanket only because the pattern rules that match them opt out."""
     detectors = _shipped_detectors()
-    assert (
-        "guideline_checker/core/detection/pattern.py" in detectors["Never use eval() or exec() on runtime data"].exclude
-    )
+    assert "guideline_checker/core/derive/seed.py" in detectors["Never use eval() or exec() on runtime data"].exclude
     assert "guideline_checker/cli.py" in detectors["Emit operational output through the logging module"].exclude
