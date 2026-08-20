@@ -17,9 +17,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from guideline_checker.core.detection import run_checks
+from guideline_checker.core.health import HealthState, compute_rule_health
 from guideline_checker.guidelines import load_yaml_guidelines
 from guideline_checker.loader import load_all_sources
-from guideline_checker.rule_health import HealthState, compute_rule_health
 
 # A third-party repo's own instructions — no chrysa standard, no guidelines/*.yml,
 # no threshold value shipped by the tool. Plain prose the host already wrote.
