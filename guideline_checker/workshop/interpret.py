@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from guideline_checker.core.detection import CheckKind, kind_of_detector
 from guideline_checker.loader import RuleDetector
-from guideline_checker.proposer import Proposal
+from guideline_checker.workshop.proposer import Proposal
 
 # Bound the batch: interpreting prose escalates to an LLM per sentence, so a run
 # over hundreds of advisory rules would be slow and costly. Callers pass a limit.

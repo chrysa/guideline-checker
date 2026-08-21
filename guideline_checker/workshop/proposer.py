@@ -1,8 +1,9 @@
 """The proposer seam — turn a rule statement into a candidate ``detect:`` block.
 
 A ``Proposer`` proposes; it never judges. Every proposal is replayed by the
-deterministic engine in the sandbox and shown with its proof before any write
-(see ``sandbox.replay`` and ADR D-0012). The LLM backends (Ollama, Claude) live
+deterministic engine in the sandbox proof routine and shown with its proof
+before any write (see ``core.health.replay`` and ADR D-0012). The LLM backends
+(Ollama, Claude) live
 behind the optional ``[assist]`` extra; the ``HeuristicProposer`` here needs no
 extra and no network — it recycles the checker's own phrase table, so a dead
 rule whose prose the checker already recognises gets an armed detector for free,
@@ -90,8 +91,8 @@ JSON:"""
 class OllamaProposer:
     """Propose a detector via a local Ollama model — the LLM backend of the seam.
 
-    The model only *proposes*: every proposal is still replayed in the sandbox
-    for proof before any write (ADR D-0012). Lives behind the optional
+    The model only *proposes*: every proposal is still replayed by the sandbox
+    proof routine before any write (ADR D-0012). Lives behind the optional
     ``[assist]`` extra conceptually; the transport is stdlib ``urllib`` so it
     adds no runtime dependency. ``generate`` is injectable for offline tests.
     """
@@ -129,8 +130,8 @@ class ClaudeProposer:
     """Propose a detector via the ``claude`` CLI — the portable LLM backend.
 
     Shells out to ``claude -p`` on the user's subscription (no API key, no local
-    model, no RAM). Like every proposer it only proposes: the sandbox proves the
-    detector before any write (ADR D-0012). ``ANTHROPIC_API_KEY`` / ``ANTHROPIC_KEY``
+    model, no RAM). Like every proposer it only proposes: the sandbox proof
+    routine proves the detector before any write (ADR D-0012). ``ANTHROPIC_API_KEY`` / ``ANTHROPIC_KEY``
     are stripped from the child env so ``claude -p`` uses the subscription session
     instead of exiting on a stray key. ``generate`` is injectable for offline tests.
     """

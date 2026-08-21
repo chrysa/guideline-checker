@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from guideline_checker.interpret import DerivedRule, interpret_rules
 from guideline_checker.loader import RuleDetector
-from guideline_checker.proposer import Proposal
+from guideline_checker.workshop.interpret import DerivedRule, interpret_rules
+from guideline_checker.workshop.proposer import Proposal
 
 
 def _proposal(rule: str, detector: RuleDetector, source: str = "claude") -> Proposal:

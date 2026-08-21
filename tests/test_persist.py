@@ -15,7 +15,7 @@ import pytest
 
 from guideline_checker.guidelines import load_yaml_guidelines
 from guideline_checker.loader import RuleDetector
-from guideline_checker.persist import apply_detector, detector_to_detect
+from guideline_checker.workshop.persist import apply_detector, detector_to_detect
 
 _CATEGORIES = "categories:\n  - id: correctness\n    description: Correctness\n"
 
@@ -115,14 +115,14 @@ def test_no_provenance_leaves_rule_unannotated(tmp_path: Path) -> None:
 
 
 def test_find_rule_id_for_text_matches(tmp_path: Path) -> None:
-    from guideline_checker.persist import find_rule_id_for_text
+    from guideline_checker.workshop.persist import find_rule_id_for_text
 
     _referential(tmp_path)
     assert find_rule_id_for_text(tmp_path, "Never use print for debugging output") == "py-no-print"
 
 
 def test_find_rule_id_for_text_none_when_absent(tmp_path: Path) -> None:
-    from guideline_checker.persist import find_rule_id_for_text
+    from guideline_checker.workshop.persist import find_rule_id_for_text
 
     _referential(tmp_path)
     assert find_rule_id_for_text(tmp_path, "some markdown bullet with no yaml rule") is None

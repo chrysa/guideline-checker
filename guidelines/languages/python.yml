@@ -105,6 +105,11 @@ rules:
   severity: error
 - category: security
   detect:
+    exclude:
+    # proposer.py's LLM prompt cites "os.system(" as an example forbidden
+    # substring for the model to emit as a detector pattern — data, not a live
+    # call (see the same reasoning for the seed.py excludes above).
+    - guideline_checker/workshop/proposer.py
     forbid:
     - os.system(
   id: py-no-os-system

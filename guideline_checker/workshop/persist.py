@@ -20,7 +20,7 @@ import yaml
 from guideline_checker.loader import RuleDetector
 
 if TYPE_CHECKING:
-    from guideline_checker.interpret import DerivedRule
+    from guideline_checker.workshop.interpret import DerivedRule
 
 # Interpret-once writes its output here: a per-repo derived cache (ADR D-0016),
 # regenerable from host prose, versioned in the host repo — not shipped content.
@@ -115,7 +115,7 @@ def _derived_id(rule: str, taken: set[str]) -> str:
 def write_derived_ruleset(root: Path, derived: list[DerivedRule], *, dry_run: bool = True) -> ApplyResult:
     """Write an interpret-once ruleset into the per-repo derived cache (ADR D-0016).
 
-    Each :class:`~guideline_checker.interpret.DerivedRule` becomes a transverse
+    Each :class:`~guideline_checker.workshop.interpret.DerivedRule` becomes a transverse
     YAML rule under ``guidelines/derived/derived.yml`` — id, kind-mapped category,
     the proven detector, and the host sentence as both ``rule`` and ``provenance``.
     The file is rewritten wholesale (it is a regenerable cache, not hand-authored),
