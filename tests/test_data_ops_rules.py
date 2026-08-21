@@ -123,3 +123,35 @@ def test_op040_flags_an_entrypoint_without_a_version_route(project: Path) -> Non
 
     assert len(found) == 1
     assert found[0].severity == "info"
+
+
+# --------------------------------------------------------------------------- #
+# OP-023 — a dashboard definition declares a stable uid and schema version
+# --------------------------------------------------------------------------- #
+
+
+def test_op023_passes_a_dashboard_with_uid_and_schema(project: Path) -> None:
+    d = project / "dashboards"
+    d.mkdir()
+    (d / "core.json").write_text(
+        '{\n  "uid": "core-overview",\n  "schemaVersion": 39,\n  "title": "Core"\n}\n',
+        encoding="utf-8",
+    )
+    assert _violations_for(project, "core.json") == []
+
+
+def test_op023_flags_a_dashboard_missing_uid(project: Path) -> None:
+    d = project / "dashboards"
+    d.mkdir()
+    (d / "core.json").write_text(
+        '{\n  "schemaVersion": 39,\n  "title": "Core"\n}\n',
+        encoding="utf-8",
+    )
+    found = _violations_for(project, "core.json")
+    assert len(found) == 1
+    assert found[0].severity == "info"
+
+
+def test_op023_ignores_unrelated_json(project: Path) -> None:
+    (project / "package.json").write_text('{\n  "name": "app"\n}\n', encoding="utf-8")
+    assert _violations_for(project, "package.json") == []
