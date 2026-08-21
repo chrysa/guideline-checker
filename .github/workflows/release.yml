@@ -20,6 +20,6 @@ jobs:
     call:
         # v1.2.2 is the first release tag carrying the clean SemVer tagging fix
         # (majorMinorPatch instead of semVer). Replaces the interim SHA pin.
-        uses: chrysa/github-actions/.github/workflows/release.yml@v1.8.0
+        uses: chrysa/github-actions/.github/workflows/release.yml@v1.8.1
         secrets:
             RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}

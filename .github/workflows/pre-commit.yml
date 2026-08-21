@@ -13,4 +13,4 @@ concurrency:
 
 jobs:
     call:
-        uses: chrysa/github-actions/.github/workflows/pre-commit.yml@v1.8.0
+        uses: chrysa/github-actions/.github/workflows/pre-commit.yml@v1.8.1
