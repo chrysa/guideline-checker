@@ -107,6 +107,26 @@ def test_per_rule_target_override(tmp_path: Path) -> None:
     assert globs["Applies everywhere"] == "**/*"
 
 
+def test_standard_field_traces_to_rule_id(tmp_path: Path) -> None:
+    """A rule carrying `standard:` exposes it via rule_standard; a rule without it
+    has no entry (GV-012 traceability — mirrors provenance)."""
+    g = tmp_path / "guidelines"
+    _write(g / "categories.yml", _CATEGORIES)
+    _write(
+        g / "languages" / "python.yml",
+        'language_target: python\napply_to_glob: "**/*.py"\nrules:\n'
+        "  - id: py-mapped\n    category: stack\n    severity: warning\n"
+        '    standard: FE-070\n    rule: "A mapped rule"\n'
+        "  - id: py-generic\n    category: stack\n    severity: warning\n"
+        '    rule: "A generic rule"\n',
+    )
+    instructions = load_yaml_guidelines(tmp_path)
+    merged: dict[str, str] = {}
+    for instruction in instructions:
+        merged.update(instruction.rule_standard)
+    assert merged == {"A mapped rule": "FE-070"}
+
+
 def test_new_dimension_is_folder_driven(tmp_path: Path) -> None:
     """A brand-new dimension folder loads with ZERO code change (genericity guard)."""
     g = tmp_path / "guidelines"
