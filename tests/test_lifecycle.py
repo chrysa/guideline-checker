@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.lifecycle import (
+from guideline_checker.fleet.lifecycle import (
     CHECK_IDS,
     audit,
     check_liveness,

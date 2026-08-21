@@ -266,8 +266,8 @@ def test_main_web_warns_on_open_public_bind(
 class TestSynthesizeOrigin:
     def test_origin_source_writes_report_and_returns_zero(self, tmp_path: Path, mocker: MockerFixture) -> None:
 
-        from guideline_checker.gh_client import GhClient as RealClient
-        from guideline_checker.gh_client import GhResult
+        from guideline_checker.fleet.gh_client import GhClient as RealClient
+        from guideline_checker.fleet.gh_client import GhResult
 
         def _origin_runner(args):  # type: ignore[no-untyped-def]
             joined = " ".join(args)
@@ -288,7 +288,7 @@ class TestSynthesizeOrigin:
 
         from guideline_checker.cli import main
 
-        gh_cls = mocker.patch("guideline_checker.cli.GhClient")
+        gh_cls = mocker.patch("guideline_checker.fleet.gh_client.GhClient")
         gh_cls.return_value = RealClient(runner=_origin_runner)
         code = main(
             [
@@ -312,8 +312,8 @@ class TestSynthesizeOrigin:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: MockerFixture
     ) -> None:
 
-        from guideline_checker.gh_client import GhClient as RealClient
-        from guideline_checker.gh_client import GhResult
+        from guideline_checker.fleet.gh_client import GhClient as RealClient
+        from guideline_checker.fleet.gh_client import GhResult
 
         def _runner(args):  # type: ignore[no-untyped-def]
             joined = " ".join(args)
@@ -333,7 +333,7 @@ class TestSynthesizeOrigin:
 
         from guideline_checker.cli import main
 
-        gh_cls = mocker.patch("guideline_checker.cli.GhClient")
+        gh_cls = mocker.patch("guideline_checker.fleet.gh_client.GhClient")
         gh_cls.return_value = RealClient(runner=_runner)
         code = main(
             [

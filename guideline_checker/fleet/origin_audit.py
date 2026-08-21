@@ -11,10 +11,10 @@ from pathlib import Path
 
 from guideline_checker.core.detection import RuleResult, Violation
 from guideline_checker.core.detection.scanner_source import OriginScanner
-from guideline_checker.distribution import CHECK_IDS, Expectations, audit
-from guideline_checker.gh_client import GhClient
+from guideline_checker.fleet.distribution import CHECK_IDS, Expectations, audit
+from guideline_checker.fleet.gh_client import GhClient
+from guideline_checker.fleet.manifest import RepoTarget
 from guideline_checker.loader import InstructionFile, SourceType
-from guideline_checker.manifest import RepoTarget
 
 
 @dataclass

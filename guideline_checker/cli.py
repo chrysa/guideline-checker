@@ -16,7 +16,6 @@ from typing import NamedTuple
 from guideline_checker import __version__
 from guideline_checker.core.detection import RuleResult, resolve_rule_detectors, run_checks
 from guideline_checker.core.health import RuleHealth, compute_rule_health, summarize
-from guideline_checker.gh_client import GhClient
 from guideline_checker.loader import InstructionFile, load_all_sources, load_instructions
 from guideline_checker.reporters.html import HtmlReporter
 
@@ -879,9 +878,10 @@ def _cmd_synthesize(args: argparse.Namespace) -> int:
 
 def _cmd_synthesize_origin(args: argparse.Namespace) -> int:
     """Audit origin/<default> for every dev repo in the manifest; write a synthesis report."""
-    from guideline_checker.distribution import load_expectations
-    from guideline_checker.manifest import load_manifest
-    from guideline_checker.origin_audit import run_origin_audit
+    from guideline_checker.fleet.distribution import load_expectations
+    from guideline_checker.fleet.gh_client import GhClient
+    from guideline_checker.fleet.manifest import load_manifest
+    from guideline_checker.fleet.origin_audit import run_origin_audit
     from guideline_checker.reporters.synthesis_html import SynthesisHtmlReporter
 
     if args.manifest is None or args.shared_standards is None:

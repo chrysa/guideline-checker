@@ -12,12 +12,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from guideline_checker.core.detection import RuleResult
-from guideline_checker.distribution import (
+from guideline_checker.fleet.distribution import (
     LICENSE_PATH,
     STANDARDS_PATH,
     Expectations,
 )
-from guideline_checker.gh_client import GhClient
+from guideline_checker.fleet.gh_client import GhClient
 
 _FIX_BRANCH = "chore/distribution-fixes"
 
