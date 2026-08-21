@@ -70,7 +70,7 @@ guideline_checker/
   ast_python.py         # Named Python AST checks (detect.ast)
   ast_javascript.py     # Named JS/TS AST checks via tree-sitter
   baseline.py           # Baseline adoption (accept current violations, gate new)
-  cli.py                # CLI entry point — init/check/fix/synthesize/web/central/push
+  cli.py                # CLI entry point — init/check/fix/synthesize/web
   hook.py               # Pre-commit hook entry point (delegates to cli.main)
   loader.py             # Instruction file loader/parser (markdown sources)
   guidelines.py         # Structured YAML rule referential loader (guidelines/<dimension>/*.yml)
@@ -80,7 +80,6 @@ guideline_checker/
   web/
     app.py              # FastAPI app — dashboard + /api/scan|results|rules-health|propose|rules/detector
     static/index.html   # Single-page workshop UI (bundled via package-data)
-    central.py          # FROZEN: multi-repo aggregate server (no active reporters)
     auth.py             # Pluggable auth (api_key / local / ldap / oidc)
 guidelines/             # YAML rule referential: ai-models/ (advisory), languages/, packs/
 .pre-commit-hooks.yaml  # Hook definition for pre-commit framework
