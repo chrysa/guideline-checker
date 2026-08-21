@@ -305,9 +305,11 @@ app: FastAPI = FastAPI(
     lifespan=_lifespan,
 )
 
-# The workshop panel (propose/interpret/persist) is an optional plugin: web/app.py
-# never hard-imports workshop/, so a future workshop dependency that fails to
-# install simply drops the panel rather than crashing the dashboard.
+# The propose/interpret/persist router is an optional plugin: this try/except means
+# a missing workshop.web_endpoints module gracefully drops the panel's routes rather than
+# crashing the dashboard. However, web/app.py has unconditional imports from workshop/
+# at the top (HeuristicProposer, DerivedRule) used by the _is_resolvable check and state;
+# those are not guarded by this block, so a broader workshop import failure would still crash.
 try:
     from guideline_checker.workshop.web_endpoints import router as _workshop_router
 except ImportError:
