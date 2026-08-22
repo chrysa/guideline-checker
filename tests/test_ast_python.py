@@ -255,3 +255,18 @@ def test_unbounded_queue_passes_positional_bound() -> None:
 
 def test_unbounded_queue_ignores_other_calls() -> None:
     assert run_ast_checks(["unbounded-queue"], "d = dict()\nx = list()\n") == []
+
+
+def test_irreversible_runpython_flags_forward_only() -> None:
+    src = "from django.db import migrations\nx = migrations.RunPython(forward)\n"
+    assert len(run_ast_checks(["irreversible-runpython"], src)) == 1
+
+
+def test_irreversible_runpython_passes_reverse_kwarg() -> None:
+    src = "from django.db import migrations\nx = migrations.RunPython(forward, reverse_code=backward)\n"
+    assert run_ast_checks(["irreversible-runpython"], src) == []
+
+
+def test_irreversible_runpython_passes_positional_reverse() -> None:
+    src = "from django.db import migrations\nx = migrations.RunPython(forward, backward)\n"
+    assert run_ast_checks(["irreversible-runpython"], src) == []

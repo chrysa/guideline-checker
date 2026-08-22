@@ -251,6 +251,29 @@ def _check_unbounded_queue(tree: ast.Module) -> list[tuple[int, str]]:
     return findings
 
 
+def _check_irreversible_runpython(tree: ast.Module) -> list[tuple[int, str]]:
+    """Flag a ``RunPython(forward)`` data migration with no reverse (DA-013).
+
+    A data migration must be reversible: ``migrations.RunPython`` takes the reverse
+    as its second positional argument or the ``reverse_code`` keyword. A call with
+    only the forward function is one-way — the finding. Declaring an explicit
+    ``RunPython.noop`` reverse counts as reversible (a deliberate, documented
+    no-op), so only a fully-absent reverse fires.
+    """
+    findings: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
+        if name != "RunPython":
+            continue
+        has_reverse = len(node.args) >= 2 or any(kw.arg == "reverse_code" for kw in node.keywords)
+        if not has_reverse:
+            findings.append((node.lineno, "irreversible data migration: RunPython() with no reverse_code"))
+    return findings
+
+
 _AST_CHECKS: dict[str, AstCheck] = {
     "pydantic-v1": _check_pydantic_v1,
     "sync-fastapi-route": _check_sync_fastapi_route,
@@ -258,6 +281,7 @@ _AST_CHECKS: dict[str, AstCheck] = {
     "silent-exception": _check_silent_exception,
     "assert-as-validation": _check_assert_as_validation,
     "unbounded-queue": _check_unbounded_queue,
+    "irreversible-runpython": _check_irreversible_runpython,
 }
 
 # Exposed for the YAML loader to validate ``detect.ast`` names against.
