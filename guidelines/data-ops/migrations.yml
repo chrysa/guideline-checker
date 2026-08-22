@@ -10,6 +10,7 @@ rules:
     - op\.drop_table\(
     - op\.drop_column\(
   id: DA-022
+  standard: DA-022
   rationale: "DA-022 (annexe DATA-MIGRATIONS.md) \u2014 a destructive schema change\
     \ ships with a migration plan. A DROP TABLE / DROP COLUMN / ALTER ... DROP (SQL)\
     \ or an alembic op.drop_table/op.drop_column (ORM) is destructive; flagging the\

@@ -120,6 +120,11 @@ class GuidelineRule:
     # rules authored by hand; set when the workshop arms a proposed detector so
     # the derived cache traces back to the host's own instructions.
     provenance: str = ""
+    # The chrysa standards rule id this detector mechanises (e.g. "FE-070",
+    # "DA-013"), for GV-012 traceability: a detector should say which normative
+    # rule it enforces. Empty when the detector is generic (a language idiom with
+    # no single owning rule).
+    standard: str = ""
 
 
 @dataclass
@@ -165,6 +170,8 @@ class _RawRule:
     file_target: str = _WILDCARD_TARGET
     # ADR D-0016: host prose sentence this rule derives from (optional).
     provenance: str = ""
+    # chrysa standards rule id this detector mechanises (GV-012 traceability).
+    standard: str = ""
 
 
 def load_yaml_guidelines(root: Path) -> list[InstructionFile]:
@@ -455,6 +462,7 @@ def _parse_raw_rule(
         fix=_build_fix(path, rule_id, raw),
         file_target=file_target,
         provenance=str(raw.get("provenance", "")).strip(),
+        standard=str(raw.get("standard", "")).strip(),
     )
 
 
@@ -505,6 +513,7 @@ def _merge_rr_with_base(
     detect = _merge_detectors(base.detect if base else None, rr.detect)
     fix = rr.fix or (base.fix if base else None)
     provenance = rr.provenance or (base.provenance if base else "")
+    standard = rr.standard or (base.standard if base else "")
 
     if category is None:
         raise GuidelineError(f"{rr.path}: rule {rule_id!r} is missing a 'category' (none declared or inherited).")
@@ -522,6 +531,7 @@ def _merge_rr_with_base(
         detect=detect,
         fix=fix,
         provenance=provenance,
+        standard=standard,
     )
 
 
@@ -824,6 +834,7 @@ def _to_instruction_files(df: _DimensionFile) -> list[InstructionFile]:
                 rule_detectors={r.rule: r.detect for r in rules if r.detect is not None},
                 rule_fixes={r.rule: r.fix for r in rules if r.fix is not None},
                 rule_provenance={r.rule: r.provenance for r in rules if r.provenance},
+                rule_standard={r.rule: r.standard for r in rules if r.standard},
             ),
         )
     return instruction_files
