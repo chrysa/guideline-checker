@@ -225,12 +225,39 @@ def _check_assert_as_validation(tree: ast.Module) -> list[tuple[int, str]]:
     ]
 
 
+def _check_unbounded_queue(tree: ast.Module) -> list[tuple[int, str]]:
+    """Flag a ``Queue()`` created with no bound (EV-010).
+
+    ``asyncio.Queue`` / ``queue.Queue`` / a bare ``Queue`` default to *unbounded*:
+    the first positional argument or the ``maxsize`` keyword is the bound, and its
+    absence lets an in-memory queue grow under load until the process dies. A call
+    with neither is the finding; ``Queue(100)`` or ``Queue(maxsize=100)`` is fine.
+
+    Known limit: a bound passed through a variable (``Queue(maxsize=cfg.size)``)
+    still counts as bounded — the check asks only that a bound is declared, not that
+    its value is sane. A single-file AST pass cannot resolve the value.
+    """
+    findings: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
+        if name != "Queue":
+            continue
+        has_maxsize = any(kw.arg == "maxsize" for kw in node.keywords)
+        if not node.args and not has_maxsize:
+            findings.append((node.lineno, "unbounded queue: Queue() created without a maxsize bound"))
+    return findings
+
+
 _AST_CHECKS: dict[str, AstCheck] = {
     "pydantic-v1": _check_pydantic_v1,
     "sync-fastapi-route": _check_sync_fastapi_route,
     "mutable-default-arg": _check_mutable_default,
     "silent-exception": _check_silent_exception,
     "assert-as-validation": _check_assert_as_validation,
+    "unbounded-queue": _check_unbounded_queue,
 }
 
 # Exposed for the YAML loader to validate ``detect.ast`` names against.
