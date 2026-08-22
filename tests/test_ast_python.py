@@ -238,3 +238,20 @@ def test_assert_as_validation_explains_why_it_matters() -> None:
 
 def test_assert_as_validation_is_silent_without_asserts() -> None:
     assert run_ast_checks(["assert-as-validation"], "def check(v):\n    return v > 0\n") == []
+
+
+def test_unbounded_queue_flags_bare_asyncio_queue() -> None:
+    found = run_ast_checks(["unbounded-queue"], "import asyncio\nq = asyncio.Queue()\n")
+    assert len(found) == 1
+
+
+def test_unbounded_queue_passes_maxsize_kwarg() -> None:
+    assert run_ast_checks(["unbounded-queue"], "import asyncio\nq = asyncio.Queue(maxsize=100)\n") == []
+
+
+def test_unbounded_queue_passes_positional_bound() -> None:
+    assert run_ast_checks(["unbounded-queue"], "from queue import Queue\nq = Queue(100)\n") == []
+
+
+def test_unbounded_queue_ignores_other_calls() -> None:
+    assert run_ast_checks(["unbounded-queue"], "d = dict()\nx = list()\n") == []
