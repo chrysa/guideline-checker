@@ -1,0 +1,19 @@
+apply_to_glob: '**/dashboards/**/*.json, **/grafana/**/*.json'
+language_target: grafana-dashboard
+rules:
+- category: observability
+  detect:
+    require_regex:
+    - '(?m)"schemaVersion"\s*:'
+    - '(?m)"uid"\s*:'
+  id: OP-023
+  standard: OP-023
+  rationale: "OP-023 (annexe OBSERVABILITY-OPS.md) — dashboards are code: a versioned,\
+    \ single-source definition carries a stable machine `uid` and the `schemaVersion`\
+    \ it targets, so it can be reproduced in a fresh environment and reconciled against\
+    \ its committed form. A dashboard JSON under a dashboards/ or grafana/ path missing\
+    \ either is the finding. Scoped to those paths so it never fires on unrelated JSON.\
+    \ Lands at info under GV-020. CheckKind: file-content (require_regex, absence is\
+    \ the violation)."
+  rule: A dashboard definition declares a stable uid and its schema version
+  severity: info
