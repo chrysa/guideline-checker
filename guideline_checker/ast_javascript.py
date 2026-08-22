@@ -362,6 +362,46 @@ def _check_missing_effect_deps(root: Node) -> list[tuple[int, str]]:
     return out
 
 
+def _object_keys(node: Node) -> set[str]:
+    """Property names declared in an object-literal node (pairs + shorthands)."""
+    keys: set[str] = set()
+    for child in node.named_children:
+        if child.type == "pair":
+            keys.add(_text(child.child_by_field_name("key")).strip("'\""))
+        elif child.type == "shorthand_property_identifier":
+            keys.add(_text(child))
+    return keys
+
+
+# A useMutation options object carries its outcome feedback under one of these.
+_MUTATION_FEEDBACK_KEYS = frozenset({"onError", "onSuccess", "onSettled"})
+
+
+def _check_mutation_without_feedback(root: Node) -> list[tuple[int, str]]:
+    """Flag a ``useMutation({...})`` whose options declare no outcome handler (FE-081).
+
+    A data-mutating interaction must confirm its outcome (success and failure). The
+    TanStack mutation options object carries that as ``onError`` / ``onSuccess`` (or
+    ``onSettled``); an options object with none is a mutation that resolves silently
+    — the finding. A ``useMutation`` whose first argument is not an object literal
+    (e.g. options built elsewhere) is not flagged: a single-file pass cannot see the
+    handlers, and info-mode must not cry wolf.
+    """
+    out: list[tuple[int, str]] = []
+    for node in _walk(root):
+        if node.type != "call_expression":
+            continue
+        callee = node.child_by_field_name("function")
+        if callee is None or callee.type != "identifier" or _text(callee) != "useMutation":
+            continue
+        args = _arg_nodes(node)
+        if not args or args[0].type != "object":
+            continue
+        if not (_object_keys(args[0]) & _MUTATION_FEEDBACK_KEYS):
+            out.append((_line(node), "useMutation() with no onError/onSuccess outcome handler"))
+    return out
+
+
 _JS_AST_CHECKS: dict[str, JsAstCheck] = {
     "ts-any-type": _check_any_type,
     "ts-suppression": _check_suppression,
@@ -370,6 +410,7 @@ _JS_AST_CHECKS: dict[str, JsAstCheck] = {
     "react-index-key": _check_index_key,
     "react-inline-component": _check_inline_component,
     "react-missing-effect-deps": _check_missing_effect_deps,
+    "mutation-without-feedback": _check_mutation_without_feedback,
 }
 
 # Exposed for the YAML loader to validate ``detect.ast`` names against.
