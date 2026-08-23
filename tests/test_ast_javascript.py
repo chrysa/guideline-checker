@@ -202,6 +202,7 @@ def test_unknown_js_checks_helper() -> None:
         "react-index-key",
         "react-inline-component",
         "react-missing-effect-deps",
+        "mutation-without-feedback",
     }
 
 

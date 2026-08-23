@@ -115,7 +115,15 @@ def _matches_pattern(file_path: Path, root: Path, pattern: str) -> bool:
         patterns.extend(_expand_brace_pattern(p))
 
     for pat in patterns:
-        if relative.match(pat):
+        # Python 3.13+ `full_match` implements recursive ``**`` across directory
+        # boundaries; `PurePath.match` treats ``**`` as a single ``*``, so a
+        # pattern like ``**/dashboards/**/*.json`` misses a root-level
+        # ``dashboards/core.json``. Prefer `full_match`, fall back to `match`
+        # on 3.12 where it does not exist.
+        if hasattr(relative, "full_match"):
+            if relative.full_match(pat):
+                return True
+        elif relative.match(pat):
             return True
         # Python 3.12: PurePath.match("**/*.ext") won't match root-level
         # files. Strip the leading **/ and try matching the filename.

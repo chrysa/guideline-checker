@@ -134,6 +134,8 @@ def test_unknown_checks_helper() -> None:
         "mutable-default-arg",
         "silent-exception",
         "assert-as-validation",
+        "unbounded-queue",
+        "irreversible-runpython",
     }
 
 
