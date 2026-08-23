@@ -21,6 +21,18 @@ FIXTURE_INSTRUCTIONS = FIXTURE_ROOT / ".github" / "instructions"
 class TestRealProjectIntegration:
     """Run against the bundled fixture project which has known violations."""
 
+    @pytest.fixture(autouse=True)
+    def _isolated_derive_cache(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Keep the derive cache out of the checked-in fixture tree.
+
+        `resolve_rule_detectors` defaults to caching under `<root>/.guideline-cache`
+        (spec §3.4). These tests scan `FIXTURE_ROOT`, a source-controlled fixture:
+        without this override, the cache write pollutes the fixture tree on a normal
+        checkout and raises `PermissionError` in Docker, where the image bakes
+        fixtures read-only for the non-root test user.
+        """
+        monkeypatch.setenv("GUIDELINE_CACHE_DIR", str(tmp_path / ".guideline-cache"))
+
     def test_finds_python_violations(self) -> None:
         results = run_checks(root=FIXTURE_ROOT, instructions_dir=FIXTURE_INSTRUCTIONS, all_sources=False)
         python_results = [r for r in results if "python" in r.instruction.path.name]
