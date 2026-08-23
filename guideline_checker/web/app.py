@@ -15,7 +15,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -310,10 +310,13 @@ app: FastAPI = FastAPI(
 # crashing the dashboard. However, web/app.py has unconditional imports from workshop/
 # at the top (HeuristicProposer, DerivedRule) used by the _is_resolvable check and state;
 # those are not guarded by this block, so a broader workshop import failure would still crash.
+_workshop_router: APIRouter | None = None
 try:
-    from guideline_checker.workshop.web_endpoints import router as _workshop_router
+    from guideline_checker.workshop.web_endpoints import router as _imported_workshop_router
 except ImportError:
-    _workshop_router = None
+    pass
+else:
+    _workshop_router = _imported_workshop_router
 
 if _workshop_router is not None:
     app.include_router(_workshop_router)

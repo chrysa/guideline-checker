@@ -25,6 +25,9 @@ from pathlib import Path
 
 from guideline_checker.loader import RuleDetector
 
+if typing.TYPE_CHECKING:
+    from _typeshed import DataclassInstance
+
 _ENV_OVERRIDE = "GUIDELINE_CACHE_DIR"
 _DEFAULT_DIRNAME = ".guideline-cache"
 
@@ -77,7 +80,7 @@ def _to_jsonable(value: object) -> object:
     return value
 
 
-def _from_jsonable(data: dict[str, object] | None, cls: type) -> object:
+def _from_jsonable[T](data: dict[str, object] | None, cls: type[T]) -> T | None:
     """Reconstruct an instance of dataclass `cls` from `_to_jsonable`'s output.
 
     Uses `cls`'s resolved field type hints (not hand-listed field names) to
@@ -87,7 +90,8 @@ def _from_jsonable(data: dict[str, object] | None, cls: type) -> object:
     if data is None:
         return None
     hints = typing.get_type_hints(cls)
-    kwargs = {f.name: _coerce(data.get(f.name), hints[f.name]) for f in dataclasses.fields(cls)}
+    dc = typing.cast("type[DataclassInstance]", cls)
+    kwargs = {f.name: _coerce(data.get(f.name), hints[f.name]) for f in dataclasses.fields(dc)}
     return cls(**kwargs)
 
 
@@ -95,12 +99,18 @@ def _coerce(raw: object, hint: object) -> object:
     """Coerce one JSON-decoded field value back to what `hint` declares."""
     origin = typing.get_origin(hint)
     if origin is tuple:
-        return tuple(raw) if raw is not None else ()
+        return tuple(typing.cast("typing.Iterable[object]", raw)) if raw is not None else ()
     if origin in _UNION_ORIGINS:
         for arg in typing.get_args(hint):
             if dataclasses.is_dataclass(arg):
-                return _from_jsonable(raw, arg)
+                return _coerce_dataclass(raw, arg)
         return raw
     if dataclasses.is_dataclass(hint):
-        return _from_jsonable(raw, hint)
+        return _coerce_dataclass(raw, hint)
     return raw
+
+
+def _coerce_dataclass(raw: object, cls: object) -> object:
+    """Reconstruct a nested dataclass from its JSON dict, narrowing the dynamic types."""
+    data = typing.cast("dict[str, object] | None", raw)
+    return _from_jsonable(data, typing.cast("type[object]", cls))
