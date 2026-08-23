@@ -6,6 +6,7 @@ rules:
     require_regex:
     - '(?im)^\s*healthcheck\s*:'
   id: OP-000
+  standard: OP-000
   rationale: "OP-000 (annexe OBSERVABILITY-OPS.md) \u2014 a deployable service exposes\
     \ startup, liveness AND readiness probes. In a Compose stack the service's probe\
     \ is its `healthcheck:`; its absence from the canonical compose file is the finding.\

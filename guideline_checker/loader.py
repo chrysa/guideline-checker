@@ -143,6 +143,11 @@ class InstructionFile:
     # D-0016). Populated only by YAML rules carrying a ``provenance:`` field; a
     # rule with no entry was hand-authored and traces to nothing in host prose.
     rule_provenance: dict[str, str] = field(default_factory=dict)
+    # Maps a rule statement to the chrysa standards rule id it mechanises (e.g.
+    # "FE-070"), for GV-012 traceability. Populated only by YAML rules carrying a
+    # ``standard:`` field; a rule with no entry enforces a socle-prose rule or a
+    # generic idiom with no single owning annexe id.
+    rule_standard: dict[str, str] = field(default_factory=dict)
 
 
 def load_instructions(instructions_dir: Path) -> list[InstructionFile]:
