@@ -84,8 +84,8 @@ guideline_checker/
     distribution.py  manifest.py  origin_audit.py  lifecycle.py  gh_client.py
     (synthesize --origin dispatches here)
 
-  web/                               ← EXTRA [web] — the core dashboard
-    app.py  auth.py
+  web/                               ← the core dashboard — app.py ships by DEFAULT
+    app.py  auth.py                   ← always installed; [web] extra only pulls future deps
     (central.py DELETED, push DELETED)
 ```
 

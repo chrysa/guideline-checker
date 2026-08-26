@@ -207,6 +207,21 @@ git mv guideline_checker/metrics.py guideline_checker/core/detection/numeric.py
 
 - [ ] **Step 3: Split `checker.py` by copying function groups into new files, verbatim**
 
+Concrete before/after — the phrase table becomes YAML rules dispatched by `pattern.py` handlers:
+
+```text
+BEFORE (checker.py, prose-recognised):
+  # _build_checks() hard-codes a phrase family in Python
+  _security_checks() -> (PatternCheck(forbid=("shell=True",), ...),)
+
+AFTER (guidelines/*.yml, declarative):
+  - id: PY-no-shell-true
+    detector: { forbid_regex: ["shell=True"] }
+  # pattern.py just reads detector.forbid_regex and runs _per_line_violations —
+  # no per-family Python function survives; the rule carries its own detection.
+```
+
+
 Create `core/detection/pattern.py` containing (copied verbatim, with their existing docstrings
 and type hints, plus `from __future__ import annotations` and whatever imports each function
 already used in `checker.py`): `PatternCheck`, `_split_patterns`, `_expand_brace_pattern`,

@@ -128,3 +128,49 @@ def test_find_rule_id_for_text_none_when_absent(tmp_path: Path) -> None:
     assert find_rule_id_for_text(tmp_path, "some markdown bullet with no yaml rule") is None
     # No guidelines/ dir at all -> None, never raises.
     assert find_rule_id_for_text(tmp_path / "nope", "x") is None
+
+
+def test_rule_detector_json_round_trips() -> None:
+    """A fully-populated RuleDetector must survive a JSON round-trip.
+
+    Guards the plan's assumption that detectors serialize to JSON: every field
+    (including the nested CrossReference / NumericThreshold) is a plain
+    str/tuple/int/bool. If a future field is a callable or a compiled Pattern,
+    ``json.dumps`` raises here instead of failing silently in the derived cache.
+    """
+    import dataclasses
+    import json
+
+    from guideline_checker.loader import CrossReference, NumericThreshold
+
+    detector = RuleDetector(
+        forbid=("print(",),
+        forbid_regex=(r"\bTODO\b",),
+        file_regex=(r"(?s)class .*",),
+        require_regex=(r"response_model=",),
+        ast_checks=("pydantic-v1",),
+        scan_checks=("hardcoded-secret",),
+        cross_reference=CrossReference(cite=r"`(?P<name>\w+)`", define_in=("docs/x.md",), define_as="{name}"),
+        stale_after_days=30,
+        numeric_threshold=NumericThreshold(metric="coverage", max_value=85),
+        exclude=("tests/",),
+        match_in_comments=True,
+    )
+
+    payload = json.dumps(dataclasses.asdict(detector))
+    data = json.loads(payload)
+    data["forbid"] = tuple(data["forbid"])
+    data["forbid_regex"] = tuple(data["forbid_regex"])
+    data["file_regex"] = tuple(data["file_regex"])
+    data["require_regex"] = tuple(data["require_regex"])
+    data["ast_checks"] = tuple(data["ast_checks"])
+    data["scan_checks"] = tuple(data["scan_checks"])
+    data["exclude"] = tuple(data["exclude"])
+    data["cross_reference"] = CrossReference(
+        cite=data["cross_reference"]["cite"],
+        define_in=tuple(data["cross_reference"]["define_in"]),
+        define_as=data["cross_reference"]["define_as"],
+    )
+    data["numeric_threshold"] = NumericThreshold(**data["numeric_threshold"])
+
+    assert RuleDetector(**data) == detector
