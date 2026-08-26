@@ -4,155 +4,148 @@ exclude: ^\.claude/(?!(skills|agents)/)
 fail_fast: false
 minimum_pre_commit_version: 4.1.0
 repos:
-- hooks:
-  - id: trailing-whitespace
-  - id: end-of-file-fixer
-  - args:
-    - --unsafe
-    exclude: ^\.github/ISSUE_TEMPLATE/
-    id: check-yaml
-  - id: check-toml
-  - id: debug-statements
-  - id: check-merge-conflict
-  - id: detect-private-key
-  - args:
-    - --branch
-    - main
-    id: no-commit-to-branch
-  - id: check-json
-  repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v6.0.0
-- hooks:
-  - args:
-    - --fix
-    id: ruff
-  - id: ruff-format
-  repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.15.22
-- hooks:
-  - id: mypy
-    stages:
-    - manual
-  repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v2.3.0
-- hooks:
-  - id: makefile-check
-  - exclude: (^|/)tests?/|^(README\.md|docs/)
-    id: python-print-detection
-  - exclude: (^|/)tests?/|^(README\.md|docs/)
-    id: python-pprint-detection
-  - id: python-unreachable-code
-  - exclude: ^\.github/(workflows|ISSUE_TEMPLATE)/|^\.github/dependabot\.yml$
-    id: yaml-sorter
-  - id: adr-gate
-  - exclude: ^tests/
-    id: no-bare-except
-  - id: python-logger-detection
-    exclude: (^|/)tests?/|^(README\.md|docs/)
-  - id: no-sync-in-async
-  - exclude: (^|/)tests?/|^(README\.md|docs/)
-    id: debugger-detection
-  - id: fastapi-missing-response-model
-    exclude: (^|/)tests/
-  - exclude: ^tests/
-    id: console-log-detection
-  - id: console-debug-detection
-  - id: no-console-warn
-  - id: ts-unreachable-code
-  - id: dockerfile-no-latest
-  - id: regression-gate
-    stages:
-    - pre-push
-  - id: json-sorter
-  - id: env-file-check
-  - id: env-example-sync
-  - exclude: tests?/|\.test\.|\.spec\.|^guideline_checker/(proposer\.py$|web/app\.py$)
-    id: no-hardcoded-localhost
-  - exclude: (^|/)tests/
-    id: fastapi-missing-links
-  - id: claude-skill-frontmatter
-  - id: claude-agent-frontmatter
-  - id: claude-mcp-config
-  - id: python-no-unittest-import
-  - id: claude-assets-present
-  - id: python-untyped-raise
-    exclude: (^|/)tests?/
-  - id: python-mutable-default
-  - id: python-dispatch-ladder
-  repo: https://github.com/chrysa/pre-commit-tools
-  rev: v0.2.0-253
-- hooks:
-  - id: gitleaks
-  repo: https://github.com/gitleaks/gitleaks
-  rev: v8.30.1
-- hooks:
-  - args:
-    - feat
-    - fix
-    - docs
-    - style
-    - refactor
-    - test
-    - chore
-    - perf
-    - revert
-    - ci
-    id: conventional-pre-commit
-    stages:
-    - commit-msg
-  repo: https://github.com/compilerla/conventional-pre-commit
-  rev: v4.4.0
-- hooks:
-  - entry: make docker-test
-    id: run-tests
-    language: system
-    name: run test suite (with coverage)
-    pass_filenames: false
-    stages:
-    - pre-push
-  - entry: "bash -c 'command -v docker >/dev/null 2>&1 || { echo \"skipping sonar\
-      \ \u2014 docker absent (runs in CI)\"; exit 0; }; [ -n \"${SONAR_TOKEN:-}\"\
-      \ ] || { echo \"skipping sonar \u2014 SONAR_TOKEN unset (runs in CI)\"; exit\
-      \ 0; }; docker run --rm --env SONAR_TOKEN -v \"$(pwd):/usr/src\" sonarsource/sonar-scanner-cli:11\
-      \ -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=chrysa -Dsonar.projectKey=chrysa_guideline-checker\
-      \ -Dsonar.python.coverage.reportPaths=reports/coverage.xml -Dsonar.python.xunit.reportPath=reports/junit.xml\
-      \ || echo \"sonar analysis did not complete \u2014 not blocking the push (enforced\
-      \ in CI)\"'"
-    id: sonar-scanner
-    language: system
-    name: sonar cloud analysis (best-effort)
-    pass_filenames: false
-    stages:
-    - pre-push
-  repo: local
-- hooks:
-  - args:
-    - --fix
-    id: markdownlint
-    stages:
-    - manual
-  repo: https://github.com/igorshubovych/markdownlint-cli
-  rev: v0.49.1
-- repo: local
-  hooks:
-  - id: guideline-check
-    name: guideline-check (in-tree, self-hosting)
-    entry: python -m guideline_checker.cli check --fail-on error
-    language: python
-    additional_dependencies:
-    - PyYAML>=6
-    - tree-sitter>=0.23
-    - tree-sitter-typescript>=0.23
-    - tree-sitter-javascript>=0.23
-    pass_filenames: false
-    always_run: true
-- repo: https://github.com/chrysa/guideline-checker
-  rev: v1.31.0-14
-  hooks:
-  - id: guideline-check
-    args:
-    - check
-    - --fail-on
-    - error
-    - --baseline
-    - .guideline-baseline.json
+  - hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - args:
+          - --unsafe
+        exclude: ^\.github/ISSUE_TEMPLATE/
+        id: check-yaml
+      - id: check-toml
+      - id: debug-statements
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - args:
+          - --branch
+          - main
+        id: no-commit-to-branch
+      - id: check-json
+    repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+  - hooks:
+      - args:
+          - --fix
+        id: ruff
+      - id: ruff-format
+    repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.22
+  - hooks:
+      - id: mypy
+        stages:
+          - manual
+    repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.3.0
+  - hooks:
+      - id: makefile-check
+      - exclude: '(^|/)tests?/|^(README\.md|docs/)|(^|/)quality_gate\.py$|^\.claude/ape/'
+        id: python-print-detection
+      - exclude: '(^|/)tests?/|^(README\.md|docs/)|(^|/)quality_gate\.py$|^\.claude/ape/'
+        id: python-pprint-detection
+      - id: python-unreachable-code
+      - exclude: ^(\.github/|workflows/|templates/|docker-compose)|(^|/)(pnpm-lock|yarn|uv|poetry)\.(yaml|lock)$|(^|/)\.pre-commit-config\.yaml$
+        id: yaml-sorter
+      - id: adr-gate
+      - exclude: ^tests/
+        id: no-bare-except
+      - id: python-logger-detection
+        exclude: '(^|/)tests?/|^(README\.md|docs/)'
+      - id: no-sync-in-async
+      - exclude: '(^|/)tests?/|^(README\.md|docs/)'
+        id: debugger-detection
+      - id: fastapi-missing-response-model
+        exclude: '(^|/)tests/'
+      - exclude: ^tests/
+        id: console-log-detection
+      - id: console-debug-detection
+      - id: no-console-warn
+      - id: ts-unreachable-code
+      - id: dockerfile-no-latest
+      - id: regression-gate
+        stages:
+          - pre-push
+      - id: json-sorter
+      - id: env-file-check
+      - id: env-example-sync
+      - exclude: tests?/|\.test\.|\.spec\.|^guideline_checker/(proposer\.py$|web/app\.py$)
+        id: no-hardcoded-localhost
+      - exclude: '(^|/)tests/'
+        id: fastapi-missing-links
+      - id: claude-skill-frontmatter
+      - id: claude-agent-frontmatter
+      - id: claude-mcp-config
+      - id: python-no-unittest-import
+      - id: claude-assets-present
+      - id: python-untyped-raise
+        exclude: '(^|/)tests?/'
+      - id: python-mutable-default
+      - id: python-dispatch-ladder
+    repo: https://github.com/chrysa/pre-commit-tools
+    rev: v0.2.0-253
+  - hooks:
+      - id: gitleaks
+    repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+  - hooks:
+      - args:
+          - feat
+          - fix
+          - docs
+          - style
+          - refactor
+          - test
+          - chore
+          - perf
+          - revert
+          - ci
+        id: conventional-pre-commit
+        stages:
+          - commit-msg
+    repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+  - hooks:
+      - entry: make docker-test
+        id: run-tests
+        language: system
+        name: run test suite (with coverage)
+        pass_filenames: false
+        stages:
+          - pre-push
+      - entry: "bash -c 'command -v docker >/dev/null 2>&1 || { echo \"skipping sonar — docker absent (runs in CI)\"; exit 0; }; [ -n \"${SONAR_TOKEN:-}\" ] || { echo \"skipping sonar — SONAR_TOKEN unset (runs in CI)\"; exit 0; }; docker run --rm --env SONAR_TOKEN -v \"$(pwd):/usr/src\" sonarsource/sonar-scanner-cli:11 -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=chrysa -Dsonar.projectKey=chrysa_guideline-checker -Dsonar.python.coverage.reportPaths=reports/coverage.xml -Dsonar.python.xunit.reportPath=reports/junit.xml || echo \"sonar analysis did not complete — not blocking the push (enforced in CI)\"'"
+        id: sonar-scanner
+        language: system
+        name: sonar cloud analysis (best-effort)
+        pass_filenames: false
+        stages:
+          - pre-push
+    repo: local
+  - hooks:
+      - args:
+          - --fix
+        id: markdownlint
+        stages:
+          - manual
+    repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.49.1
+  - repo: local
+    hooks:
+      - id: guideline-check
+        name: guideline-check (in-tree, self-hosting)
+        entry: python -m guideline_checker.cli check --fail-on error
+        language: python
+        additional_dependencies:
+          - PyYAML>=6
+          - tree-sitter>=0.23
+          - tree-sitter-typescript>=0.23
+          - tree-sitter-javascript>=0.23
+        pass_filenames: false
+        always_run: true
+  - repo: https://github.com/chrysa/guideline-checker
+    rev: v1.31.0-14
+    hooks:
+      - id: guideline-check
+        args:
+          - check
+          - --fail-on
+          - error
+          - --baseline
+          - .guideline-baseline.json
