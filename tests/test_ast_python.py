@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.ast_python import VALID_AST_CHECKS, run_ast_checks, unknown_checks
-from guideline_checker.checker import run_checks
+from guideline_checker.core.detection import run_checks
+from guideline_checker.core.detection.ast_python import VALID_AST_CHECKS, run_ast_checks, unknown_checks
 from guideline_checker.guidelines import GuidelineError, load_yaml_guidelines
 
 # ─── pydantic-v1 ──────────────────────────────────────────────────────────────
@@ -134,6 +134,8 @@ def test_unknown_checks_helper() -> None:
         "mutable-default-arg",
         "silent-exception",
         "assert-as-validation",
+        "unbounded-queue",
+        "irreversible-runpython",
     }
 
 

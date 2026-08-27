@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from guideline_checker.scanners import (
+from guideline_checker.core.detection.scanners import (
     VALID_SCANS,
     run_scans,
     shannon_entropy,

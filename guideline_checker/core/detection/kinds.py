@@ -61,7 +61,8 @@ KIND_MEASURES: dict[CheckKind, str] = {
 
 # Phrase-derived rules carry no ``detect:`` block; the engine recognises their
 # prose. These patterns classify such a rule into a metric/presence kind so the
-# taxonomy covers phrase-detected rules too (kept in sync with checker.py).
+# taxonomy covers phrase-detected rules too (kept in sync with
+# core/detection/presence.py and core/detection/numeric.py).
 _NUMERIC_PROSE = re.compile(
     r"\b(max(?:imum)?|min(?:imum)?|at least|no more than|coverage|complexity|length)\b.*\d",
     re.I,

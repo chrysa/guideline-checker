@@ -7,7 +7,7 @@ is caught even without the async test stack.
 
 from __future__ import annotations
 
-from guideline_checker.rule_health import HealthState, RuleHealth
+from guideline_checker.core.health import HealthState, RuleHealth
 from guideline_checker.web.app import _is_resolvable, _serialize_health
 
 

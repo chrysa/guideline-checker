@@ -12,14 +12,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from guideline_checker.baseline import fingerprint
-from guideline_checker.checker import RuleResult, Violation
-from guideline_checker.kinds import kind_of_detector, kind_of_phrase
+from guideline_checker.core.detection import RuleResult, Violation, kind_of_detector, kind_of_phrase
+from guideline_checker.core.health import RuleHealth, summarize
 from guideline_checker.loader import InstructionFile
 
 # The result contract's own version, independent of the tool's release version.
 # Bump the minor for an additive field, the major for a removal or a changed
 # meaning. SARIF keeps its own "2.1.0" — that version belongs to the SARIF spec.
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"  # 1.1: additive "health" field (rule-health matrix, spec §4)
 
 
 def _kind_of(instruction: InstructionFile, rule: str) -> str:
@@ -31,6 +31,21 @@ def _kind_of(instruction: InstructionFile, rule: str) -> str:
     """
     detector = instruction.rule_detectors.get(rule)
     return (kind_of_detector(detector) or kind_of_phrase(rule)).value
+
+
+def _health_entry(entry: RuleHealth) -> dict[str, object]:
+    """One rule's detection health, for a consumer that wants the matrix, not a green scan."""
+    return {
+        "rule": entry.rule,
+        "instruction": entry.instruction,
+        "state": entry.state.value,
+        "has_declarative_detector": entry.has_declarative_detector,
+        "has_phrase_detection": entry.has_phrase_detection,
+        "fire_count": entry.fire_count,
+        "reason": entry.reason,
+        "provenance": entry.provenance,
+        "kind": entry.kind,
+    }
 
 
 def _violation_entry(violation: Violation, instruction: InstructionFile, root: Path) -> dict[str, object]:
@@ -54,7 +69,13 @@ def _violation_entry(violation: Violation, instruction: InstructionFile, root: P
 class JsonReporter:
     """Generate a JSON compliance report."""
 
-    def write(self, results: list[RuleResult], output_path: Path, root: Path) -> None:
+    def write(
+        self,
+        results: list[RuleResult],
+        output_path: Path,
+        root: Path,
+        health: list[RuleHealth] | None = None,
+    ) -> None:
         """Write the JSON report to output_path."""
         rules_list: list[dict[str, object]] = [
             {
@@ -77,6 +98,12 @@ class JsonReporter:
                 "errors": sum(sum(1 for v in r.violations if v.severity == "error") for r in results),
                 "warnings": sum(sum(1 for v in r.violations if v.severity == "warning") for r in results),
                 "info": sum(sum(1 for v in r.violations if v.severity == "info") for r in results),
+            },
+            # Rule health leads the report — a consumer reads it before "rules"
+            # (the violation list), per spec: rule-health is the headline.
+            "health": {
+                "summary": summarize(health) if health else None,
+                "rules": [_health_entry(h) for h in health] if health else [],
             },
             "rules": rules_list,
         }

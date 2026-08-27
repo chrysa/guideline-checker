@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from guideline_checker import cli
-from guideline_checker.checker import _is_excluded, _read_ignore_file, run_checks
+from guideline_checker.core.detection import _read_ignore_file, run_checks
+from guideline_checker.core.detection.pattern import _is_excluded
 
 _CATEGORIES = """\
 categories:

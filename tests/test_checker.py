@@ -7,18 +7,20 @@ from pathlib import Path
 import pytest
 from pytest_mock import MockerFixture
 
-from guideline_checker.checker import (
+from guideline_checker.core.detection import (
     IGNORE_FILES,
-    PatternCheck,
     _collect_files,
-    _expand_brace_pattern,
     _is_text_file,
-    _line_matches,
-    _matches_pattern,
     _narrow_apply_to,
     _resolve_max_file_size,
-    _split_patterns,
     run_checks,
+)
+from guideline_checker.core.detection.pattern import (
+    PatternCheck,
+    _expand_brace_pattern,
+    _line_matches,
+    _matches_pattern,
+    _split_patterns,
 )
 from guideline_checker.loader import InstructionFile
 
@@ -315,7 +317,7 @@ class TestRuleEngineV02:
     def test_check_file_oserror_returns_empty(self, tmp_path: Path, mocker: MockerFixture) -> None:
         """_check_file should return [] when a file cannot be read (OSError)."""
 
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         instr = InstructionFile(
@@ -333,8 +335,8 @@ class TestRuleEngineV02:
         assert violations == []
 
     def test_debug_output_console_log_in_python_context(self, tmp_path: Path) -> None:
-        """_debug_output_checks: no console.log rule detected in non-TS file."""
-        from guideline_checker.checker import _check_file
+        """derive.seed._debug_output_checks: no console.log rule detected in non-TS file."""
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         instr = InstructionFile(
@@ -350,8 +352,8 @@ class TestRuleEngineV02:
         assert any("console.log" in v.line_content for v in violations)
 
     def test_import_relative_import_check(self, tmp_path: Path) -> None:
-        """_import_checks: relative import detection."""
-        from guideline_checker.checker import _check_file
+        """derive.seed._import_checks: relative import detection."""
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         instr = InstructionFile(
@@ -369,8 +371,8 @@ class TestRuleEngineV02:
         assert any("from .. import" in c for c in contents)
 
     def test_annotation_check_future_annotations(self, tmp_path: Path) -> None:
-        """_annotation_checks: __future__ import annotations rule."""
-        from guideline_checker.checker import _check_file
+        """derive.seed._annotation_checks: __future__ import annotations rule."""
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         instr = InstructionFile(
@@ -393,8 +395,8 @@ class TestRuleEngineV02:
         assert violations2 == []
 
     def test_typescript_console_debug_check(self, tmp_path: Path) -> None:
-        """_typescript_checks: no console.debug in TS files."""
-        from guideline_checker.checker import _check_file
+        """derive.seed._typescript_checks: no console.debug in TS files."""
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         instr = InstructionFile(
@@ -410,8 +412,8 @@ class TestRuleEngineV02:
         assert any("console.debug" in v.line_content for v in violations)
 
     def test_python_strict_no_pass_in_except(self, tmp_path: Path) -> None:
-        """_python_strict_checks: no pass in except / silent exception."""
-        from guideline_checker.checker import _check_file
+        """derive.seed._python_strict_checks: no pass in except / silent exception."""
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         instr = InstructionFile(
@@ -496,6 +498,38 @@ class TestCollectFiles:
         paths_str = [str(p) for p in result]
         assert not any("node_modules" in s for s in paths_str)
         assert any("src.py" in s for s in paths_str)
+
+    def test_collect_files_skips_guideline_cache(self, tmp_path: Path) -> None:
+        """_collect_files should not descend into .guideline-cache (Task 6 fix round 1,
+        Finding 2): its JSON entries hold raw pattern strings, not source code."""
+        cache_dir = tmp_path / ".guideline-cache"
+        cache_dir.mkdir()
+        (cache_dir / "deadbeef.json").write_text('{"forbid": ["print("]}', encoding="utf-8")
+        (tmp_path / "src.py").write_text("x = 1\n")
+        result = _collect_files(tmp_path)
+        paths_str = [str(p) for p in result]
+        assert not any(".guideline-cache" in s for s in paths_str)
+        assert any("src.py" in s for s in paths_str)
+
+    def test_run_checks_ignores_guideline_cache_contents(self, tmp_path: Path) -> None:
+        """A cached detector's own pattern literal (e.g. "print(") must not be
+        flagged as a violation of the rule it was cached for."""
+        from guideline_checker.core.derive.cache import store
+        from guideline_checker.loader import RuleDetector
+
+        root = tmp_path / "project"
+        root.mkdir()
+        inst_dir = root / ".github" / "instructions"
+        inst_dir.mkdir(parents=True)
+        (inst_dir / "no_print.instructions.md").write_text(
+            '---\napplyTo: "**/*"\ndescription: "no print"\n---\n\n- No print() calls\n',
+            encoding="utf-8",
+        )
+        (root / "app.py").write_text("def hello():\n    return 1\n", encoding="utf-8")
+        store(root, "some-cache-key", RuleDetector(forbid=("print(",)))
+        results = run_checks(root=root, instructions_dir=inst_dir, all_sources=False)
+        violations = [v for r in results for v in r.violations]
+        assert not any(".guideline-cache" in str(v.file) for v in violations)
 
     def test_run_checks_ignores_generated_report_files(self, tmp_path: Path) -> None:
         """run_checks should not flag violations inside guideline-report.md."""
@@ -621,7 +655,7 @@ class TestLengthRules:
         long_func = "\n".join(["def long_func():"] + ["    x = 1"] * 15)
         f = tmp_path / "long.py"
         f.write_text(long_func)
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
 
         instr = InstructionFile(
             path=tmp_path / "rules.md",
@@ -635,7 +669,7 @@ class TestLengthRules:
 
     def test_function_length_two_functions_second_too_long(self, tmp_path: Path) -> None:
         """Multiple functions: only the one exceeding the limit is flagged."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         code = "def short():\n    return 1\n\n" + "def long_fn():\n" + "    x = 1\n" * 12
@@ -653,7 +687,7 @@ class TestLengthRules:
 
     def test_file_length_rule_flags_long_file(self, tmp_path: Path) -> None:
         """A file exceeding the max line count should produce a warning."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         f = tmp_path / "big.py"
@@ -670,7 +704,7 @@ class TestLengthRules:
         assert "lines" in violations[0].line_content
 
 
-# --- credential (entropy scan) / _docker_checks tests ---
+# --- credential (entropy scan) / derive.seed._docker_checks tests ---
 
 
 class TestSecurityPatternChecks:
@@ -678,7 +712,7 @@ class TestSecurityPatternChecks:
 
     def test_docker_no_root_user(self, tmp_path: Path) -> None:
         """Docker check: 'run as non-root' flags USER root."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         f = tmp_path / "Dockerfile"
@@ -695,7 +729,7 @@ class TestSecurityPatternChecks:
 
     def test_docker_no_latest_tag(self, tmp_path: Path) -> None:
         """Docker check: 'no latest tag' flags :latest usage."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         f = tmp_path / "Dockerfile"
@@ -712,7 +746,7 @@ class TestSecurityPatternChecks:
 
     def test_credential_hardcoded_secret_literal(self, tmp_path: Path) -> None:
         """Credential check: a high-entropy hardcoded secret literal is an error."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         f = tmp_path / "config.py"
@@ -730,7 +764,7 @@ class TestSecurityPatternChecks:
 
     def test_credential_ignores_value_read_from_a_call(self, tmp_path: Path) -> None:
         """Credential check: reading a token from a call is not a hardcoded secret."""
-        from guideline_checker.checker import _check_file
+        from guideline_checker.core.detection import _check_file
         from guideline_checker.loader import InstructionFile
 
         f = tmp_path / "auth.py"

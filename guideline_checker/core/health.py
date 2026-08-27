@@ -4,7 +4,7 @@ Answers the question a green scan never can: *is a rule capable of detecting
 anything, and does it actually fire?* Computed with no LLM and no network.
 
 A rule is detectable when it carries a declarative ``detect:`` block **or** its
-prose maps to a phrase-derived check (the ``_build_checks`` family, plus the
+prose maps to a phrase-derived check (``derive_seed_rules``, plus the
 presence/length triggers). A rule with neither is ``DEAD``: it can never flag a
 violation, however green the scan looks. This is what makes the referential
 honest — a YAML rule advertised as enforceable but carrying no detector surfaces
@@ -17,21 +17,24 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from guideline_checker.checker import _build_checks
-from guideline_checker.kinds import CheckKind, kind_of_detector, kind_of_phrase
-from guideline_checker.loader import SourceType
+from guideline_checker.core.derive.seed import derive_seed_rules
+from guideline_checker.core.detection import CheckKind, _collect_files, kind_of_detector, kind_of_phrase
+from guideline_checker.core.detection.pattern import _matches_pattern
+from guideline_checker.core.detection.presence import _declared_violations
+from guideline_checker.loader import RuleDetector, SourceType
 
 if TYPE_CHECKING:
-    from guideline_checker.checker import RuleResult
+    from guideline_checker.core.detection import RuleResult
     from guideline_checker.loader import InstructionFile
 
-# Text-only triggers for the presence/length checks that ``_build_checks`` does
-# not cover. Kept in sync with ``checker._check_presence_rules`` /
-# ``checker._check_length_rules`` — they gate on file suffix/content at scan
+# Text-only triggers for the presence/length checks that ``derive_seed_rules``
+# does not cover. Kept in sync with ``presence._check_presence_rules`` /
+# ``numeric._check_length_rules`` — they gate on file suffix/content at scan
 # time, but the rule text alone is enough to know the rule is *armed*.
 _FUTURE_ANNOTATIONS = "from __future__ import annotations"
 _MAX_FUNCTION_LENGTH = (
@@ -107,7 +110,7 @@ def _fired_counts(results: list[RuleResult]) -> Counter[str]:
 def _has_phrase_detection(rule: str) -> bool:
     """True when the rule's prose maps to any phrase-derived check."""
     low = rule.lower()
-    if _build_checks(low):
+    if derive_seed_rules(low) is not None:
         return True
     if _FUTURE_ANNOTATIONS in low:
         return True
@@ -166,3 +169,86 @@ def _rule_health(
         provenance=provenance,
         kind=(kind or CheckKind.FORBIDDEN_PATTERN).value,
     )
+
+
+# The proof routine below was guideline_checker/sandbox.py before the v2 redesign
+# (spec §4: "health proves it in sandbox — core sandbox path, read-only"). It has
+# no LLM/gh dependency, so it is core-owned; workshop/proposer.py imports it from
+# here rather than keeping its own copy (satellite → core, never the reverse).
+#
+# The sandbox — replay a proposed detector for proof, writing nothing.
+#
+# The workshop never asks the user to trust a proposal blind: it replays the
+# candidate detector through the *real* per-file detection path
+# (``core.detection._check_file``) against the working tree and returns exactly what it
+# catches — file, line, excerpt. Deterministic, offline, read-only. This is the
+# proof shown before the proposal is ever written to ``guidelines/*.yml``
+# (see ADR D-0012).
+
+_MAX_HITS = 100
+
+
+@dataclass(frozen=True)
+class Hit:
+    """One line a replayed detector flagged."""
+
+    file: str
+    line: int
+    excerpt: str
+
+
+@dataclass(frozen=True)
+class Proof:
+    """What a proposed detector catches on this repo — the evidence to validate."""
+
+    rule: str
+    match_count: int
+    files_scanned: int
+    hits: list[Hit] = field(default_factory=list)
+
+
+def replay(
+    rule: str,
+    detector: RuleDetector,
+    root: Path,
+    apply_to: str = "**/*",
+    max_hits: int = _MAX_HITS,
+) -> Proof:
+    """Run ``detector`` for ``rule`` over ``root`` and return the lines it flags.
+
+    Writes nothing. Runs the proposed detector in isolation through the engine's
+    declarative path (``_declared_violations``), so the proof is what *this*
+    detector would report — free of the rule's incidental phrase-matching.
+    ``hits`` is capped at ``max_hits`` while ``match_count`` stays the true total.
+    """
+    hits: list[Hit] = []
+    match_count = 0
+    files_scanned = 0
+    for file_path in _collect_files(root):
+        if not _matches_pattern(file_path, root, apply_to):
+            continue
+        files_scanned += 1
+        try:
+            lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for violation in _declared_violations(file_path, lines, rule, detector, root):
+            match_count += 1
+            if len(hits) < max_hits:
+                hits.append(
+                    Hit(
+                        file=_relativize(violation.file, root),
+                        line=violation.line_number,
+                        excerpt=violation.line_content,
+                    )
+                )
+
+    return Proof(rule=rule, match_count=match_count, files_scanned=files_scanned, hits=hits)
+
+
+def _relativize(file_path: Path, root: Path) -> str:
+    """Best-effort repo-relative path for display."""
+    try:
+        return str(file_path.relative_to(root))
+    except ValueError:
+        return str(file_path)

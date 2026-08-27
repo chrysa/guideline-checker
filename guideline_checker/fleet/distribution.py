@@ -9,9 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from guideline_checker.checker import Violation
-from guideline_checker.manifest import RepoTarget
-from guideline_checker.scanner_source import Scanner
+from guideline_checker.core.detection import Violation
+from guideline_checker.core.detection.scanner_source import Scanner
+from guideline_checker.fleet.manifest import RepoTarget
 
 STANDARDS_PATH = ".chrysa/STANDARDS.md"
 CLAUDE_PATH = "CLAUDE.md"

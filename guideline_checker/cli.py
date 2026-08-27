@@ -5,17 +5,22 @@ from __future__ import annotations
 import argparse
 import importlib
 import os
-import re
 import shutil
 import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple
 
-from guideline_checker.checker import RuleResult, run_checks
-from guideline_checker.gh_client import GhClient
+from guideline_checker import __version__
+from guideline_checker.core.detection import RuleResult, resolve_rule_detectors, run_checks
+from guideline_checker.core.health import RuleHealth, compute_rule_health, summarize
+from guideline_checker.loader import InstructionFile, load_all_sources, load_instructions
 from guideline_checker.reporters.html import HtmlReporter
+
+# The generation loop's cache key includes this so a tool upgrade that changes
+# derivation heuristics invalidates stale cache entries (spec §3.3/§3.4)
+# instead of silently reusing a detector an older engine derived.
+_ENGINE_VERSION = __version__
 
 
 def _add_check_subcommand(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
@@ -185,6 +190,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_fix_subcommand(sub)
 
+    # ── health subcommand ────────────────────────────────────────────────────
+    health_cmd = sub.add_parser("health", help="Report rule-health only — no violation scan.")
+    health_cmd.add_argument(
+        "--root",
+        type=Path,
+        default=Path("."),
+        help="Project root directory (default: current directory).",
+    )
+
     # ── synthesize subcommand ────────────────────────────────────────────────
     syn_cmd = sub.add_parser(
         "synthesize",
@@ -299,72 +313,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable auto-reload on code changes (development only).",
     )
 
-    # ── central subcommand ───────────────────────────────────────────────────
-    central_cmd = sub.add_parser(
-        "central",
-        help="Launch the central aggregation server (requires the 'web' extra).",
-    )
-    central_cmd.add_argument(
-        "--store",
-        type=Path,
-        default=Path("./central-store"),
-        help="Directory backing the report store (default: ./central-store).",
-    )
-    central_cmd.add_argument(
-        "--host",
-        default="127.0.0.1",
-        help="Interface to bind (default: 127.0.0.1, loopback only).",
-    )
-    central_cmd.add_argument(
-        "--port",
-        type=int,
-        default=8090,
-        help="Port to listen on (default: 8090).",
-    )
-    central_cmd.add_argument(
-        "--reload",
-        action="store_true",
-        default=False,
-        help="Enable auto-reload on code changes (development only).",
-    )
-
-    # ── push subcommand ──────────────────────────────────────────────────────
-    push_cmd = sub.add_parser(
-        "push",
-        help="Push a JSON compliance report to a central server.",
-    )
-    push_cmd.add_argument(
-        "--server",
-        required=True,
-        help="Base URL of the central server, e.g. https://guidelines.example.com",
-    )
-    push_cmd.add_argument(
-        "--report",
-        type=Path,
-        default=Path("guideline-report.json"),
-        help="Path to the JSON report produced by 'check --json' (default: guideline-report.json).",
-    )
-    push_cmd.add_argument(
-        "--repo",
-        default=None,
-        help="Repo identifier ([A-Za-z0-9._-]). Defaults to the git remote / directory name.",
-    )
-    push_cmd.add_argument(
-        "--commit",
-        default=None,
-        help="Commit SHA to record (default: current git HEAD, if available).",
-    )
-    push_cmd.add_argument(
-        "--branch",
-        default=None,
-        help="Branch name to record (default: current git branch, if available).",
-    )
-    push_cmd.add_argument(
-        "--api-key",
-        default=None,
-        help="API key sent as X-Api-Key (default: API_KEY env var).",
-    )
-
     return parser
 
 
@@ -449,24 +397,29 @@ def _run_linters_for_check(args: argparse.Namespace, root: Path) -> list:  # typ
     return linter_results
 
 
-def _write_extra_reports(args: argparse.Namespace, results: list, root: Path) -> None:  # type: ignore[type-arg]
+def _write_extra_reports(
+    args: argparse.Namespace,
+    results: list,  # type: ignore[type-arg]
+    root: Path,
+    health: list[RuleHealth] | None = None,
+) -> None:
     """Write JSON / SARIF / Markdown reports when the corresponding flags are set."""
     if args.json:
         from guideline_checker.reporters.json_reporter import JsonReporter
 
-        JsonReporter().write(results=results, output_path=args.json, root=root)
+        JsonReporter().write(results=results, output_path=args.json, root=root, health=health)
         print(f"[guideline-checker] JSON report written to: {args.json}")
 
     if args.sarif:
         from guideline_checker.reporters.sarif import SarifReporter
 
-        SarifReporter().write(results=results, output_path=args.sarif, root=root)
+        SarifReporter().write(results=results, output_path=args.sarif, root=root, health=health)
         print(f"[guideline-checker] SARIF report written to: {args.sarif}")
 
     if args.markdown:
         from guideline_checker.reporters.markdown import MarkdownReporter
 
-        MarkdownReporter().write(results=results, output_path=args.markdown, root=root)
+        MarkdownReporter().write(results=results, output_path=args.markdown, root=root, health=health)
         print(f"[guideline-checker] Markdown report written to: {args.markdown}")
 
 
@@ -518,6 +471,25 @@ def _add_fix_subcommand(sub: argparse._SubParsersAction) -> None:  # type: ignor
     fix_cmd.set_defaults(fix=True, fail_on=None, diff=False, baseline=None, write_baseline=None, linters=None)
 
 
+def _cmd_health(args: argparse.Namespace) -> int:
+    """Report the rule-health audit only — no violation scan (spec §3.5).
+
+    Informational, not a gate: always exits 0. Runs the same
+    ``resolve_rule_detectors`` cache-first pre-pass as ``check`` so the health
+    matrix reflects cache-filled detectors, not just declared ones — a rule
+    that ``check`` arms via a derived detector must not show up here as dead
+    or advisory.
+    """
+    root: Path = args.root.resolve()
+    instructions = load_all_sources(root)
+    instructions = resolve_rule_detectors(root, instructions, _ENGINE_VERSION)
+    health = compute_rule_health(instructions, results=[])
+    counts = summarize(health)
+    for state, count in counts.items():
+        print(f"{state}: {count}")
+    return 0
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
     """Scaffold default instruction files. Imported lazily — `init` is rarely the command."""
     from guideline_checker.init_cmd import run_init
@@ -550,11 +522,19 @@ def _cmd_check(args: argparse.Namespace) -> int:
     if diff_files is not None and len(diff_files) == 0:
         return 0
 
+    # Generation loop pre-pass (spec §3.3): fill in each rule's missing
+    # primary detector, cache-first, before checking. run_checks then reuses
+    # this exact (resolved) instruction list instead of reloading its own —
+    # reporting below reuses it again for the rule-health matrix.
+    instructions: list[InstructionFile] = (
+        load_all_sources(root) if use_all_sources else load_instructions(instructions_dir)
+    )
+    instructions = resolve_rule_detectors(root, instructions, _ENGINE_VERSION)
+
     results = run_checks(
         root=root,
-        instructions_dir=instructions_dir,
+        instructions=instructions,
         diff_files=diff_files,
-        all_sources=use_all_sources,
         exclude=args.exclude,
         max_file_size=args.max_file_size,
     )
@@ -572,11 +552,22 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 
 def _scan(args: argparse.Namespace, root: Path) -> list[RuleResult]:
-    """Run a full (non-diff) scan with the current args — used to re-check after autofix."""
+    """Run a full (non-diff) scan with the current args — used to re-check after autofix.
+
+    Runs the same resolve_rule_detectors pre-pass as _cmd_check (spec §3.3) before
+    checking, so the post-fix gate sees the same resolved detector set as the
+    initial check — otherwise the two could disagree on which rules are actually
+    detectable (Task 6 fix round 1, Finding 4).
+    """
+    use_all_sources = not args.no_multi_source
+    instructions_dir = args.instructions or root / ".github" / "instructions"
+    instructions: list[InstructionFile] = (
+        load_all_sources(root) if use_all_sources else load_instructions(instructions_dir)
+    )
+    instructions = resolve_rule_detectors(root, instructions, _ENGINE_VERSION)
     return run_checks(
         root=root,
-        instructions_dir=args.instructions or root / ".github" / "instructions",
-        all_sources=not args.no_multi_source,
+        instructions=instructions,
         exclude=args.exclude,
         max_file_size=args.max_file_size,
     )
@@ -676,17 +667,22 @@ def _report_and_gate(args: argparse.Namespace, results: list[RuleResult], root: 
     """Write reports for ``results`` and return the exit code per ``--fail-on``."""
     linter_results = _run_linters_for_check(args, root)
 
+    # Rule health leads the report (spec: it's the headline, not a tile) — computed
+    # and handed to every reporter ahead of the violation list.
+    health = compute_rule_health([r.instruction for r in results], results)
+
     reporter = HtmlReporter()
     report_path: Path = args.output
     reporter.write(
         results=results,
         output_path=report_path,
         root=root,
+        health=health,
         linter_results=linter_results,
     )
     print(f"[guideline-checker] Report written to: {report_path}")
 
-    _write_extra_reports(args, results, root)
+    _write_extra_reports(args, results, root, health)
 
     violation_count = sum(len(r.violations) for r in results)
     error_count = sum(sum(1 for v in r.violations if v.severity == "error") for r in results)
@@ -814,9 +810,10 @@ def _cmd_synthesize(args: argparse.Namespace) -> int:
 
 def _cmd_synthesize_origin(args: argparse.Namespace) -> int:
     """Audit origin/<default> for every dev repo in the manifest; write a synthesis report."""
-    from guideline_checker.distribution import load_expectations
-    from guideline_checker.manifest import load_manifest
-    from guideline_checker.origin_audit import run_origin_audit
+    from guideline_checker.fleet.distribution import load_expectations
+    from guideline_checker.fleet.gh_client import GhClient
+    from guideline_checker.fleet.manifest import load_manifest
+    from guideline_checker.fleet.origin_audit import run_origin_audit
     from guideline_checker.reporters.synthesis_html import SynthesisHtmlReporter
 
     if args.manifest is None or args.shared_standards is None:
@@ -922,184 +919,13 @@ def _cmd_web(args: argparse.Namespace) -> int:
     return 0
 
 
-# ─── central command ──────────────────────────────────────────────────────────
-
-
-def _cmd_central(args: argparse.Namespace) -> int:
-    """Launch the central aggregation server, persisting reports under ``--store``."""
-    store: Path = args.store.resolve()
-    os.environ["CENTRAL_STORE"] = str(store)
-
-    try:
-        uvicorn = importlib.import_module("uvicorn")
-    except ImportError:
-        print(
-            "[guideline-checker] The central server needs the 'web' extra. "
-            "Install it with: pip install 'guideline-checker[web]'",
-            file=sys.stderr,
-        )
-        return 1
-
-    if args.host not in _LOOPBACK_HOSTS and _auth_is_open():
-        print(
-            f"[guideline-checker] WARNING: binding {args.host} with authentication disabled — "
-            "the ingest API is exposed without protection. Set AUTH_MODE/API_KEY (see .env.example).",
-            file=sys.stderr,
-        )
-
-    print(f"[guideline-checker] Serving central server (store: {store}) at http://{args.host}:{args.port} ...")
-    if args.reload:
-        uvicorn.run(
-            "guideline_checker.web.central:central_app",
-            host=args.host,
-            port=args.port,
-            reload=True,
-        )
-    else:
-        central_app = importlib.import_module("guideline_checker.web.central").central_app
-        uvicorn.run(central_app, host=args.host, port=args.port)
-    return 0
-
-
-# ─── push command ─────────────────────────────────────────────────────────────
-
-_REPO_SLUG_RE = re.compile(r"[^A-Za-z0-9._-]+")
-
-
-def _git_output(git_args: list[str]) -> str | None:
-    """Return stripped stdout of a git command, or None if git/repo is unavailable."""
-    git_path = shutil.which("git")
-    if git_path is None:
-        return None
-    try:
-        proc = subprocess.run(
-            [git_path, *git_args],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if proc.returncode != 0:
-        return None
-    return proc.stdout.strip() or None
-
-
-def _default_repo_name() -> str:
-    """Infer a repo name from the git origin remote, falling back to the cwd name."""
-    url = _git_output(["remote", "get-url", "origin"])
-    if url:
-        name = url.rstrip("/").rsplit("/", 1)[-1]
-        if name.endswith(".git"):
-            name = name[:-4]
-        if name:
-            return name
-    return Path.cwd().name
-
-
-def _slug_repo(name: str) -> str:
-    """Reduce a repo name to the central server's allowed charset."""
-    return _REPO_SLUG_RE.sub("-", name).strip("-")
-
-
-class _PushPlan(NamedTuple):
-    """A validated push: where to send it, under which repo name, and what."""
-
-    url: str
-    repo: str
-    payload: dict[str, object]
-
-
-def _push_plan(args: argparse.Namespace) -> tuple[_PushPlan | None, str]:
-    """Validate the push inputs into a plan, or return the reason it cannot proceed.
-
-    Every failure here is a user-input problem with a specific fix, so each returns
-    its own message rather than a bare exit code — split out from :func:`_cmd_push`
-    so the validation is testable without a server or a network.
-    """
-    import json
-
-    report_path: Path = args.report
-    if not report_path.is_file():
-        return None, f"Report not found: {report_path}"
-    try:
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return None, f"Cannot read report: {exc}"
-
-    summary = report.get("summary") if isinstance(report, dict) else None
-    if not isinstance(summary, dict):
-        return None, "Report has no 'summary' block — is this a 'check --json' output?"
-
-    repo = _slug_repo(args.repo or _default_repo_name())
-    if not repo:
-        return None, "Could not determine a valid repo name; pass --repo."
-
-    url = args.server.rstrip("/") + "/api/ingest"
-    if not url.startswith(("http://", "https://")):
-        return None, "--server must be an http(s) URL."
-
-    payload: dict[str, object] = {
-        "repo": repo,
-        "summary": summary,
-        "commit": args.commit or _git_output(["rev-parse", "HEAD"]),
-        "branch": args.branch or _git_output(["rev-parse", "--abbrev-ref", "HEAD"]),
-        "generated_at": report.get("generated_at"),
-        "report": report,
-    }
-    return _PushPlan(url=url, repo=repo, payload=payload), ""
-
-
-def _cmd_push(args: argparse.Namespace) -> int:
-    """Push a ``check --json`` report to a central server's ingest endpoint."""
-    import json
-    import urllib.error
-    import urllib.request
-
-    plan, problem = _push_plan(args)
-    if plan is None:
-        print(f"[guideline-checker] {problem}", file=sys.stderr)
-        return 1
-    url, repo, payload = plan.url, plan.repo, plan.payload
-
-    headers = {"Content-Type": "application/json"}
-    api_key = args.api_key or os.environ.get("API_KEY", "")
-    if api_key:
-        headers["X-Api-Key"] = api_key
-
-    request = urllib.request.Request(  # noqa: S310 — scheme validated to http(s) above
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as resp:  # noqa: S310 — scheme validated above
-            status_code = resp.status
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", "replace")[:200]
-        print(
-            f"[guideline-checker] Push rejected (HTTP {exc.code}): {detail}",
-            file=sys.stderr,
-        )
-        return 1
-    except urllib.error.URLError as exc:
-        print(f"[guideline-checker] Push failed: {exc.reason}", file=sys.stderr)
-        return 1
-
-    print(f"[guideline-checker] Pushed report for '{repo}' to {url} (HTTP {status_code}).")
-    return 0
-
-
 # Subcommand -> handler. A table, not an if/elif ladder: adding a command is a row,
 # and `fix` sharing `check`'s handler is visible here instead of buried in control flow.
 _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "init": _cmd_init,
+    "health": _cmd_health,
     "synthesize": _cmd_synthesize,
     "web": _cmd_web,
-    "central": _cmd_central,
-    "push": _cmd_push,
     "check": _cmd_check,
     "fix": _cmd_check,
 }

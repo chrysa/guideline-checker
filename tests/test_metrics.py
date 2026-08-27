@@ -1,6 +1,6 @@
 """Measurement primitives: they measure, they never judge."""
 
-from guideline_checker.metrics import METRICS, VALID_METRICS
+from guideline_checker.core.detection.numeric import METRICS, VALID_METRICS
 
 
 def test_file_lines_counts_every_line() -> None:

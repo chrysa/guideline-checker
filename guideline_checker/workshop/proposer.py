@@ -1,8 +1,9 @@
 """The proposer seam — turn a rule statement into a candidate ``detect:`` block.
 
 A ``Proposer`` proposes; it never judges. Every proposal is replayed by the
-deterministic engine in the sandbox and shown with its proof before any write
-(see ``sandbox.replay`` and ADR D-0012). The LLM backends (Ollama, Claude) live
+deterministic engine in the sandbox proof routine and shown with its proof
+before any write (see ``core.health.replay`` and ADR D-0012). The LLM backends
+(Ollama, Claude) live
 behind the optional ``[assist]`` extra; the ``HeuristicProposer`` here needs no
 extra and no network — it recycles the checker's own phrase table, so a dead
 rule whose prose the checker already recognises gets an armed detector for free,
@@ -21,7 +22,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-from guideline_checker.checker import _build_checks
+from guideline_checker.core.derive.seed import derive_seed_rules
 from guideline_checker.loader import RuleDetector
 
 _JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
@@ -49,24 +50,23 @@ class Proposer(Protocol):
 class HeuristicProposer:
     """Propose a detector by recycling the checker's phrase table — no LLM.
 
-    If ``_build_checks`` recognises the rule's prose, its anti-pattern substrings
-    become the proposal's ``forbid`` list. Rules the table cannot map (semantic or
-    provider-specific conventions) return ``None`` so the router escalates to an LLM.
+    If ``derive_seed_rules`` recognises the rule's prose, its anti-pattern
+    substrings become the proposal's ``forbid`` list. Rules the table cannot map
+    (semantic or provider-specific conventions) return ``None`` so the router
+    escalates to an LLM.
     """
 
     source = "heuristic"
 
     def propose(self, rule: str, apply_to: str = "**/*") -> Proposal | None:
-        checks = _build_checks(rule.lower())
-        if not checks:
+        detector = derive_seed_rules(rule)
+        if detector is None:
             return None
-        forbid = tuple(dict.fromkeys(check.pattern for check in checks))
-        match_in_comments = any(check.match_in_comments for check in checks)
-        joined = ", ".join(forbid)
+        joined = ", ".join(detector.forbid)
         return Proposal(
             rule=rule,
-            detector=RuleDetector(forbid=forbid, match_in_comments=match_in_comments),
-            rationale=f"Recognised {len(forbid)} known anti-pattern substring(s): {joined}.",
+            detector=detector,
+            rationale=f"Recognised {len(detector.forbid)} known anti-pattern substring(s): {joined}.",
             source=self.source,
         )
 
@@ -91,8 +91,8 @@ JSON:"""
 class OllamaProposer:
     """Propose a detector via a local Ollama model — the LLM backend of the seam.
 
-    The model only *proposes*: every proposal is still replayed in the sandbox
-    for proof before any write (ADR D-0012). Lives behind the optional
+    The model only *proposes*: every proposal is still replayed by the sandbox
+    proof routine before any write (ADR D-0012). Lives behind the optional
     ``[assist]`` extra conceptually; the transport is stdlib ``urllib`` so it
     adds no runtime dependency. ``generate`` is injectable for offline tests.
     """
@@ -130,8 +130,8 @@ class ClaudeProposer:
     """Propose a detector via the ``claude`` CLI — the portable LLM backend.
 
     Shells out to ``claude -p`` on the user's subscription (no API key, no local
-    model, no RAM). Like every proposer it only proposes: the sandbox proves the
-    detector before any write (ADR D-0012). ``ANTHROPIC_API_KEY`` / ``ANTHROPIC_KEY``
+    model, no RAM). Like every proposer it only proposes: the sandbox proof
+    routine proves the detector before any write (ADR D-0012). ``ANTHROPIC_API_KEY`` / ``ANTHROPIC_KEY``
     are stripped from the child env so ``claude -p`` uses the subscription session
     instead of exiting on a stray key. ``generate`` is injectable for offline tests.
     """

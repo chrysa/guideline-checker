@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from guideline_checker.gh_client import GhClient, GhResult
+from guideline_checker.fleet.gh_client import GhClient, GhResult
 
 
 def _runner(responses: dict[str, GhResult]):

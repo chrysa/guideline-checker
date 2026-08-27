@@ -1,22 +1,30 @@
-"""Tests for the deterministic rule-health engine (``rule_health``).
+"""Tests for the deterministic rule-health engine and sandbox proof (``core.health``).
 
 Rule health answers the question the silent-green dashboard never could:
 *is this rule capable of detecting anything, and does it actually fire?* It is
 computed by the deterministic engine with no LLM and no network — a rule with no
 declarative detector **and** no phrase-derived check is ``DEAD`` and can never
 flag a violation, however green the scan looks.
+
+The sandbox (below, merged from ``tests/test_sandbox.py``) runs a candidate
+detector through the *real* per-file detection path (``core.detection._check_file``)
+against the working tree, writing nothing, and returns exactly what it catches:
+file, line, excerpt. This is the proof the workshop shows before any write —
+the user never has to trust a proposal blind.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from guideline_checker.checker import RuleResult, Violation
-from guideline_checker.loader import InstructionFile, RuleDetector, SourceType
-from guideline_checker.rule_health import (
+from guideline_checker.core.detection import RuleResult, Violation
+from guideline_checker.core.health import (
     HealthState,
+    Proof,
     compute_rule_health,
+    replay,
 )
+from guideline_checker.loader import InstructionFile, RuleDetector, SourceType
 
 
 def _instruction(
@@ -197,7 +205,7 @@ def test_missing_provenance_defaults_to_empty() -> None:
 
 def test_health_carries_the_check_kind() -> None:
     """ADR D-0020: every rule reports its generic mechanism (kind)."""
-    from guideline_checker.kinds import CheckKind
+    from guideline_checker.core.detection import CheckKind
 
     rule = "no pickle loads"
     instr = _instruction("python", [rule], {rule: RuleDetector(forbid=("pickle.loads(",))})
@@ -206,9 +214,56 @@ def test_health_carries_the_check_kind() -> None:
 
 
 def test_dead_rule_kind_is_advisory() -> None:
-    from guideline_checker.kinds import CheckKind
+    from guideline_checker.core.detection import CheckKind
 
     rule = "Structure prompts with XML tags"  # YAML rule, no detector -> dead
     instr = _instruction("ai", [rule])
     entry = next(h for h in compute_rule_health([instr]) if h.rule == rule)
     assert entry.kind == CheckKind.ADVISORY.value
+
+
+# ─── Sandbox proof (replay a proposed detector, read-only) ────────────────────
+
+
+def _repo(tmp_path: Path) -> Path:
+    (tmp_path / "app.py").write_text("x = 1\nprint(x)\nvalue = 2\n", encoding="utf-8")
+    (tmp_path / "clean.py").write_text("y = 1\nreturn y\n", encoding="utf-8")
+    return tmp_path
+
+
+def test_replay_reports_matching_lines_as_proof(tmp_path: Path) -> None:
+    proof = replay("no print", RuleDetector(forbid=("print(",)), _repo(tmp_path))
+
+    assert isinstance(proof, Proof)
+    assert proof.match_count == 1
+    hit = proof.hits[0]
+    assert hit.file == "app.py"
+    assert hit.line == 2
+    assert "print(" in hit.excerpt
+
+
+def test_replay_writes_nothing(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    before = (root / "app.py").read_text(encoding="utf-8")
+
+    replay("no print", RuleDetector(forbid=("print(",)), root)
+
+    assert (root / "app.py").read_text(encoding="utf-8") == before
+
+
+def test_replay_of_a_matchless_detector_proves_zero(tmp_path: Path) -> None:
+    proof = replay("no pdb", RuleDetector(forbid=("import pdb",)), _repo(tmp_path))
+
+    assert proof.match_count == 0
+    assert proof.hits == []
+    assert proof.files_scanned >= 2
+
+
+def test_replay_honours_apply_to_glob(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    (root / "notes.md").write_text("print(hello)\n", encoding="utf-8")
+
+    proof = replay("no print", RuleDetector(forbid=("print(",)), root, apply_to="**/*.py")
+
+    assert all(h.file.endswith(".py") for h in proof.hits)
+    assert proof.match_count == 1

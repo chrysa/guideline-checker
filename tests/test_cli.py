@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 from pytest_mock import MockerFixture
 
-from guideline_checker.cli import build_parser, main
+from guideline_checker.cli import _scan, build_parser, main
+from guideline_checker.core.derive.seed import derive_seed_rules
 
 
 def _make_project(tmp_path: Path, *, violation: bool = True) -> Path:
@@ -164,6 +165,27 @@ def test_main_check_fail_on_warning_with_warning_only(tmp_path: Path) -> None:
     assert code == 1
 
 
+def test_scan_resolves_rule_detectors_like_cmd_check(tmp_path: Path) -> None:
+    """_scan (the --fix post-fix re-check path) must resolve missing primary
+    detectors the same way _cmd_check does, so both paths agree on which
+    rules are detectable (Task 6 fix round 1, Finding 4).
+
+    "No print() calls" has no YAML detect: block (it's a markdown instruction)
+    but is recognised by the seed table — resolve_rule_detectors should fill
+    its primary detector during _scan, not leave it missing.
+    """
+    root = _make_project(tmp_path, violation=True)
+    args = build_parser().parse_args(["check", "--root", str(root)])
+
+    results = _scan(args, root)
+
+    matching = [r for r in results if "No print() calls" in r.instruction.rules]
+    assert matching
+    detector = matching[0].instruction.rule_detectors.get("No print() calls")
+    assert detector is not None
+    assert detector == derive_seed_rules("No print() calls")
+
+
 # ─── web subcommand ────────────────────────────────────────────────────────────
 
 
@@ -244,8 +266,8 @@ def test_main_web_warns_on_open_public_bind(
 class TestSynthesizeOrigin:
     def test_origin_source_writes_report_and_returns_zero(self, tmp_path: Path, mocker: MockerFixture) -> None:
 
-        from guideline_checker.gh_client import GhClient as RealClient
-        from guideline_checker.gh_client import GhResult
+        from guideline_checker.fleet.gh_client import GhClient as RealClient
+        from guideline_checker.fleet.gh_client import GhResult
 
         def _origin_runner(args):  # type: ignore[no-untyped-def]
             joined = " ".join(args)
@@ -266,7 +288,7 @@ class TestSynthesizeOrigin:
 
         from guideline_checker.cli import main
 
-        gh_cls = mocker.patch("guideline_checker.cli.GhClient")
+        gh_cls = mocker.patch("guideline_checker.fleet.gh_client.GhClient")
         gh_cls.return_value = RealClient(runner=_origin_runner)
         code = main(
             [
@@ -290,8 +312,8 @@ class TestSynthesizeOrigin:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str], mocker: MockerFixture
     ) -> None:
 
-        from guideline_checker.gh_client import GhClient as RealClient
-        from guideline_checker.gh_client import GhResult
+        from guideline_checker.fleet.gh_client import GhClient as RealClient
+        from guideline_checker.fleet.gh_client import GhResult
 
         def _runner(args):  # type: ignore[no-untyped-def]
             joined = " ".join(args)
@@ -311,7 +333,7 @@ class TestSynthesizeOrigin:
 
         from guideline_checker.cli import main
 
-        gh_cls = mocker.patch("guideline_checker.cli.GhClient")
+        gh_cls = mocker.patch("guideline_checker.fleet.gh_client.GhClient")
         gh_cls.return_value = RealClient(runner=_runner)
         code = main(
             [
@@ -521,3 +543,22 @@ class TestConfigCli:
         # Backlog is baselined via the config-provided path -> gate passes despite fail_on=warning.
         code = main(["check", "--root", str(root), "--output", str(tmp_path / "r2.html")])
         assert code == 0
+
+
+def test_health_command_never_fails_and_prints_state_counts(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / "CLAUDE.md").write_text(
+        "# Rules\n\n- No print statements.\n- Follow the style guide.\n",
+        encoding="utf-8",
+    )
+    exit_code = main(["health", "--root", str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    # "No print statements." maps to a phrase-derived detector -> armed (no scan run).
+    assert "armed: 1" in captured.out
+    # "Follow the style guide." has no recognised detector on a Markdown source -> advisory.
+    assert "advisory: 1" in captured.out
+    # No scan results are passed in, so nothing can be proven, and CLAUDE.md rules
+    # are never reported dead (dead is reserved for the YAML referential).
+    assert "proven: 0" in captured.out
+    assert "dead: 0" in captured.out

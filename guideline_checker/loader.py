@@ -69,7 +69,7 @@ class CrossReference:
 class NumericThreshold:
     """A metric to measure and the bound it must not cross.
 
-    The engine owns the *measuring* (see :mod:`guideline_checker.metrics`); this
+    The engine owns the *measuring* (see :mod:`guideline_checker.core.detection.numeric`); this
     carries the host's chosen metric name and bound, and nothing else. Keeping the
     number here — read from ``guidelines/*.yml`` — rather than in engine code is
     ADR D-0016's line: mechanisms in the tool, values in the host.
@@ -101,7 +101,7 @@ class RuleDetector:
     cross_reference: CrossReference | None = None  # a citation here, its definition elsewhere
     stale_after_days: int | None = None  # a matching file older than this is stale (file-freshness kind)
     numeric_threshold: NumericThreshold | None = None  # a measured metric vs a bound (numeric-threshold kind)
-    exclude: tuple[str, ...] = ()  # paths this detector must not judge (see checker._is_excluded)
+    exclude: tuple[str, ...] = ()  # paths this detector must not judge (see pattern._is_excluded)
     match_in_comments: bool = False  # applies to forbid / forbid_regex
 
 

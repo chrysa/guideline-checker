@@ -65,6 +65,10 @@ dev = [
     "uvicorn[standard]>=0.34",
 ]
 e2e = ["playwright>=1.48", "pytest-playwright>=0.5"]
+workshop = []  # LLM detector authoring (proposer/persist/interpret) — no extra deps today;
+               # reserved for a future LLM SDK so it never lands in the default install.
+fleet = []     # gh-backed multi-repo governance — no extra deps today (gh_client shells to
+               # the `gh` CLI); reserved so a future PyGithub dependency never lands by default.
 
 [project.scripts]
 guideline-checker = "guideline_checker.cli:main"
@@ -142,8 +146,12 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN", "S101", "S104"]
 "tests/fixtures/**" = ["ANN", "S101", "S104", "S307", "S110", "E722", "S108"]
-# checker.py embeds detection patterns (e.g. "0.0.0.0") intentionally — not a real binding
-"guideline_checker/checker.py" = ["S104"]
+# seed.py embeds detection patterns (e.g. "0.0.0.0") intentionally — not a real binding
+"guideline_checker/core/derive/seed.py" = ["S104"]
+# __init__.py defines Violation/RuleResult before importing .pattern/.numeric/.presence,
+# which themselves construct Violation — the submodule imports must come after those
+# classes are defined to avoid a real circular import, hence E402 here is deliberate.
+"guideline_checker/core/detection/__init__.py" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"

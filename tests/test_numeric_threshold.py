@@ -1,19 +1,21 @@
 """Tests for the numeric-threshold mechanism (kind NUMERIC_THRESHOLD, ADR D-0021).
 
-The engine owns the measuring (``guideline_checker.metrics``); the metric name and
-the bound are host values read from the referential. A threshold literal inside
-engine code would be the very drift ADR D-0016 draws its line against.
+The engine owns the measuring (``guideline_checker.core.detection.numeric``); the
+metric name and the bound are host values read from the referential. A threshold
+literal inside engine code would be the very drift ADR D-0016 draws its line
+against.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
-from guideline_checker.checker import Violation, _numeric_threshold_violations
+from guideline_checker.core.detection import CheckKind, Violation, kind_of_detector
+from guideline_checker.core.detection.numeric import _numeric_threshold_violations
 from guideline_checker.guidelines import GuidelineError, load_yaml_guidelines
-from guideline_checker.kinds import CheckKind, kind_of_detector
 from guideline_checker.loader import NumericThreshold, RuleDetector
 
 
@@ -180,20 +182,32 @@ def test_the_shipped_referential_arms_the_numeric_threshold_kind() -> None:
 
 
 def test_the_engine_states_no_bound_of_its_own() -> None:
-    """The bounds live in the host referential; restating one in engine code is the drift."""
-    engine = (_REPO_ROOT / "guideline_checker" / "metrics.py").read_text(encoding="utf-8")
-    assert "500" not in engine
-    assert "max_value" not in engine
+    """The bounds live in the host referential; restating one in engine code is the drift.
+
+    The pure measurers (the ``metrics.py``-era primitives, now merged into
+    ``core/detection/numeric.py``) take only ``source`` and answer *how much*,
+    never *too much*. The violation-building functions merged alongside them
+    (``_numeric_threshold_violations`` and friends) legitimately read the host's own
+    ``max_value`` as an attribute (``threshold.max_value``) to compare against — that is
+    ADR D-0021, not drift. This test asserts that no hardcoded bound constant exists in
+    the engine file, and that bare ``max_value`` (not preceded by a dot) never appears.
+    """
+    engine_source = (_REPO_ROOT / "guideline_checker" / "core" / "detection" / "numeric.py").read_text(encoding="utf-8")
+    # No hardcoded bound constant anywhere in the file.
+    assert "500" not in engine_source
+    # The bare word ``max_value`` must not appear; only ``.max_value`` (attribute access) is allowed.
+    assert not re.search(r"(?<!\.)\bmax_value\b", engine_source)
 
 
 # ─── D-0021 blind spot: the numeric rules must see the repo's longest files ────
 #
-# ``.guidelineignore`` blanket-excluded checker.py and cli.py because a *pattern*
-# detector's own tables hold the patterns it flags. That same blanket blinded the
-# *measurement* rules to the two longest files in the repo — the exact silent-green
-# this project refuses. The fix scopes the exclusion per-rule instead of per-file.
+# ``.guidelineignore`` blanket-excluded core/derive/seed.py and cli.py because
+# a *pattern* detector's own tables hold the patterns it flags. That same blanket
+# blinded the *measurement* rules to the two longest files in the repo — the exact
+# silent-green this project refuses. The fix scopes the exclusion per-rule instead
+# of per-file.
 
-_BLIND_SPOT_FILES = ("guideline_checker/checker.py", "guideline_checker/cli.py")
+_BLIND_SPOT_FILES = ("guideline_checker/core/derive/seed.py", "guideline_checker/cli.py")
 
 
 def _shipped_detectors() -> dict[str, RuleDetector]:
@@ -212,7 +226,7 @@ def test_the_numeric_rules_do_not_exclude_the_longest_files() -> None:
 
 
 def test_the_pattern_rules_scope_the_exclusion_per_rule() -> None:
-    """checker.py and cli.py leave the blanket only because the pattern rules that match them opt out."""
+    """core/derive/seed.py and cli.py leave the blanket only because the pattern rules that match them opt out."""
     detectors = _shipped_detectors()
-    assert "guideline_checker/checker.py" in detectors["Never use eval() or exec() on runtime data"].exclude
+    assert "guideline_checker/core/derive/seed.py" in detectors["Never use eval() or exec() on runtime data"].exclude
     assert "guideline_checker/cli.py" in detectors["Emit operational output through the logging module"].exclude

@@ -7,20 +7,6 @@ description: 'Check project compliance against .github/instructions/ rules. Gene
 
   '
 inputs:
-  central-api-key:
-    default: ''
-    description: 'API key sent to the central server as X-Api-Key. Leave empty to skip
-      the push.
-
-      '
-    required: false
-  central-server:
-    default: ''
-    description: 'Base URL of a central guideline server to push the JSON report to.
-      Empty disables the push.
-
-      '
-    required: false
   exclude:
     default: ''
     description: 'Comma-separated globs (relative to root) to skip. A bare directory
@@ -112,15 +98,6 @@ runs:
       echo "sarif-path=$(realpath "$GC_SARIF" 2>/dev/null || echo "$GC_SARIF")" >> "$GITHUB_OUTPUT"
 
       exit $EXIT_CODE
-    shell: bash
-  - continue-on-error: true
-    env:
-      GC_CENTRAL_KEY: ${{ inputs.central-api-key }}
-      GC_CENTRAL_SERVER: ${{ inputs.central-server }}
-    if: ${{ inputs.central-server != '' && !cancelled() }}
-    name: Push report to central server
-    run: "guideline-checker push --server \"$GC_CENTRAL_SERVER\" --report guideline-report.json\
-      \ --api-key \"$GC_CENTRAL_KEY\"\n"
     shell: bash
   - if: ${{ inputs.upload-sarif == 'true' && !cancelled() }}
     name: Upload SARIF to GitHub Code Scanning

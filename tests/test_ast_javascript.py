@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.ast_javascript import (
+from guideline_checker.core.detection import run_checks
+from guideline_checker.core.detection.ast_javascript import (
     VALID_JS_AST_CHECKS,
     run_js_ast_checks,
     unknown_js_checks,
 )
-from guideline_checker.ast_python import VALID_AST_CHECKS
-from guideline_checker.checker import run_checks
+from guideline_checker.core.detection.ast_python import VALID_AST_CHECKS
 from guideline_checker.guidelines import GuidelineError, load_yaml_guidelines
 
 # ─── ts-any-type ──────────────────────────────────────────────────────────────
@@ -202,6 +202,7 @@ def test_unknown_js_checks_helper() -> None:
         "react-index-key",
         "react-inline-component",
         "react-missing-effect-deps",
+        "mutation-without-feedback",
     }
 
 

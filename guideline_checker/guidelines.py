@@ -35,8 +35,10 @@ from pathlib import Path
 
 import yaml
 
-from guideline_checker.ast_javascript import VALID_JS_AST_CHECKS, unknown_js_checks
-from guideline_checker.ast_python import VALID_AST_CHECKS, unknown_checks
+from guideline_checker.core.detection.ast_javascript import VALID_JS_AST_CHECKS, unknown_js_checks
+from guideline_checker.core.detection.ast_python import VALID_AST_CHECKS, unknown_checks
+from guideline_checker.core.detection.numeric import VALID_METRICS
+from guideline_checker.core.detection.scanners import VALID_SCANS, unknown_scans
 from guideline_checker.loader import (
     CrossReference,
     InstructionFile,
@@ -45,8 +47,6 @@ from guideline_checker.loader import (
     RuleFix,
     SourceType,
 )
-from guideline_checker.metrics import VALID_METRICS
-from guideline_checker.scanners import VALID_SCANS, unknown_scans
 
 logger = logging.getLogger(__name__)
 
