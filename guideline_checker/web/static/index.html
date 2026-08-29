@@ -302,7 +302,16 @@ const pName = (p) => p.name || "";
 const pScore = (p) => (p.error ? -1 : ((p.compliance || {}).score == null ? 101 : p.compliance.score)); // errors first, n/a last
 
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// Escapes for both text and quoted-attribute contexts. Quotes MUST be escaped:
+// without it, a value inside `attr="${esc(x)}"` can break out of the attribute
+// (e.g. `" onmouseover="…`) and inject script — an XSS even though < > are escaped.
+const esc = (s) =>
+  String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 const fmtTime = (t) => (t ? t.slice(0, 19).replace("T", " ") : "");
 
 // ── i18n: FR + EN from V1 (chrysa standard) ──────────────────────────────────
@@ -676,7 +685,7 @@ function renderRules() {
   if (!rows.length) { showEmpty(t("no_rules_match")); return; }
   $("rules").innerHTML = rows.slice(0, 300).map((r) =>
     `<div class="row" data-rule="${esc(r.rule)}" role="button" tabindex="0" aria-label="${esc(r.state)}: ${esc(r.rule)} — ${esc(t("row_load_hint"))}">
-       <span class="chip ${r.state}">${r.state}</span>
+       <span class="chip ${esc(r.state)}">${esc(r.state)}</span>
        <div><div class="rule">${esc(r.rule)}</div><div class="src">${esc(r.instruction)}${r.kind && r.kind !== "advisory" ? ` · <span class="kind">${esc(r.kind)}</span>` : ""}${r.provenance ? ` · from “${esc(r.provenance)}”` : ""}</div></div>
        ${r.resolvable ? `<button class="resolve" data-rule="${esc(r.rule)}" title="${esc(t("resolve_title"))}">${esc(t("resolve"))}</button>` : `<span class="fires">${r.fire_count ? "×" + r.fire_count : ""}</span>`}
      </div>`).join("");
