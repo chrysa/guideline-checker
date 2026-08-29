@@ -23,6 +23,7 @@ from guideline_checker.core.detection import RuleResult, run_checks
 from guideline_checker.core.health import RuleHealth, compute_rule_health, summarize
 from guideline_checker.loader import InstructionFile, load_all_sources
 from guideline_checker.web.auth import require_auth
+from guideline_checker.web.mode import require_workshop
 from guideline_checker.workshop.interpret import DerivedRule
 from guideline_checker.workshop.proposer import HeuristicProposer
 from guideline_checker.workspace import discover_projects, has_rule_source
@@ -422,7 +423,7 @@ def browse_dirs(path: str | None = None) -> JSONResponse:
     return JSONResponse(_browse_listing(_BROWSE_ROOT, path))
 
 
-@app.post("/api/scan", response_model=dict[str, str], dependencies=[Depends(require_auth)])
+@app.post("/api/scan", response_model=dict[str, str], dependencies=[Depends(require_auth), Depends(require_workshop)])
 def trigger_scan(background_tasks: BackgroundTasks, req: _ScanRequest | None = None) -> dict[str, str]:
     """Trigger a scan in the background, optionally switching to another target first.
 
@@ -481,7 +482,11 @@ def get_rules_health() -> JSONResponse:
     )
 
 
-@app.post("/api/scan-all", response_model=dict[str, str], dependencies=[Depends(require_auth)])
+@app.post(
+    "/api/scan-all",
+    response_model=dict[str, str],
+    dependencies=[Depends(require_auth), Depends(require_workshop)],
+)
 def trigger_scan_all(background_tasks: BackgroundTasks) -> dict[str, str]:
     """Compute a health summary for every workspace project (the fleet cockpit)."""
     if _state.all_running:

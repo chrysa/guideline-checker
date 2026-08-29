@@ -15,6 +15,7 @@ from guideline_checker.core.health import replay
 from guideline_checker.loader import RuleDetector
 from guideline_checker.web.app import _active_root, _claude_available, _llm_enabled, _state, _truthy
 from guideline_checker.web.auth import require_auth
+from guideline_checker.web.mode import require_workshop
 from guideline_checker.workshop.interpret import interpret_rules
 from guideline_checker.workshop.persist import apply_detector, find_rule_id_for_text, write_derived_ruleset
 from guideline_checker.workshop.proposer import (
@@ -62,7 +63,11 @@ def _do_interpret() -> None:
         _state.interpret_running = False
 
 
-@router.post("/api/interpret", response_model=dict[str, str], dependencies=[Depends(require_auth)])
+@router.post(
+    "/api/interpret",
+    response_model=dict[str, str],
+    dependencies=[Depends(require_auth), Depends(require_workshop)],
+)
 async def trigger_interpret(background_tasks: BackgroundTasks) -> dict[str, str]:
     """Interpret the active project's advisory prose into a derived, proven ruleset."""
     if _state.interpret_running:
@@ -89,7 +94,11 @@ class _PersistRequest(BaseModel):
     dry_run: bool = True  # preview the diff; set false to write guidelines/derived/derived.yml
 
 
-@router.post("/api/interpret/persist", response_model=None, dependencies=[Depends(require_auth)])
+@router.post(
+    "/api/interpret/persist",
+    response_model=None,
+    dependencies=[Depends(require_auth), Depends(require_workshop)],
+)
 def persist_derived(req: _PersistRequest) -> JSONResponse:
     """Cache the derived ruleset (ADR D-0016): write it to guidelines/derived/derived.yml.
 
@@ -149,7 +158,7 @@ def _propose(rule: str, apply_to: str) -> Proposal | None:
     return proposal
 
 
-@router.post("/api/propose", response_model=None, dependencies=[Depends(require_auth)])
+@router.post("/api/propose", response_model=None, dependencies=[Depends(require_auth), Depends(require_workshop)])
 def propose_detector(req: _ProposeRequest) -> JSONResponse:
     """Propose a detector for a rule and replay it in the sandbox for proof.
 
@@ -186,7 +195,11 @@ def propose_detector(req: _ProposeRequest) -> JSONResponse:
     )
 
 
-@router.post("/api/rules/detector", response_model=None, dependencies=[Depends(require_auth)])
+@router.post(
+    "/api/rules/detector",
+    response_model=None,
+    dependencies=[Depends(require_auth), Depends(require_workshop)],
+)
 def arm_rule(req: _ArmRequest) -> JSONResponse:
     """Write a validated detector onto a referential rule; ``dry_run`` shows the diff only."""
     detector = RuleDetector(
@@ -226,7 +239,7 @@ class _ResolveRequest(BaseModel):
     dry_run: bool = True  # preview the diff; set false to actually write the detector
 
 
-@router.post("/api/rules/resolve", response_model=None, dependencies=[Depends(require_auth)])
+@router.post("/api/rules/resolve", response_model=None, dependencies=[Depends(require_auth), Depends(require_workshop)])
 def resolve_rule(req: _ResolveRequest) -> JSONResponse:
     """Resolve a rule end to end: derive a detector, prove it, then arm it.
 
