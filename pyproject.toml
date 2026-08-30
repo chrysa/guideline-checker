@@ -131,6 +131,7 @@ select = [
     "PLR1714",
     "PLR1730",
     "PLR5501",
+    "PLR2004",
 ]
 ignore = [
     "S101",    # use of assert (sanctioned by chrysa standard)
@@ -152,7 +153,9 @@ ignore = [
 # which themselves construct Violation — the submodule imports must come after those
 # classes are defined to avoid a real circular import, hence E402 here is deliberate.
 "guideline_checker/core/detection/__init__.py" = ["E402"]
-
+"**/tests/**" = ["PLR2004"]
+"**/test_*.py" = ["PLR2004"]
+"**/conftest.py" = ["PLR2004"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
