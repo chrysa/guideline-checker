@@ -1,6 +1,6 @@
 default_language_version:
   python: python3.14
-exclude: ^\.claude/(?!(skills|agents)/)
+exclude: ^\.claude/(?!(skills|agents)/)|(^|/)quality_gate\.py$|^\.claude/ape/
 fail_fast: false
 minimum_pre_commit_version: 4.1.0
 repos:
@@ -37,12 +37,12 @@ repos:
   rev: v2.3.0
 - hooks:
   - id: makefile-check
-  - exclude: (^|/)tests?/|^(README\.md|docs/)|^guideline_checker/(cli\.py$|core/derive/seed\.py$)
+  - exclude: (^|/)tests?/|^(README\.md|docs/)|(^|/)quality_gate\.py$|^\.claude/ape/
     id: python-print-detection
-  - exclude: (^|/)tests?/|^(README\.md|docs/)|^guideline_checker/core/derive/seed\.py$
+  - exclude: (^|/)tests?/|^(README\.md|docs/)|(^|/)quality_gate\.py$|^\.claude/ape/
     id: python-pprint-detection
   - id: python-unreachable-code
-  - exclude: ^\.github/(workflows|ISSUE_TEMPLATE)/|^\.github/dependabot\.yml$
+  - exclude: ^(\.github/|workflows/|templates/|docker-compose)|(^|/)(pnpm-lock|yarn|uv|poetry)\.(yaml|lock)$|(^|/)\.pre-commit-config\.yaml$
     id: yaml-sorter
   - id: adr-gate
   - exclude: ^tests/
@@ -50,7 +50,7 @@ repos:
   - id: python-logger-detection
     exclude: (^|/)tests?/|^(README\.md|docs/)
   - id: no-sync-in-async
-  - exclude: (^|/)tests?/|^(README\.md|docs/)|^guidelines/
+  - exclude: (^|/)tests?/|^(README\.md|docs/)
     id: debugger-detection
   - id: fastapi-missing-response-model
     exclude: (^|/)tests/

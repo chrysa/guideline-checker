@@ -24,6 +24,7 @@ from guideline_checker.core.health import RuleHealth, compute_rule_health, summa
 from guideline_checker.loader import InstructionFile, load_all_sources
 from guideline_checker.web.auth import require_auth
 from guideline_checker.web.mode import require_workshop
+from guideline_checker.web.security_headers import SecurityHeadersMiddleware
 from guideline_checker.workshop.interpret import DerivedRule
 from guideline_checker.workshop.proposer import HeuristicProposer
 from guideline_checker.workspace import discover_projects, has_rule_source
@@ -305,6 +306,7 @@ app: FastAPI = FastAPI(
     version="1.0.0",
     lifespan=_lifespan,
 )
+app.add_middleware(SecurityHeadersMiddleware)
 
 # The propose/interpret/persist router is an optional plugin: this try/except means
 # a missing workshop.web_endpoints module gracefully drops the panel's routes rather than

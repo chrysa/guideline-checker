@@ -14,8 +14,14 @@ pytestmark = pytest.mark.anyio
 
 
 @pytest.fixture()
-async def client(mocker: MockerFixture) -> AsyncIterator[AsyncClient]:
-    """Return a TestClient with the startup scan mocked out."""
+async def client(monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture) -> AsyncIterator[AsyncClient]:
+    """Return a TestClient with the startup scan mocked out.
+
+    These tests exercise API behaviour, not authentication, so auth is
+    explicitly disabled — the app now fails closed when a mode is selected
+    without its secret, so the intent must be declared rather than implied.
+    """
+    monkeypatch.setenv("AUTH_ENABLED", "false")
     _state.results = []
     _state.constraints = []
     _state.timestamp = None
