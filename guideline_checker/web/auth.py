@@ -10,10 +10,10 @@ disabled
     No authentication required. Only for local dev or trusted networks.
 api_key  *(default)*
     ``X-Api-Key`` request header checked against the ``API_KEY`` env var.
-    If ``API_KEY`` is unset the check is skipped (open access).
+    If ``API_KEY`` is unset the request is refused (fail closed, 500).
 local
     HTTP Basic Auth.  Credentials checked against ``LOCAL_USERNAME`` /
-    ``LOCAL_PASSWORD`` env vars.  If neither is set access is open.
+    ``LOCAL_PASSWORD`` env vars.  If either is unset the request is refused (fail closed, 500).
 ldap
     HTTP Basic Auth forwarded to an LDAP server via a simple bind.
     Required env vars: ``LDAP_URL``, ``LDAP_USER_DN_TEMPLATE``.
@@ -85,7 +85,12 @@ _bearer = HTTPBearer(auto_error=False)
 def _check_api_key(key: str | None) -> None:
     expected = os.environ.get("API_KEY", "")
     if not expected:
-        return  # not configured → open access
+        # Fail closed: api_key mode is selected but no key is configured.
+        # Never silently serve open access — refuse until it is configured.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication is misconfigured: API_KEY is not set",
+        )
     if not key or not secrets.compare_digest(key, expected):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -96,8 +101,13 @@ def _check_api_key(key: str | None) -> None:
 def _check_local(creds: HTTPBasicCredentials | None) -> None:
     username = os.environ.get("LOCAL_USERNAME", "")
     password = os.environ.get("LOCAL_PASSWORD", "")
-    if not username and not password:
-        return  # not configured → open access
+    if not username or not password:
+        # Fail closed: local mode is selected but credentials are incomplete.
+        # A half-configured credential (only one of the two set) must not open access.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication is misconfigured: LOCAL_USERNAME/LOCAL_PASSWORD are not both set",
+        )
     if creds is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
