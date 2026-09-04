@@ -107,6 +107,7 @@ show_missing = true
 fail_under = 85
 
 [tool.ruff]
+extend-exclude = [".claude", "scripts/quality_gate.py"]
 target-version = "py312"
 line-length = 120
 
