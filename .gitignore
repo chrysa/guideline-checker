@@ -275,3 +275,7 @@ graphify-out/
 Thumbs.db
 
 # ---8<--- chrysa:canonical:end --->8---
+# graphify artifacts (keep architecture diagram only)
+graphify-out/*
+!graphify-out/architecture.json
+!graphify-out/architecture.html

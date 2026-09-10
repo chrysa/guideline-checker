@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "guideline-checker \u2014 module map",
+    "quality_profile": "standard",
+    "viewBox": [
+      776,
+      570
+    ],
+    "views": [
+      {
+        "id": "modules",
+        "label": "Modules",
+        "focus": [
+          "d_tests",
+          "d_guideline_checker",
+          "d_claude",
+          "d_root",
+          "d_docs",
+          "d_scripts"
+        ],
+        "note": "Top source directories sized by graph node count; edges are cross-module references."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "d_tests",
+      "type": "external",
+      "label": "tests",
+      "sublabel": "1592 nodes",
+      "pos": [
+        40,
+        60
+      ],
+      "size": [
+        156,
+        64
+      ]
+    },
+    {
+      "id": "d_guideline_checker",
+      "type": "backend",
+      "label": "guideline_checker",
+      "sublabel": "1180 nodes",
+      "pos": [
+        272,
+        60
+      ],
+      "size": [
+        156,
+        64
+      ]
+    },
+    {
+      "id": "d_claude",
+      "type": "backend",
+      "label": ".claude",
+      "sublabel": "425 nodes",
+      "pos": [
+        504,
+        60
+      ],
+      "size": [
+        156,
+        64
+      ]
+    },
+    {
+      "id": "d_root",
+      "type": "backend",
+      "label": "(root)",
+      "sublabel": "270 nodes",
+      "pos": [
+        40,
+        210
+      ],
+      "size": [
+        156,
+        64
+      ]
+    },
+    {
+      "id": "d_docs",
+      "type": "backend",
+      "label": "docs",
+      "sublabel": "110 nodes",
+      "pos": [
+        272,
+        210
+      ],
+      "size": [
+        156,
+        64
+      ]
+    },
+    {
+      "id": "d_scripts",
+      "type": "backend",
+      "label": "scripts",
+      "sublabel": "54 nodes",
+      "pos": [
+        504,
+        210
+      ],
+      "size": [
+        156,
+        64
+      ]
+    },
+    {
+      "id": "d_github",
+      "type": "backend",
+      "label": ".github",
+      "sublabel": "24 nodes",
+      "pos": [
+        40,
+        360
+      ],
+      "size": [
+        156,
+        64
+      ]
+    },
+    {
+      "id": "d_legal",
+      "type": "backend",
+      "label": "legal",
+      "sublabel": "21 nodes",
+      "pos": [
+        272,
+        360
+      ],
+      "size": [
+        156,
+        64
+      ]
+    },
+    {
+      "id": "d_vscode",
+      "type": "backend",
+      "label": ".vscode",
+      "sublabel": "3 nodes",
+      "pos": [
+        504,
+        360
+      ],
+      "size": [
+        156,
+        64
+      ]
+    }
+  ],
+  "connections": [],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Auto-generated",
+      "items": [
+        "Derived from graphify graph.json",
+        "3679 nodes \u00b7 8366 edges"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Top cross-module links",
+      "items": [
+        "tests \u2194 guideline_checker (1380)",
+        "guideline_checker \u2194 (root) (22)",
+        "tests \u2194 scripts (19)",
+        "scripts \u2194 (root) (1)"
+      ]
+    }
+  ]
+}
