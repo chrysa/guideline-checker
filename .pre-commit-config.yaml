@@ -37,9 +37,9 @@ repos:
   rev: v2.3.0
 - hooks:
   - id: makefile-check
-  - exclude: (^|/)tests?/|^(README\.md|docs/)|(^|/)quality_gate\.py$|^\.claude/ape/|^guideline_checker/checker\.py$
+  - exclude: (^|/)tests?/|^(README\.md|docs/)|(^|/)quality_gate\.py$|^\.claude/ape/
     id: python-print-detection
-  - exclude: (^|/)tests?/|^(README\.md|docs/)|(^|/)quality_gate\.py$|^\.claude/ape/|^guideline_checker/checker\.py$
+  - exclude: (^|/)tests?/|^(README\.md|docs/)|(^|/)quality_gate\.py$|^\.claude/ape/
     id: python-pprint-detection
   - id: python-unreachable-code
   - exclude: ^(\.github/|workflows/|templates/|docker-compose)|(^|/)(pnpm-lock|yarn|uv|poetry)\.(yaml|lock)$|(^|/)\.pre-commit-config\.yaml$
