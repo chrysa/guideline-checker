@@ -113,7 +113,6 @@ Check project compliance against GitHub Copilot instruction rules and generate H
     action-check.yml
     approved-label.yml
     auto-assign.yml
-    auto-update-pre-commit.yml
     ci.yml
     dependabot-auto-merge.yml
     dependencies.yml
@@ -169,6 +168,7 @@ guideline_checker/
   __init__.py
   autofix.py
   baseline.py
+  checker.py
   cli.py
   config.py
   core/
@@ -251,6 +251,7 @@ legal/
 opencode.json
 pyproject.toml
 scripts/
+  gen_context_files.py
   quality_gate.py
 sonar-project.properties
 standards/
@@ -369,6 +370,7 @@ requires-python: >=3.12
 guideline_checker/__init__.py — guideline-checker: check project compliance against Copilot instruction rules.
 guideline_checker/autofix.py — Local, deterministic autofix for violations on rules carrying a ``fix:`` block.
 guideline_checker/baseline.py — Baseline support for incremental adoption (L2.2).
+guideline_checker/checker.py — Core checker: match files against instruction rules.
 guideline_checker/cli.py — CLI entry point for guideline-checker.
 guideline_checker/config.py — Project configuration file support (L2.3).
 guideline_checker/core/__init__.py
@@ -404,4 +406,3 @@ guideline_checker/reporters/json_reporter.py — JSON report generator for guide
 guideline_checker/reporters/markdown.py — Markdown report generator for guideline-checker results.
 guideline_checker/reporters/sarif.py — SARIF 2.1.0 report generator for guideline-checker.
 guideline_checker/reporters/synthesis_html.py — Multi-repo synthesis HTML reporter.
-guideline_checker/web/__init__.py — Web dashboard for guideline-checker.
