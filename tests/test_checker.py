@@ -196,6 +196,48 @@ class TestLineMatches:
         assert _line_matches("    // console.log(x)", "console.log(") is False
 
 
+class TestInlineSuppression:
+    """A line already suppressed for the equivalent linter (ruff/bandit) is
+    intentional and must not be re-flagged by a forbidden-pattern rule."""
+
+    _RULE = "No shell=True in subprocess without justification"
+    # Built from parts so ruff does not read this test's own source as carrying a
+    # (bare) suppression directive.
+    _NQ = "# no" + "qa"
+
+    def test_control_flags_without_suppression(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", "subprocess.run(cmd, shell=True)\n", self._RULE)
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("shell=True" in v.line_content for r in results for v in r.violations)
+
+    def test_noqa_with_security_code_suppresses(self, tmp_path: Path) -> None:
+        code = f"subprocess.run(cmd, shell=True)  {self._NQ}: S602 justified\n"
+        root, inst = _make_project(tmp_path, "app.py", code, self._RULE)
+        results = run_checks(root=root, instructions_dir=inst)
+        assert not any("shell=True" in v.line_content for r in results for v in r.violations)
+
+    def test_bare_noqa_does_not_suppress(self, tmp_path: Path) -> None:
+        # A bare suppression (no code) is too broad to silence a security pattern — the
+        # author must name the code (S602). Mirrors the wildcard-import fixture, which
+        # carries a bare directive yet is still expected to be flagged.
+        code = f"subprocess.run(cmd, shell=True)  {self._NQ}\n"
+        root, inst = _make_project(tmp_path, "app.py", code, self._RULE)
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("shell=True" in v.line_content for r in results for v in r.violations)
+
+    def test_nosec_suppresses(self, tmp_path: Path) -> None:
+        root, inst = _make_project(tmp_path, "app.py", "subprocess.run(cmd, shell=True)  # nosec\n", self._RULE)
+        results = run_checks(root=root, instructions_dir=inst)
+        assert not any("shell=True" in v.line_content for r in results for v in r.violations)
+
+    def test_unrelated_noqa_code_still_flags(self, tmp_path: Path) -> None:
+        # A suppression for an unrelated style code (E501) must NOT mask a security finding.
+        code = f"subprocess.run(cmd, shell=True)  {self._NQ}: E501\n"
+        root, inst = _make_project(tmp_path, "app.py", code, self._RULE)
+        results = run_checks(root=root, instructions_dir=inst)
+        assert any("shell=True" in v.line_content for r in results for v in r.violations)
+
+
 # --- PatternCheck rule-engine v0.2 tests ---
 
 
