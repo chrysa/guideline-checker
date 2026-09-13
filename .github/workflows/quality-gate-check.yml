@@ -23,4 +23,4 @@ concurrency:
 
 jobs:
     call:
-        uses: chrysa/github-actions/.github/workflows/quality-gate-check.yml@v1.8.1
+        uses: chrysa/github-actions/.github/workflows/quality-gate-check.yml@v1.9.0
