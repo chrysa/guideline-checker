@@ -119,6 +119,7 @@ Check project compliance against GitHub Copilot instruction rules and generate H
     deploy.yml
     detect-conflicts.yml
     enforce-feature-branch.yml
+    enforce-shortcut-link.yml
     labeler.yml
     mutation-testing.yml
     pr-dependencies.yml
