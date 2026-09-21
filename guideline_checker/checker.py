@@ -154,11 +154,20 @@ DISABLE_COMMENT = "guideline: disable"
 
 
 class PatternCheck(NamedTuple):
-    """A single pattern check derived from a rule sentence."""
+    """A single pattern check derived from a rule sentence.
+
+    ``suffixes`` scopes the check to files with those extensions (e.g. a TypeScript
+    ``no any`` check only applies to ``.ts``/``.tsx``). ``None`` means it applies to
+    every file. This stops a language-specific rule carried by a scope-less global
+    source (Copilot/CLAUDE/AGENTS instructions with ``apply_to='**/*'``) from firing
+    on files of another language — e.g. a TS ``: any`` rule matching a Python
+    annotation or a Markdown line.
+    """
 
     pattern: str
     severity: str
     match_in_comments: bool = False
+    suffixes: tuple[str, ...] | None = None
 
 
 @dataclass
@@ -547,8 +556,9 @@ def _evaluate_rule(
             length_violations.extend(_declared_violations(file_path, lines, rule, detector, root))
         return length_violations
 
-    # Detect common anti-patterns based on rule text
-    checks = _build_checks(rule_lower)
+    # Detect common anti-patterns based on rule text, then drop checks scoped to
+    # other languages (e.g. a TypeScript rule must not fire on a .py/.md file).
+    checks = tuple(c for c in _build_checks(rule_lower) if c.suffixes is None or file_path.suffix in c.suffixes)
 
     code_lines = _match_lines(file_path, lines)
     for lineno, line in enumerate(lines, start=1):
@@ -1187,24 +1197,32 @@ def _credential_scan_violations(
     return violations
 
 
+_JS_TS_SUFFIXES: tuple[str, ...] = tuple(sorted(JS_SUFFIXES))
+
+
 def _typescript_checks(rule_lower: str) -> list[PatternCheck]:
-    """TypeScript / React anti-pattern checks."""
+    """TypeScript / React anti-pattern checks.
+
+    Every check is scoped to JS/TS files: these rules often arrive via a scope-less
+    global instruction source, and must not fire on Python or Markdown.
+    """
+    js = _JS_TS_SUFFIXES
     checks: list[PatternCheck] = []
     if "no any" in rule_lower or "no `any`" in rule_lower or "avoid any" in rule_lower:
-        checks.append(PatternCheck(": any", "error"))
-        checks.append(PatternCheck("as any", "error"))
+        checks.append(PatternCheck(": any", "error", suffixes=js))
+        checks.append(PatternCheck("as any", "error", suffixes=js))
     if "no ts-ignore" in rule_lower or "no @ts-ignore" in rule_lower:
-        checks.append(PatternCheck("@ts-ignore", "error", match_in_comments=True))
+        checks.append(PatternCheck("@ts-ignore", "error", match_in_comments=True, suffixes=js))
     if "no ts-nocheck" in rule_lower or "no @ts-nocheck" in rule_lower:
-        checks.append(PatternCheck("@ts-nocheck", "error", match_in_comments=True))
+        checks.append(PatternCheck("@ts-nocheck", "error", match_in_comments=True, suffixes=js))
     if "no console.log" in rule_lower:
-        checks.append(PatternCheck("console.log(", "warning"))
+        checks.append(PatternCheck("console.log(", "warning", suffixes=js))
     if "no console.debug" in rule_lower:
-        checks.append(PatternCheck("console.debug(", "warning"))
+        checks.append(PatternCheck("console.debug(", "warning", suffixes=js))
     if "no console.warn" in rule_lower:
-        checks.append(PatternCheck("console.warn(", "warning"))
+        checks.append(PatternCheck("console.warn(", "warning", suffixes=js))
     if "no inline style" in rule_lower or "no inline styles" in rule_lower:
-        checks.append(PatternCheck("style={{", "warning"))
+        checks.append(PatternCheck("style={{", "warning", suffixes=js))
     return checks
 
 

@@ -11,6 +11,7 @@ from guideline_checker.checker import (
     IGNORE_FILES,
     PatternCheck,
     _collect_files,
+    _evaluate_rule,
     _expand_brace_pattern,
     _is_text_file,
     _line_matches,
@@ -859,6 +860,30 @@ class TestMaxFileSize:
 
 
 # --- _masked_python_lines: forbidden-pattern rules must ignore docstrings/strings ---
+class TestLanguageScopedChecks:
+    """A language-specific rule (e.g. TypeScript `no any`) carried by a scope-less
+    global source must not fire on files of another language (regression: TS rules
+    from copilot-instructions.md flagged Python and Markdown fleet-wide)."""
+
+    def test_typescript_no_any_ignores_python(self, tmp_path: Path) -> None:
+        py = tmp_path / "client.py"
+        py.write_text("def f() -> None:\n    x: any = 1\n", encoding="utf-8")
+        violations = _evaluate_rule(py, py.read_text().splitlines(), "TypeScript strict — no any")
+        assert violations == []
+
+    def test_typescript_no_any_ignores_markdown(self, tmp_path: Path) -> None:
+        md = tmp_path / "SKILL.md"
+        md.write_text("Return `any` value as any type.\n", encoding="utf-8")
+        violations = _evaluate_rule(md, md.read_text().splitlines(), "no any")
+        assert violations == []
+
+    def test_typescript_no_any_still_fires_on_ts(self, tmp_path: Path) -> None:
+        ts = tmp_path / "client.ts"
+        ts.write_text("const x = y as any;\n", encoding="utf-8")
+        violations = _evaluate_rule(ts, ts.read_text().splitlines(), "no any")
+        assert any("as any" in v.line_content for v in violations)
+
+
 class TestMaskedPythonLines:
     """A forbidden pattern named inside a multi-line docstring or a string literal
     must not be matched (regression: `shell=True` explained in a docstring flagged
