@@ -98,7 +98,7 @@ The `.pre-commit-hooks.yaml` defines:
 
 ## Conventions
 
-- Python 3.14 (CI matrix 3.12 + 3.14)
+- Python 3.12+ (`requires-python >=3.12`; CI matrix 3.12 + 3.14) — a distributed hook library keeps a 3.12 floor for consumers
 - Ruff for linting and formatting
 - Mypy strict mode
 - Pytest + pytest-cov for tests
