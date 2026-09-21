@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import fnmatch
 import functools
+import io
 import os
 import re
 import time
+import tokenize
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
@@ -548,12 +550,17 @@ def _evaluate_rule(
     # Detect common anti-patterns based on rule text
     checks = _build_checks(rule_lower)
 
+    code_lines = _match_lines(file_path, lines)
     for lineno, line in enumerate(lines, start=1):
         # Inline suppression: skip lines marked with the disable comment
         if DISABLE_COMMENT in line:
             continue
+        code = code_lines[lineno - 1]
         for check in checks:
-            if _line_matches(line, check.pattern, match_in_comments=check.match_in_comments):
+            # Match code-only text (strings/docstrings masked) unless the check
+            # deliberately wants comments; reporting still uses the real line.
+            target = line if check.match_in_comments else code
+            if _line_matches(target, check.pattern, match_in_comments=check.match_in_comments):
                 violations.append(
                     Violation(
                         file=file_path,
@@ -582,12 +589,16 @@ def _per_line_violations(
     """Check per-line substring and regex patterns; return matching violations."""
     violations: list[Violation] = []
     regexes = tuple(_compile_regex(p) for p in detector.forbid_regex)
+    code_lines = _match_lines(file_path, lines)
     for lineno, line in enumerate(lines, start=1):
         if DISABLE_COMMENT in line:
             continue
+        # Match code-only text (strings/docstrings masked) unless the detector
+        # wants comments; reporting still uses the real line.
+        target = line if detector.match_in_comments else code_lines[lineno - 1]
         matched = any(
-            _line_matches(line, pat, match_in_comments=detector.match_in_comments) for pat in detector.forbid
-        ) or _line_passes_regex(line, regexes, match_in_comments=detector.match_in_comments)
+            _line_matches(target, pat, match_in_comments=detector.match_in_comments) for pat in detector.forbid
+        ) or _line_passes_regex(target, regexes, match_in_comments=detector.match_in_comments)
         if matched:
             violations.append(
                 Violation(
@@ -1039,10 +1050,13 @@ def _check_length_rules(file_path: Path, lines: list[str], rule_lower: str) -> l
 
 def _debug_output_checks(rule_lower: str) -> list[PatternCheck]:
     checks: list[PatternCheck] = []
-    if "no print" in rule_lower or "print()" in rule_lower or "never use print" in rule_lower:
-        checks.append(PatternCheck("print(", "warning"))
-    if "no pprint" in rule_lower or "pprint()" in rule_lower:
-        checks.append(PatternCheck("pprint(", "warning"))
+    # Detectors disabled inline: these literals name the rules, not real debug calls.
+    print_triggers = ("no print", "print()", "never use print")  # print-detection:disable
+    if any(trigger in rule_lower for trigger in print_triggers):
+        checks.append(PatternCheck("print(", "warning"))  # print-detection:disable
+    pprint_triggers = ("no pprint", "pprint()")  # pprint-detection:disable
+    if any(trigger in rule_lower for trigger in pprint_triggers):
+        checks.append(PatternCheck("pprint(", "warning"))  # pprint-detection:disable
     if any(phrase in rule_lower for phrase in ("no console.log", "no `console.log`", "never console.log")):
         checks.append(PatternCheck("console.log(", "warning"))
     if any(phrase in rule_lower for phrase in ("no console.debug", "no `console.debug`")):
@@ -1263,3 +1277,106 @@ def _line_matches(line: str, pattern: str, *, match_in_comments: bool = False) -
     if not match_in_comments and stripped.startswith(("#", "//", "*", "'")):
         return False
     return pattern.lower() in stripped.lower()
+
+
+_STRING_OPEN_RE = re.compile(r"""^[rRbBuUfF]{0,2}('''|\"\"\"|'|")""")
+
+
+def _string_delims(token_text: str) -> tuple[int, int]:
+    """Return ``(open_len, close_len)`` — the delimiter widths of a string token.
+
+    The opening delimiter includes any string prefix (``r``/``b``/``f``/…) plus the
+    quote run (1 or 3 chars); the closing delimiter is just the quote run. These are
+    left *visible* when masking so that a forbidden pattern anchored on the opening
+    quote (e.g. Django's ``secret_key = "``) still matches, while the string's
+    interior — where a pattern named only in prose lives — is blanked.
+    """
+    match = _STRING_OPEN_RE.match(token_text)
+    if match is None:
+        return 0, 0
+    open_len = match.end()
+    quote = match.group(1)
+    close_len = len(quote) if token_text.endswith(quote) and len(token_text) >= open_len + len(quote) else 0
+    return open_len, close_len
+
+
+@functools.lru_cache(maxsize=512)
+def _masked_python_lines(lines: tuple[str, ...]) -> tuple[str, ...]:
+    """Return ``lines`` with the *interior* of every string literal and the whole of
+    every comment blanked out (replaced by spaces, preserving line lengths/columns).
+
+    The single-line ``startswith`` skip in :func:`_line_matches` cannot see that a
+    line sits inside a *multi-line* string/docstring, so a forbidden pattern named
+    in a docstring (e.g. a subprocess-shell-flag explanation) produced false
+    positives. Masking via ``tokenize`` removes non-code text before matching, so a
+    pattern only fires when it appears in actual code.
+
+    Only the bodies of **docstrings** (bare string-expression statements) and
+    comments are masked. A string used as a *value* in an expression is left intact,
+    because some rules deliberately match content inside such a literal — e.g.
+    Django's ``allowed_hosts = ["*"]`` (wildcard) or ``secret_key = "…"`` (hardcoded
+    key). The false positives this guards against come from a forbidden pattern named
+    inside a docstring (e.g. a subprocess-shell-flag explanation), single- or
+    multi-line, which per-line matching cannot see is non-code. Delimiters are preserved
+    so a rule anchored on the opening quote still fires. Un-tokenizable input (partial
+    files, syntax errors) falls back to the original lines — no masking, no crash.
+    """
+    masked = list(lines)
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO("\n".join(lines)).readline)
+        for tok in tokens:
+            if _token_is_maskable(tok, masked):
+                _mask_token_span(tok, masked)
+    except (tokenize.TokenError, IndentationError, SyntaxError, ValueError):
+        return lines
+    return tuple(masked)
+
+
+def _token_is_maskable(tok: tokenize.TokenInfo, lines: list[str]) -> bool:
+    """True when *tok* is non-code noise whose span should be blanked.
+
+    Comments always qualify. A string qualifies only when it is a docstring — a
+    bare string-expression statement (nothing but whitespace before its opening
+    quote and after its closing quote), single- or multi-line. A string used as a
+    *value* in an expression (Django's ``allowed_hosts = ["*"]`` or
+    ``secret_key = "…"``) is left intact, since some rules match content inside it.
+    """
+    if tok.type == tokenize.COMMENT:
+        return True
+    if tok.type not in (tokenize.STRING, getattr(tokenize, "FSTRING_MIDDLE", -1)):
+        return False
+    (start_row, start_col), (end_row, end_col) = tok.start, tok.end
+    if start_row != end_row:
+        return True  # multi-line string: body is prose
+    start_line = lines[start_row - 1] if 0 <= start_row - 1 < len(lines) else ""
+    return not start_line[:start_col].strip() and not start_line[end_col:].strip()
+
+
+def _mask_token_span(tok: tokenize.TokenInfo, masked: list[str]) -> None:
+    """Blank *tok*'s span in ``masked`` in place, preserving line lengths/columns.
+
+    String delimiters (opening prefix+quote, closing quote) stay visible so a rule
+    anchored on the opening quote still fires; only the literal's interior is hidden.
+    """
+    (start_row, start_col), (end_row, end_col) = tok.start, tok.end
+    open_len, close_len = _string_delims(tok.string) if tok.type == tokenize.STRING else (0, 0)
+    for row in range(start_row, end_row + 1):
+        idx = row - 1
+        if idx < 0 or idx >= len(masked):
+            continue
+        text = masked[idx]
+        a = (start_col + open_len) if row == start_row else 0
+        b = (end_col - close_len) if row == end_row else len(text)
+        if b > a:
+            masked[idx] = text[:a] + " " * (b - a) + text[b:]
+
+
+def _match_lines(file_path: Path, lines: list[str]) -> list[str]:
+    """Lines to run forbidden-pattern matching against (code only for Python).
+
+    Reporting still uses the original ``lines``; only the *matched* text has
+    string/comment content masked, so violations keep their real line content.
+    """
+    if file_path.suffix == ".py":
+        return list(_masked_python_lines(tuple(lines)))
+    return lines

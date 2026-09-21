@@ -14,6 +14,7 @@ from guideline_checker.checker import (
     _expand_brace_pattern,
     _is_text_file,
     _line_matches,
+    _masked_python_lines,
     _matches_pattern,
     _narrow_apply_to,
     _resolve_max_file_size,
@@ -855,3 +856,36 @@ class TestMaxFileSize:
         monkeypatch.setenv("GUIDELINE_MAX_FILE_SIZE", "500000")
         names = [p.name for p in _collect_files(tmp_path)]
         assert "big.py" in names
+
+
+# --- _masked_python_lines: forbidden-pattern rules must ignore docstrings/strings ---
+class TestMaskedPythonLines:
+    """A forbidden pattern named inside a multi-line docstring or a string literal
+    must not be matched (regression: `shell=True` explained in a docstring flagged
+    the canonical quality_gate.py fleet-wide)."""
+
+    def test_docstring_body_is_masked(self) -> None:
+        lines = [
+            "def run():",
+            '    """Replaces the previous shell=True single-string form."""',
+            "    subprocess.run(argv)",
+        ]
+        masked = _masked_python_lines(tuple(lines))
+        assert "shell=True" not in masked[1]  # docstring body blanked
+        assert len(masked[1]) == len(lines[1])  # columns preserved
+
+    def test_real_code_is_preserved(self) -> None:
+        lines = ["subprocess.run(cmd, shell=True)"]
+        masked = _masked_python_lines(tuple(lines))
+        assert "shell=True" in masked[0]  # real code stays matchable
+
+    def test_multiline_docstring_spans_all_lines(self) -> None:
+        lines = ['x = """', "shell=True", "os.system(x)", '"""', "y = 1"]
+        masked = _masked_python_lines(tuple(lines))
+        assert "shell=True" not in masked[1]
+        assert "os.system" not in masked[2]
+        assert masked[4] == "y = 1"  # code after the string is untouched
+
+    def test_untokenizable_falls_back_to_original(self) -> None:
+        lines = ["def (:", "shell=True"]  # invalid syntax
+        assert _masked_python_lines(tuple(lines)) == tuple(lines)
