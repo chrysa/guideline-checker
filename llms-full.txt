@@ -9,6 +9,7 @@ Check project compliance against GitHub Copilot instruction rules and generate H
 
 .claude/
   agents/
+    ast-detector-writer.md
     general-backend-developer.md
     general-code-quality-debugger.md
     general-devops.md
@@ -19,6 +20,7 @@ Check project compliance against GitHub Copilot instruction rules and generate H
     general-solution-architect.md
     general-technical-project-lead.md
     general-technical-writer.md
+    rule-engine-reviewer.md
   ape/
     README.md
     ape-transform-v2.md
@@ -35,9 +37,11 @@ Check project compliance against GitHub Copilot instruction rules and generate H
     check-no-env-files.cjs
     circuit-breaker.cjs
     frustration-detection.cjs
+    guideline-yaml-check.cjs
     memory-consolidation.cjs
     model-debt-inventory.cjs
     secret-scanner.cjs
+    test-on-edit.cjs
     verifiable-thresholds.cjs
   secret-scanner-allowlist.json
   settings.json
@@ -61,6 +65,8 @@ Check project compliance against GitHub Copilot instruction rules and generate H
       SKILL.md
     council/
       SKILL.md
+    dependency-audit/
+      SKILL.md
     dockerfile-multistage/
       SKILL.md
     error-handling/
@@ -77,6 +83,8 @@ Check project compliance against GitHub Copilot instruction rules and generate H
     implement/
       SKILL.md
     plan/
+      SKILL.md
+    rule-authoring/
       SKILL.md
     spec/
       SKILL.md
@@ -260,6 +268,7 @@ standards/
     README.md
     accessibility.md
     agents.md
+    ai-orchestration.md
     api.md
     architecture.md
     backend-python.md
