@@ -84,6 +84,8 @@ Check project compliance against GitHub Copilot instruction rules and generate H
       SKILL.md
     plan/
       SKILL.md
+    rollout-status/
+      SKILL.md
     rule-authoring/
       SKILL.md
     spec/
