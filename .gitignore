@@ -276,3 +276,13 @@ graphify-out/
 Thumbs.db
 
 # ---8<--- chrysa:canonical:end --->8---
+
+.claude-plugin-setup-report.md
+
+# ai-lint: keep secrets and local config out of git
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+CLAUDE.local.md
