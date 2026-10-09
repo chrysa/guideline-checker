@@ -10,6 +10,7 @@ Check project compliance against GitHub Copilot instruction rules and generate H
 .claude/
   agents/
     ast-detector-writer.md
+    code-reviewer.md
     general-backend-developer.md
     general-code-quality-debugger.md
     general-devops.md
@@ -20,22 +21,18 @@ Check project compliance against GitHub Copilot instruction rules and generate H
     general-solution-architect.md
     general-technical-project-lead.md
     general-technical-writer.md
+    infra-reviewer.md
     rule-engine-reviewer.md
+    security-auditor.md
+    test-runner.md
   ape/
     README.md
     ape-transform-v2.md
     ape_hook.py
-  commands/
-    adr-new.md
-    commit.md
-    custom-init.md
-    help-commands.md
-    issue.md
-    reviewpr.md
-    test.md
   hooks/
     check-no-env-files.cjs
     circuit-breaker.cjs
+    format.py
     frustration-detection.cjs
     guideline-yaml-check.cjs
     memory-consolidation.cjs
@@ -47,6 +44,8 @@ Check project compliance against GitHub Copilot instruction rules and generate H
   settings.json
   skills/
     accessibility/
+      SKILL.md
+    adr-new/
       SKILL.md
     agent-patterns/
       SKILL.md
@@ -61,9 +60,13 @@ Check project compliance against GitHub Copilot instruction rules and generate H
       scripts/
     clean-architecture/
       SKILL.md
+    commit/
+      SKILL.md
     contract-testing/
       SKILL.md
     council/
+      SKILL.md
+    custom-init/
       SKILL.md
     dependency-audit/
       SKILL.md
@@ -78,19 +81,31 @@ Check project compliance against GitHub Copilot instruction rules and generate H
       gitnexus-guide/
       gitnexus-impact-analysis/
       gitnexus-refactoring/
+    help-commands/
+      SKILL.md
     hunt/
       SKILL.md
     implement/
       SKILL.md
+    issue/
+      SKILL.md
     plan/
+      SKILL.md
+    review-changes/
+      SKILL.md
+    reviewpr/
       SKILL.md
     rollout-status/
       SKILL.md
     rule-authoring/
       SKILL.md
+    skills/
+      SKILL.md
     spec/
       SKILL.md
     standards-authoring/
+      SKILL.md
+    test/
       SKILL.md
     testing-pytest/
       SKILL.md
@@ -379,6 +394,7 @@ requires-python: >=3.12
 ## Modules
 
 .claude/ape/ape_hook.py
+.claude/hooks/format.py
 guideline_checker/__init__.py — guideline-checker: check project compliance against Copilot instruction rules.
 guideline_checker/autofix.py — Local, deterministic autofix for violations on rules carrying a ``fix:`` block.
 guideline_checker/baseline.py — Baseline support for incremental adoption (L2.2).
@@ -417,4 +433,3 @@ guideline_checker/reporters/html.py — HTML report generator for guideline-chec
 guideline_checker/reporters/json_reporter.py — JSON report generator for guideline-checker results (CI artifact).
 guideline_checker/reporters/markdown.py — Markdown report generator for guideline-checker results.
 guideline_checker/reporters/sarif.py — SARIF 2.1.0 report generator for guideline-checker.
-guideline_checker/reporters/synthesis_html.py — Multi-repo synthesis HTML reporter.

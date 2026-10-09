@@ -1,51 +1,31 @@
-<!-- gitnexus:start -->
-# GitNexus — Code Intelligence
+---
+name: skills
+description: "Procedure: Skills. Use when this procedure is needed."
+---
 
-This project is indexed by GitNexus as **guideline-checker** (286 symbols, 465 relationships, 6 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+- `testing-pytest/SKILL.md` — pytest DDD + pytest-mock + constants (load when writing tests)
 
-> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+- `error-handling/SKILL.md` — FastAPI error handling + Sentry + logging (load when handling errors)
 
-## Always Do
+- `dockerfile-multistage/SKILL.md` — 4-stage Python 3.14 containers (load when editing Dockerfile)
 
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
-- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+- `clean-architecture/SKILL.md` — FastAPI module/layer structure (load when adding a domain feature)
 
-## Never Do
+- `async-patterns/SKILL.md` — async FastAPI + SQLAlchemy async sessions (load when writing async code)
 
-- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
-- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
-- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
-- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+- `api-design/SKILL.md` — REST standards + FastAPI patterns (load when designing endpoints)
 
-## Resources
+Shared skills from `shared-standards/.claude/skills/`:
 
-| Resource | Use for |
-|----------|---------|
-| `gitnexus://repo/guideline-checker/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/guideline-checker/clusters` | All functional areas |
-| `gitnexus://repo/guideline-checker/processes` | All execution flows |
-| `gitnexus://repo/guideline-checker/process/{name}` | Step-by-step execution trace |
+- `ui-ux/SKILL.md` — UX/UI/ergonomics across ALL surfaces (web, CLI, VS Code, Discord, desktop, game, agent) + WCAG 2.1 AA + dark mode + i18n FR+EN (load when building any human-facing surface)
 
-## CLI
 
-| Task | Read this skill file |
-|------|---------------------|
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+<!-- chrysa:standards:start · managed by distribute-standards.sh · DO NOT EDIT -->
+# chrysa — Transverse Standards (core)
 
-<!-- gitnexus:end -->
+> The **slim always-on core**. The canonical, tool-agnostic source of truth is `standards/STANDARDS.chrysa.md`; the normative annexes live under `standards/annexes/`. Each rule below is a one-line pointer — its full text lives in the per-domain file named beside the heading (`standards/rules/<domain>.md`), read on demand.
 
-<!-- chrysa:standards-agents:start · generated · DO NOT EDIT -->
-# chrysa standards — agent view (generated)
-
-> The same rules as `CLAUDE.md`, for any AGENTS.md-aware tool. Detail loads on demand from `standards/rules/<domain>.md`; the canon is `standards/STANDARDS.chrysa.md`.
+**Where an annexe and the canon disagree, the canon wins.**
 
 ### Governance, language & compliance · `standards/rules/governance.md`
 - Normative annexes
@@ -131,6 +111,14 @@ This project is indexed by GitNexus as **guideline-checker** (286 symbols, 465 r
 - Quality gates
 - Error handling pattern (all automations)
 
+### Product surfaces · `standards/rules/product.md`
+- A public web surface is legally compliant, consent-respecting, and operable — before it ships
+- Setup wizard & config panel
+- A game is DRM-free and fully playable solo offline
+- Every product that is operated ships a management backoffice
+- If a user can supply a file, the product accepts an upload
+- A floating assistant where it earns its place — never as decoration
+
 ### Backend Python · `standards/rules/backend-python.md`
 - Python packaging — `pyproject.toml` is the single source of truth
 - Python is written object-oriented, one class per file
@@ -160,13 +148,6 @@ This project is indexed by GitNexus as **guideline-checker** (286 symbols, 465 r
 - `.dockerignore` mandatory & exhaustive
 - Container-runtime policy
 
-### Product surfaces · `standards/rules/product.md`
-- Setup wizard & config panel
-- A game is DRM-free and fully playable solo offline
-- Every product that is operated ships a management backoffice
-- If a user can supply a file, the product accepts an upload
-- A floating assistant where it earns its place — never as decoration
-
 ### Design system · `standards/rules/design.md`
 - Design system
 
@@ -178,4 +159,7 @@ This project is indexed by GitNexus as **guideline-checker** (286 symbols, 465 r
 - Release & changelog config (canonical)
 - GitHub Actions (reuse first · custom actions centralised · thin workflows)
 - Pre-commit & git hooks (native, via pre-commit.com — never wrapped in make)
-<!-- chrysa:standards-agents:end -->
+
+### Local AI orchestration & local-first · `standards/rules/ai-orchestration.md`
+- AI orchestration & local-first
+<!-- chrysa:standards:end -->

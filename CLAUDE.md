@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # CLAUDE.md — guideline-checker
 
 > **Claude Code**: also read `.github/copilot-instructions.md` and `.github/instructions/*.instructions.md` for code specifications.
@@ -185,22 +187,7 @@ This project is indexed by GitNexus as **guideline-checker** (286 symbols, 465 r
 
 ## Skills
 
-- `testing-pytest/SKILL.md` — pytest DDD + pytest-mock + constants (load when writing tests)
-
-- `error-handling/SKILL.md` — FastAPI error handling + Sentry + logging (load when handling errors)
-
-- `dockerfile-multistage/SKILL.md` — 4-stage Python 3.14 containers (load when editing Dockerfile)
-
-- `clean-architecture/SKILL.md` — FastAPI module/layer structure (load when adding a domain feature)
-
-- `async-patterns/SKILL.md` — async FastAPI + SQLAlchemy async sessions (load when writing async code)
-
-- `api-design/SKILL.md` — REST standards + FastAPI patterns (load when designing endpoints)
-
-Shared skills from `shared-standards/.claude/skills/`:
-
-- `ui-ux/SKILL.md` — UX/UI/ergonomics across ALL surfaces (web, CLI, VS Code, Discord, desktop, game, agent) + WCAG 2.1 AA + dark mode + i18n FR+EN (load when building any human-facing surface)
-
+Follow the /skills skill.
 
 <!-- chrysa:standards:start · managed by distribute-standards.sh · DO NOT EDIT -->
 # chrysa — Transverse Standards (core)
@@ -269,8 +256,6 @@ Shared skills from `shared-standards/.claude/skills/`:
 - Agent actions are governed
 - An AI feature is evaluated, not just shipped
 - An agent writes only where the owner owns
-- A retryable operation proves the retry has no external effects
-- A mass-mutation batch returns the explicit list of what it changed
 
 ### Security, identity & sessions · `standards/rules/security.md`
 - Per-person data implies a user account — no exceptions dressed up as simplicity
@@ -294,14 +279,6 @@ Shared skills from `shared-standards/.claude/skills/`:
 - A cache is a correctness contract, not a sprinkle of speed
 - Quality gates
 - Error handling pattern (all automations)
-
-### Product surfaces · `standards/rules/product.md`
-- A public web surface is legally compliant, consent-respecting, and operable — before it ships
-- Setup wizard & config panel
-- A game is DRM-free and fully playable solo offline
-- Every product that is operated ships a management backoffice
-- If a user can supply a file, the product accepts an upload
-- A floating assistant where it earns its place — never as decoration
 
 ### Backend Python · `standards/rules/backend-python.md`
 - Python packaging — `pyproject.toml` is the single source of truth
@@ -332,6 +309,13 @@ Shared skills from `shared-standards/.claude/skills/`:
 - `.dockerignore` mandatory & exhaustive
 - Container-runtime policy
 
+### Product surfaces · `standards/rules/product.md`
+- Setup wizard & config panel
+- A game is DRM-free and fully playable solo offline
+- Every product that is operated ships a management backoffice
+- If a user can supply a file, the product accepts an upload
+- A floating assistant where it earns its place — never as decoration
+
 ### Design system · `standards/rules/design.md`
 - Design system
 
@@ -343,7 +327,4 @@ Shared skills from `shared-standards/.claude/skills/`:
 - Release & changelog config (canonical)
 - GitHub Actions (reuse first · custom actions centralised · thin workflows)
 - Pre-commit & git hooks (native, via pre-commit.com — never wrapped in make)
-
-### Local AI orchestration & local-first · `standards/rules/ai-orchestration.md`
-- AI orchestration & local-first
 <!-- chrysa:standards:end -->
