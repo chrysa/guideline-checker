@@ -187,8 +187,8 @@ class RuleResult:
 
 from guideline_checker.core.detection.numeric import _check_length_rules
 from guideline_checker.core.detection.pattern import (
-    DISABLE_COMMENT,
     _is_excluded,
+    _line_suppressed,
     _matches_pattern,
     _pattern_check_violations,
     _split_patterns,
@@ -596,7 +596,7 @@ def _ast_violations(
         ast_findings = []
     for lineno, snippet in ast_findings:
         line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
-        if DISABLE_COMMENT in line:
+        if _line_suppressed(line):
             continue
         violations.append(
             Violation(
@@ -627,7 +627,7 @@ def _scan_violations(
     content = "\n".join(lines)
     for lineno, snippet in run_scans(detector.scan_checks, content, allow_values):
         line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
-        if DISABLE_COMMENT in line:
+        if _line_suppressed(line):
             continue
         violations.append(
             Violation(
@@ -669,7 +669,7 @@ def _credential_scan_violations(
     violations: list[Violation] = []
     for lineno, snippet in run_scans(("secret-assignment",), content, allow_values):
         line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
-        if DISABLE_COMMENT in line:
+        if _line_suppressed(line):
             continue
         violations.append(
             Violation(
