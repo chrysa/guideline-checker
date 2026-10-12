@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import fnmatch
 import functools
+import io
 import re
+import tokenize
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
@@ -17,6 +19,73 @@ from guideline_checker.loader import RuleDetector
 
 # Inline suppression marker — add this comment on any line to skip all rule checks
 DISABLE_COMMENT = "guideline: disable"
+
+# A ``noqa`` / ``nosec`` comment already tells the equivalent linter (ruff/bandit)
+# that the line is intentional; a forbidden-pattern rule that mirrors those codes must
+# honour the same suppression instead of re-flagging a line the author already justified.
+_NOQA_RE = re.compile(r"#\s*noqa(?::(?P<codes>[^#\n]*))?", re.IGNORECASE)
+_SECURITY_CODE_RE = re.compile(r"^S\d", re.IGNORECASE)  # bandit security codes (S101, S602, …)
+
+
+def _line_suppressed(line: str) -> bool:
+    """True if the line carries an inline suppression that silences pattern rules.
+
+    Honours the engine's own ``guideline: disable`` marker, bandit's ``nosec``, and a
+    ``noqa`` that lists a bandit **security** code (``S\\d…``, e.g. ``S602``/``S105``).
+    A ``noqa`` for an unrelated style code (``E501``) — or a **bare** ``noqa`` with no
+    code — does NOT mask a finding: the engine is deliberately stricter than a blanket
+    suppression and requires the author to name the security code they are silencing.
+    """
+    if DISABLE_COMMENT in line or "# nosec" in line.lower():
+        return True
+    match = _NOQA_RE.search(line)
+    if match is None or match.group("codes") is None:
+        return False
+    codes = match.group("codes")
+    return any(_SECURITY_CODE_RE.match(code.strip()) for code in re.split(r"[,\s]+", codes) if code.strip())
+
+
+@functools.lru_cache(maxsize=512)
+def _masked_python_lines(lines: tuple[str, ...]) -> tuple[str, ...]:
+    """Return ``lines`` with the text of every string literal and comment blanked
+    out (replaced by spaces, preserving line lengths and columns).
+
+    The single-line ``startswith`` skip in :func:`_line_matches` cannot see that a
+    line sits inside a *multi-line* string/docstring, so a forbidden pattern named
+    in a docstring (e.g. a ``shell=True`` explanation) produced false positives.
+    Masking via ``tokenize`` removes non-code text before matching, so a pattern
+    only fires when it appears in actual code. Un-tokenizable input (partial files,
+    syntax errors) falls back to the original lines -- no masking, no crash.
+    """
+    masked = list(lines)
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO("\n".join(lines)).readline)
+        for tok in tokens:
+            if tok.type not in (tokenize.STRING, tokenize.COMMENT, getattr(tokenize, "FSTRING_MIDDLE", -1)):
+                continue
+            (start_row, start_col), (end_row, end_col) = tok.start, tok.end
+            for row in range(start_row, end_row + 1):
+                idx = row - 1
+                if idx < 0 or idx >= len(masked):
+                    continue
+                text = masked[idx]
+                a = start_col if row == start_row else 0
+                b = end_col if row == end_row else len(text)
+                masked[idx] = text[:a] + " " * (b - a) + text[b:]
+    except (tokenize.TokenError, IndentationError, SyntaxError, ValueError):
+        return lines
+    return tuple(masked)
+
+
+def _match_lines(file_path: Path, lines: list[str]) -> list[str]:
+    """Lines to run forbidden-pattern matching against (code only for Python).
+
+    Reporting still uses the original ``lines``; only the *matched* text has
+    string/comment content masked, so violations keep their real line content.
+    """
+    if file_path.suffix == ".py":
+        return list(_masked_python_lines(tuple(lines)))
+    return lines
 
 
 class PatternCheck(NamedTuple):
@@ -142,7 +211,7 @@ def _per_line_violations(
     violations: list[Violation] = []
     regexes = tuple(_compile_regex(p) for p in detector.forbid_regex)
     for lineno, line in enumerate(lines, start=1):
-        if DISABLE_COMMENT in line:
+        if _line_suppressed(line):
             continue
         matched = any(
             _line_matches(line, pat, match_in_comments=detector.match_in_comments) for pat in detector.forbid
@@ -181,7 +250,7 @@ def _pattern_check_violations(
     """
     violations: list[Violation] = []
     for lineno, line in enumerate(lines, start=1):
-        if DISABLE_COMMENT in line:
+        if _line_suppressed(line):
             continue
         for check in checks:
             if _line_matches(line, check.pattern, match_in_comments=check.match_in_comments):
@@ -213,7 +282,7 @@ def _file_regex_violations(
         for match in _compile_regex(pattern).finditer(content):
             lineno = content.count("\n", 0, match.start()) + 1
             line = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
-            if DISABLE_COMMENT in line:
+            if _line_suppressed(line):
                 continue
             violations.append(
                 Violation(
