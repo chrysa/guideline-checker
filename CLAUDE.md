@@ -63,7 +63,7 @@ Scan → rule-health tiles → filterable rules table → click a rule → propo
 
 ```
 guideline_checker/
-  checker.py            # Core deterministic check engine — runs rules against source files
+  checker.py            # Compat shim re-exporting the v2 engine (core/detection)
   rule_health.py        # Rule health (proven / armed / dead / advisory) — no LLM
   proposer.py           # Proposer seam: HeuristicProposer + Ollama/Claude LLM backends
   sandbox.py            # Replay a proposed detector for proof, writing nothing
