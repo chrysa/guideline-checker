@@ -74,9 +74,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN groupadd -r appuser && useradd -r -g appuser appuser \
-    && apt-get update && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 COPY --from=web-deps /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
 COPY --from=web-deps /usr/local/bin /usr/local/bin
@@ -86,7 +84,8 @@ USER appuser
 
 EXPOSE 8080
 
-HEALTHCHECK CMD curl -f http://localhost:8080/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
 
 CMD ["uvicorn", "guideline_checker.web.app:app", \
     "--host", "0.0.0.0", "--port", "8080"]

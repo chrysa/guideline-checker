@@ -19,16 +19,6 @@ services:
     - RUFF_CACHE_DIR=/tmp/.toolcache/ruff
     - MYPY_CACHE_DIR=/tmp/.toolcache/mypy
     - PYTEST_ADDOPTS=-p no:cacheprovider
-    healthcheck:
-      interval: 30s
-      retries: 3
-      start_period: 15s
-      test:
-      - CMD
-      - curl
-      - -f
-      - http://localhost:8080/health
-      timeout: 10s
     ports:
     - ${GC_WEB_PORT:-8080}:8080
     restart: unless-stopped
@@ -57,16 +47,6 @@ services:
     - RUFF_CACHE_DIR=/tmp/.toolcache/ruff
     - MYPY_CACHE_DIR=/tmp/.toolcache/mypy
     - PYTEST_ADDOPTS=-p no:cacheprovider
-    healthcheck:
-      interval: 30s
-      retries: 3
-      start_period: 15s
-      test:
-      - CMD
-      - curl
-      - -f
-      - http://localhost:8080/health
-      timeout: 10s
     ports:
     - ${GC_VIEWER_PORT:-8081}:8080
     restart: unless-stopped
