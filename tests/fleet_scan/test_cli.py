@@ -112,14 +112,14 @@ def test_required_token_missing_is_config_error(wired: Path, fixture_config_dir:
 
 
 def test_token_value_never_printed(wired: Path, fixture_config_dir: Path, monkeypatch, capsys) -> None:
-    secret = "ghp_" + "Q" * 36
-    monkeypatch.setenv("FLEET_SCAN_TEST_TOKEN", secret)
+    planted_token = "ghp_" + "Q" * 36
+    monkeypatch.setenv("FLEET_SCAN_TEST_TOKEN", planted_token)
     assert main(_args(fixture_config_dir, "run", "--subset", "pilot")) == 0
     captured = capsys.readouterr()
-    assert secret not in captured.out + captured.err
+    assert planted_token not in captured.out + captured.err
     for path in wired.rglob("*"):
         if path.is_file():
-            assert secret not in path.read_text(encoding="utf-8", errors="replace")
+            assert planted_token not in path.read_text(encoding="utf-8", errors="replace")
 
 
 def test_unknown_subset_and_empty_scope(wired: Path, fixture_config_dir: Path, capsys) -> None:
