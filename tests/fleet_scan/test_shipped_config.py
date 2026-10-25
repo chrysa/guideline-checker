@@ -40,6 +40,7 @@ def test_shipped_catalog_holds_no_archived_repo(shipped: EffectiveConfig) -> Non
         f"feat: x\n\n{CO_AUTHOR}\n",
         f"fix: y\n\nbody line\n{SESSION}\n",
     ],
+    ids=["co-author-trailer", "session-link-trailer"],
 )
 def test_attribution_rule_flags_trailers(shipped: EffectiveConfig, message: str) -> None:
     assert _attribution_pattern(shipped).search(message)

@@ -37,6 +37,8 @@ RUN pip install --no-cache-dir -e ".[dev]"
 COPY tests/ ./tests/
 # The shipped referential — tests assert against it (test_guidelines, test_declarative_detectors).
 COPY guidelines/ ./guidelines/
+# The fleet-scan suite also validates the shipped configuration.
+COPY config/fleet-scan/ ./config/fleet-scan/
 # The quality-gate script is repo machinery with its own tests (test_quality_gate).
 COPY scripts/ ./scripts/
 
