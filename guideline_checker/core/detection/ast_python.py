@@ -251,6 +251,10 @@ def _check_unbounded_queue(tree: ast.Module) -> list[tuple[int, str]]:
     return findings
 
 
+# ``RunPython(code, reverse_code)``: a second positional argument is the reverse.
+_RUN_PYTHON_ARITY_WITH_REVERSE = 2
+
+
 def _check_irreversible_runpython(tree: ast.Module) -> list[tuple[int, str]]:
     """Flag a ``RunPython(forward)`` data migration with no reverse (DA-013).
 
@@ -268,7 +272,9 @@ def _check_irreversible_runpython(tree: ast.Module) -> list[tuple[int, str]]:
         name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
         if name != "RunPython":
             continue
-        has_reverse = len(node.args) >= 2 or any(kw.arg == "reverse_code" for kw in node.keywords)
+        has_reverse = len(node.args) >= _RUN_PYTHON_ARITY_WITH_REVERSE or any(
+            kw.arg == "reverse_code" for kw in node.keywords
+        )
         if not has_reverse:
             findings.append((node.lineno, "irreversible data migration: RunPython() with no reverse_code"))
     return findings
