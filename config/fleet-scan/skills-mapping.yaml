@@ -1,0 +1,145 @@
+# fleet-scan — skill recommendations (owned by the standards lot, L2).
+#
+# Skills are RECOMMENDATIONS, never obligations: no rule fails because a skill is absent,
+# and the scanner does not check skill presence. A report may print "suggested skill"
+# next to a failed related rule. Profile names below are conformance.yaml profiles.
+#
+# Distribution canon: shared-standards `.claude/skills/skills-profiles.yml` (ADR D-0013,
+# status Proposed) scopes the fan-out by repos.yml profiles (ai/back/front/infra/lib/config);
+# translation used here: back→python|app, front→node, infra→container|infra, lib→lib,
+# ai→python, all→all. That translation is approximate (repos.yml profiles are declared,
+# ours are detected).
+# Note: `applies_to_profiles` / `related_rule_ids` are not walked by the engine's
+# cross-check (it only reads rule(s)/rule_id(s)/profile(s) keys); L2 validated them offline.
+
+schema_version: "1.0"
+sources:
+  - {repo: chrysa/shared-standards, path: ".claude/skills/ + .claude/skills/skills-profiles.yml", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+  - {repo: chrysa/chrysa-skills, path: "functional/, identity/", ref: "2b4185e70c3dfe8c8d9d0929c4c8a437658d7c20"}
+
+skills:
+  - skill: dockerfile-multistage
+    source: {repo: chrysa/shared-standards, path: ".claude/skills/dockerfile-multistage/SKILL.md", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    applies_to_profiles: [dockerfile, app]
+    recommendation_only: true
+    related_rule_ids: [OPS-001, OPS-003, OPS-004, CONF-006]
+    note: "Canonical stage shape + HEALTHCHECK examples. Fan-out profiles: back, infra. Multi-stage itself is not a fleet rule (see REQ-CT-MULTISTAGE)."
+
+  - skill: testing-pytest
+    source: {repo: chrysa/shared-standards, path: ".claude/skills/testing-pytest/SKILL.md", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    applies_to_profiles: [python]
+    recommendation_only: true
+    related_rule_ids: [MAT-002]
+    note: "Fan-out profile: back."
+
+  - skill: ui-ux
+    source: {repo: chrysa/shared-standards, path: ".claude/skills/ui-ux/SKILL.md", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    applies_to_profiles: [node]
+    recommendation_only: true
+    related_rule_ids: []
+    note: "Fan-out profile: front. Only for human-facing surfaces; a node CLI/lib does not need it."
+
+  - skill: accessibility
+    source: {repo: chrysa/shared-standards, path: ".claude/skills/accessibility/SKILL.md", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    applies_to_profiles: [node]
+    recommendation_only: true
+    related_rule_ids: []
+    note: "Fan-out profile: front. WCAG is not checked by the remote scanner."
+
+  - skill: api-design
+    source: {repo: chrysa/shared-standards, path: ".claude/skills/api-design/SKILL.md", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    applies_to_profiles: [python, app]
+    recommendation_only: true
+    related_rule_ids: []
+    note: "Fan-out profile: back. Only for repos exposing an HTTP API."
+
+  - skill: contract-testing
+    source: {repo: chrysa/shared-standards, path: ".claude/skills/contract-testing/SKILL.md", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    applies_to_profiles: [lib]
+    recommendation_only: true
+    related_rule_ids: [MAT-004]
+    note: "Fan-out profiles: back, lib. For published contracts / releases."
+
+  - skill: error-handling
+    source: {repo: chrysa/shared-standards, path: ".claude/skills/error-handling/SKILL.md", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    applies_to_profiles: [python, app]
+    recommendation_only: true
+    related_rule_ids: []
+    note: "Fan-out profile: back. Error tracking is not a fleet-wide rule (REQ-OPS-SENTRY)."
+
+  - skill: commit
+    source: {repo: chrysa/shared-standards, path: ".claude/skills/commit/SKILL.md", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    applies_to_profiles: [all]
+    recommendation_only: true
+    related_rule_ids: [CONF-010]
+    note: "Not in skills-profiles.yml → defaults to all (fail-open). Carries the no-attribution instruction (L41)."
+
+  - skill: verification-loop
+    source: {repo: chrysa/shared-standards, path: ".claude/skills/verification-loop/SKILL.md", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    applies_to_profiles: [all]
+    recommendation_only: true
+    related_rule_ids: [OPS-006]
+    note: "Workflow core (all). Useful before fixing a red CI."
+
+  - skill: check
+    source: {repo: chrysa/shared-standards, path: ".claude/skills/check/SKILL.md", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    applies_to_profiles: [all]
+    recommendation_only: true
+    related_rule_ids: [CONF-003, CONF-004]
+    note: "Workflow core (all): local review incl. security reviewer."
+
+  - skill: python-patterns
+    source: {repo: chrysa/chrysa-skills, path: "functional/python-patterns/SKILL.md", ref: "2b4185e70c3dfe8c8d9d0929c4c8a437658d7c20"}
+    applies_to_profiles: [python]
+    recommendation_only: true
+    related_rule_ids: [CONF-013]
+    note: "Personal skill library (not fanned out by distribute-standards)."
+
+  - skill: docker-patterns
+    source: {repo: chrysa/chrysa-skills, path: "functional/docker-patterns/SKILL.md", ref: "2b4185e70c3dfe8c8d9d0929c4c8a437658d7c20"}
+    applies_to_profiles: [container]
+    recommendation_only: true
+    related_rule_ids: [CONF-006, OPS-002]
+    note: "Overlaps dockerfile-multistage; prefer the shared-standards skill when both exist."
+
+  - skill: react-patterns
+    source: {repo: chrysa/chrysa-skills, path: "functional/react-patterns/SKILL.md", ref: "2b4185e70c3dfe8c8d9d0929c4c8a437658d7c20"}
+    applies_to_profiles: [node]
+    recommendation_only: true
+    related_rule_ids: [MAT-003, CONF-015]
+    note: "Frontend repos only."
+
+  - skill: unity-patterns
+    source: {repo: chrysa/chrysa-skills, path: "functional/unity-patterns/SKILL.md", ref: "2b4185e70c3dfe8c8d9d0929c4c8a437658d7c20"}
+    applies_to_profiles: [unity]
+    recommendation_only: true
+    related_rule_ids: []
+    note: "Unity repos; no Unity-specific fleet rule in the MVP."
+
+  - skill: godot-patterns
+    source: {repo: chrysa/chrysa-skills, path: "functional/godot-patterns/SKILL.md", ref: "2b4185e70c3dfe8c8d9d0929c4c8a437658d7c20"}
+    applies_to_profiles: [godot]
+    recommendation_only: true
+    related_rule_ids: []
+    note: "Godot repos."
+
+  - skill: dependency-audit
+    source: {repo: chrysa/chrysa-skills, path: "functional/dependency-audit/SKILL.md", ref: "2b4185e70c3dfe8c8d9d0929c4c8a437658d7c20"}
+    applies_to_profiles: [python, node]
+    recommendation_only: true
+    related_rule_ids: [CONF-014, CONF-015]
+    note: "CVE/licence triage; complements (never replaces) CI scans."
+
+  - skill: mcp-config-doctor
+    source: {repo: chrysa/chrysa-skills, path: "functional/mcp-config-doctor/SKILL.md", ref: "2b4185e70c3dfe8c8d9d0929c4c8a437658d7c20"}
+    applies_to_profiles: [all]
+    recommendation_only: true
+    related_rule_ids: [CONF-011]
+    note: "AI-config hygiene is owned by prism-ai-lint; this skill is a manual aid."
+
+  - skill: repo-bootstrap
+    source: {repo: chrysa/chrysa-skills, path: "identity/repo-bootstrap/SKILL.md", ref: "2b4185e70c3dfe8c8d9d0929c4c8a437658d7c20"}
+    applies_to_profiles: [all]
+    recommendation_only: true
+    related_rule_ids: [CONF-001, CONF-003, CONF-005, CONF-011, CONF-012]
+    note: "Remediation aid for missing socle files; the canonical path remains project-init + distribute-standards."

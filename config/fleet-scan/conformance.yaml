@@ -1,0 +1,437 @@
+# fleet-scan — conformance rules (owned by the standards lot, L2).
+#
+# Scope: remote, static, presence-level evidence only (git tree of the default branch,
+# a few file contents, repo metadata, last CI run, recent commit messages). Deep checks
+# stay with the local tools named in standards-mapping.yaml (guideline-checker detectors,
+# prism-ai-lint). A pass here is "technical conformance evidence", never production
+# readiness (see reports/convergence-2026-10-24/lots/L2/gates.md).
+#
+# Normative refs used below (git commit SHAs, read 2026-10-24):
+#   chrysa/shared-standards  origin/develop 76334385c50eaa8ac0a304f87deb1e5cf17932cb  (canon)
+#   chrysa/dev-kit           origin/develop 3ed9f1210d09e46444d0efb9adc4715bf37436c2  (declared future authority, bootstrap)
+#   chrysa/guideline-checker feat/fleet-scan-mvp 9c7460c97a6cb83d59135c10d7bda1020ad692d9 (local detectors)
+#   chrysa/prism-ai-lint     origin/main 0106d37ad296c6ee1fc2d125519b16c3de089061 (AI-config lint)
+# STANDARDS.chrysa.md locators are "§section · Lnnn" (line in the file at that SHA).
+#
+# Rollout (GOVERNANCE.md GV-020): new automated checks land as info/warning and are never
+# introduced as blocking on a fleet with known debt. Only CONF-009 (committed secret
+# material) is blocking: the canon requires rotation, and debt there is not tolerable.
+
+schema_version: "1.0"
+rules_version: "2026.10.25-2"
+
+profiles:
+  python:
+    description: Python code present (a packaging/requirements manifest at the root, or a pyproject.toml one level down for monorepos).
+    detect: {any_glob: ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "*/pyproject.toml"]}
+  node:
+    description: JS/TS code present (a package.json at the root or one level down, e.g. frontend/).
+    detect: {any_glob: ["package.json", "*/package.json"]}
+  container:
+    description: The repo builds or composes containers somewhere in its tree.
+    detect: {any_glob: ["**/Dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"]}
+  dockerfile:
+    description: A root Dockerfile exists (rules that read Dockerfile content target it).
+    detect: {any_file: ["Dockerfile"]}
+  app:
+    description: >-
+      Deployable at the repo root (root Dockerfile or root compose file) — proxy for the
+      repos.yml `runtime: container` tier. Heuristic: a library that keeps a compose file
+      only for tests also matches; the catalog should set an explicit scan_profile for
+      `exempt:*` repos.
+    detect: {any_file: ["Dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"]}
+  lib:
+    description: >-
+      Distributed component heuristic (pre-commit hook package, GitHub Action, typed or
+      src-layout Python package). Weak signal — prefer explicit catalog profiles.
+    detect: {any_glob: [".pre-commit-hooks.yaml", "action.yml", "action.yaml", "**/py.typed", "src/*/__init__.py"]}
+  unity:
+    description: Unity project.
+    detect: {any_file: ["ProjectSettings/ProjectVersion.txt"]}
+  godot:
+    description: Godot project.
+    detect: {any_file: ["project.godot"]}
+  go:
+    description: Go module.
+    detect: {any_file: ["go.mod"]}
+  dotnet:
+    description: .NET solution or project (outside Unity).
+    detect: {any_glob: ["*.sln", "**/*.csproj"]}
+  shell:
+    description: Shell scripts (dotfiles, automation) — used only to exclude docs-only.
+    detect: {any_glob: ["**/*.sh"]}
+  infra:
+    description: Deploy manifests (Helm chart, Kustomize, Terraform). No rule makes Kubernetes mandatory.
+    detect: {any_glob: ["**/Chart.yaml", "**/kustomization.yaml", "**/*.tf"]}
+  docs-only:
+    description: No code, container, game or infra marker found.
+    detect: {none_of_profiles: ["python", "node", "container", "unity", "godot", "go", "dotnet", "shell", "infra"]}
+
+rules:
+  # ─── conformance ────────────────────────────────────────────────────────────
+  - id: CONF-001
+    title: README present
+    description: >-
+      Every repo carries a root README.md reflecting its actual current state (updated at
+      least each release). Content freshness is not checked remotely.
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Documentation and Notion in lockstep · L243; §Release & changelog config › Docs · L1310", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [all]
+    severity: medium
+    blocking: false
+    evidence: "README.md (or README.rst) at the repo root of the default branch"
+    method: {type: file_exists, params: {any_of: ["README.md", "README.rst", "readme.md"]}}
+
+  - id: CONF-002
+    title: LICENSE present
+    description: >-
+      dev-kit lists LICENSE among the required community files "profile permitting";
+      the shared-standards canon ships templates/LICENSE.mit and guideline-checker's
+      origin audit checks `license-present`. Visibility-dependent ("where required") is
+      not expressible in a profile, so this stays low severity for every repo.
+    source: {document: "standards/repository-configuration.md", locator: "§Required community and automation files · L69", repo: "chrysa/dev-kit", ref: "3ed9f1210d09e46444d0efb9adc4715bf37436c2"}
+    dimension: conformance
+    profiles: [all]
+    severity: low
+    blocking: false
+    evidence: "LICENSE / LICENSE.md / LICENSE.txt / COPYING at the repo root"
+    method: {type: file_exists, params: {any_of: ["LICENSE", "LICENSE.md", "LICENSE.txt", "COPYING"]}}
+
+  - id: CONF-003
+    title: pre-commit configuration present
+    description: >-
+      Every git hook goes through pre-commit, configured in .pre-commit-config.yaml; the
+      security gate (secrets + SAST) is wired in pre-commit from the scaffold.
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Pre-commit & git hooks · L1401-1420", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [all]
+    severity: high
+    blocking: false
+    evidence: ".pre-commit-config.yaml at the repo root"
+    method: {type: file_exists, params: {any_of: [".pre-commit-config.yaml"]}}
+
+  - id: CONF-004
+    title: Secret scanner declared in pre-commit
+    description: >-
+      Secrets never reach a commit: a secret scanner (gitleaks; detect-secrets accepted)
+      runs in pre-commit and in CI. Remote check = the hook id is declared; whether it
+      runs, its version and its allowlist are not verified here.
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Security scanning is a gate · L438-446", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [all]
+    severity: high
+    blocking: false
+    evidence: "a `id: gitleaks` or `id: detect-secrets` hook in .pre-commit-config.yaml"
+    method: {type: file_regex, params: {path: ".pre-commit-config.yaml", pattern: "^\\s*-?\\s*id:\\s*['\"]?(gitleaks|detect-secrets)\\b", expect: present, missing: fail}}
+
+  - id: CONF-005
+    title: Makefile exposes the application target socle
+    description: >-
+      Every application repo exposes, with these exact names, the mandatory socle
+      `help install install-dev lint format format-check typecheck test test-cov pre-commit
+      clean ci quality-gate-baseline quality-gate-verify`. Only the root Makefile is read:
+      targets defined in included make/*.mk files are not seen (possible false fail).
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Makefile targets › Mandatory socle · L1260-1264", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [python, node]
+    severity: medium
+    blocking: false
+    evidence: "target declarations `<name>:` in the root Makefile"
+    method:
+      type: makefile_targets
+      params:
+        path: Makefile
+        targets: [help, install, install-dev, lint, format, format-check, typecheck, test, test-cov, pre-commit, clean, ci, quality-gate-baseline, quality-gate-verify]
+
+  - id: CONF-006
+    title: .dockerignore present when the repo builds containers
+    description: >-
+      `.dockerignore` is mandatory and exhaustive (at minimum .git, node_modules,
+      __pycache__, .env*, *.log). Remote check = root file presence only; exhaustiveness
+      and per-context files for nested Dockerfiles are not checked.
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › .dockerignore mandatory & exhaustive · L889", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [container]
+    severity: medium
+    blocking: false
+    evidence: ".dockerignore at the repo root"
+    method: {type: file_exists, params: {any_of: [".dockerignore"]}}
+
+  - id: CONF-007
+    title: No virtualenv committed
+    description: >-
+      venv/, .venv/, env/ are forbidden inside a project tree. A committed virtualenv is
+      detected by its directory name or its pyvenv.cfg marker (catches any name, incl. env/).
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › No virtualenv in a repo — ever · L726", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [all]
+    severity: high
+    blocking: false
+    evidence: "no tree path matching .venv, venv/bin or a pyvenv.cfg"
+    method: {type: file_absent, params: {paths: ["**/.venv", "**/venv/bin/**", "**/pyvenv.cfg"]}}
+
+  - id: CONF-008
+    title: No tool cache or dependency directory committed
+    description: >-
+      __pycache__, .pytest_cache, .ruff_cache, .mypy_cache and node_modules are regenerable
+      machine artifacts and must be invisible in the repo.
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Tool caches & deps never touch the project tree · L731", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [all]
+    severity: medium
+    blocking: false
+    evidence: "no tracked directory named __pycache__, node_modules, .pytest_cache, .ruff_cache, .mypy_cache"
+    method: {type: file_absent, params: {paths: ["**/__pycache__", "**/node_modules", "**/.pytest_cache", "**/.ruff_cache", "**/.mypy_cache"]}}
+
+  - id: CONF-009
+    title: No committed .env or private key file
+    description: >-
+      `.env.example` committed, `.env` never; a secret already committed is rotated, not
+      .gitignored. High-precision path list only (no content scan): a hit means secret
+      material is in the default-branch tree and must be rotated — hence blocking.
+      Content-level secret detection stays with gitleaks (CI/pre-commit) and
+      guideline-checker `secrets-via-env`.
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › machine-agnostic (.env never) · L661; › Security scanning is a gate (rotate, not .gitignore) · L444-446", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [all]
+    severity: critical
+    blocking: true
+    evidence: "no tree path named .env, .env.local, .env.prod(uction), .env.<x>.local, id_rsa, id_ed25519, *.p12, *.pfx"
+    method:
+      type: file_absent
+      params:
+        paths: ["**/.env", "**/.env.local", "**/.env.*.local", "**/.env.prod", "**/.env.production", "**/id_rsa", "**/id_ed25519", "**/*.p12", "**/*.pfx"]
+
+  - id: CONF-010
+    title: No assistant attribution trace in recent commits
+    description: >-
+      Commits carry no assistant attribution: co-author trailer naming the assistant or
+      its vendor address, "generated with" footer, or assistant session-link trailer
+      (commit skill + command template, owner rules D9/D12 of 2026-10-25). High,
+      not blocking: the fleet has known history debt (GV-020) and rewriting published
+      history is an explicit owner decision (prism-ai-lint ATTR_HISTORY). Only the last
+      50 default-branch commits are inspected.
+    source: {document: ".claude/skills/commit/SKILL.md", locator: "L41, rule that forbids any assistant co-author or generated-with trailer (same in templates/claude/commands/commit.md L40)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [all]
+    severity: high
+    blocking: false
+    evidence: "messages of the last 50 commits on the default branch"
+    method:
+      type: commit_messages_absent
+      params:
+        pattern: "(?im)(co-authored-by[:]\\s*claude|generated with \\[?claude code|noreply@anthropic\\.com|^claude-session:\\s*https?://)"
+        last_n: 50
+
+  - id: CONF-011
+    title: CLAUDE.md carries the managed standards block
+    description: >-
+      The repo is kept in sync with the canon: distribute-standards.sh inlines the slim
+      core into a managed `<!-- chrysa:standards:start ... -->` block of CLAUDE.md
+      (AGENTS.md / copilot views are generated from the same source). Block freshness
+      and instruction quality are not checked here (prism-ai-lint owns instruction lint).
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Repo provenance · L111; › repository legible to an agent · L1036-1043; scripts/distribute-standards.sh L67 (marker)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [all]
+    severity: medium
+    blocking: false
+    evidence: "`chrysa:standards:start` marker in the root CLAUDE.md"
+    method: {type: file_regex, params: {path: "CLAUDE.md", pattern: "<!--\\s*chrysa:standards:start", expect: present, missing: fail}}
+
+  - id: CONF-012
+    title: git-cliff changelog config present
+    description: >-
+      The changelog is generated by git-cliff from Conventional Commits; cliff.toml is a
+      canonical file (byte-drift gated locally by `cliff-canonical-drift`). Remote check =
+      presence only.
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Release & changelog config (canonical) › Changelog · L1303-1309", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [python, node, container]
+    severity: low
+    blocking: false
+    evidence: "cliff.toml at the repo root"
+    method: {type: file_exists, params: {any_of: ["cliff.toml"]}}
+
+  - id: CONF-013
+    title: Python packaging via pyproject.toml
+    description: >-
+      pyproject.toml is the single source of truth for Python packaging; setup.py is
+      forbidden. Tool-config placement ([tool.*]) and build backend are not checked.
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Python packaging · L599", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [python]
+    severity: medium
+    blocking: false
+    evidence: "at least one pyproject.toml (root or package dir)"
+    method: {type: tree_glob, params: {glob: "**/pyproject.toml", min_count: 1}}
+
+  - id: CONF-014
+    title: No npm or yarn lockfile
+    description: >-
+      pnpm is the only JS/TS package manager; a package-lock.json or yarn.lock anywhere in
+      the tree is a defect (delete, regenerate with pnpm).
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › The JS/TS package manager is pnpm · L136", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [node]
+    severity: high
+    blocking: false
+    evidence: "no tree path named package-lock.json or yarn.lock"
+    method: {type: file_absent, params: {paths: ["**/package-lock.json", "**/yarn.lock"]}}
+
+  - id: CONF-015
+    title: pnpm lockfile committed
+    description: >-
+      The committed lockfile is pnpm-lock.yaml (root or workspace package dir). The
+      `packageManager` pin and CI `--frozen-lockfile` are not checked.
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › The JS/TS package manager is pnpm · L136-141", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: conformance
+    profiles: [node]
+    severity: medium
+    blocking: false
+    evidence: "at least one pnpm-lock.yaml in the tree"
+    method: {type: tree_glob, params: {glob: "**/pnpm-lock.yaml", min_count: 1}}
+
+  # ─── operational_readiness ──────────────────────────────────────────────────
+  - id: OPS-001
+    title: Dockerfile present for a deployable repo
+    description: >-
+      A `runtime: container` repo provides Dockerfile(s) + docker-compose + HEALTHCHECK.
+      Fails for a compose-only stack (third-party images only) — a real signal that
+      nothing of this repo is built.
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Container-runtime policy › container · L1289-1290", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: operational_readiness
+    profiles: [app]
+    severity: high
+    blocking: false
+    evidence: "at least one Dockerfile in the tree"
+    method: {type: tree_glob, params: {glob: "**/Dockerfile", min_count: 1}}
+
+  - id: OPS-002
+    title: Compose file present for a deployable repo
+    description: >-
+      One-command local startup goes through docker compose (`make docker-up`). Fails for a
+      repo with a root Dockerfile but no compose file (container-collection repos are a
+      documented exception — set an explicit profile in the catalog).
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Container-runtime policy › container · L1289-1290", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: operational_readiness
+    profiles: [app]
+    severity: medium
+    blocking: false
+    evidence: "docker-compose.y(a)ml / compose.y(a)ml / docker-compose.dev.yml at the root"
+    method: {type: file_exists, params: {any_of: ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml", "docker-compose.dev.yml"]}}
+
+  - id: OPS-003
+    title: Root Dockerfile declares a HEALTHCHECK
+    description: >-
+      Healthchecks live in the Dockerfile (CT-004); a compose healthcheck only overrides
+      locally or covers a third-party image. Only the root Dockerfile is read.
+    source: {document: "standards/annexes/CONTAINERS-K3S.md", locator: "CT-004 › Placement · L55-68 (anchored in STANDARDS.chrysa.md L893)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: operational_readiness
+    profiles: [dockerfile]
+    severity: medium
+    blocking: false
+    evidence: "a `HEALTHCHECK` instruction in the root Dockerfile"
+    method: {type: file_regex, params: {path: "Dockerfile", pattern: "(?i)^\\s*HEALTHCHECK\\s+(CMD|--)", expect: present, missing: unknown}}
+
+  - id: OPS-004
+    title: HEALTHCHECK does not call the language runtime
+    description: >-
+      The probe never invokes the project's language runtime (python, node, php, ruby,
+      java, manage.py, npm): use the service's own probe, bash /dev/tcp, or an HTTP client
+      already in the base image. Passes when there is no HEALTHCHECK at all (OPS-003
+      reports that).
+    source: {document: "standards/annexes/CONTAINERS-K3S.md", locator: "CT-004 › Probe · L70-80", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: operational_readiness
+    profiles: [dockerfile]
+    severity: low
+    blocking: false
+    evidence: "HEALTHCHECK line(s) of the root Dockerfile"
+    method: {type: file_regex, params: {path: "Dockerfile", pattern: "(?i)^\\s*HEALTHCHECK\\b.*\\b(python3?|node|npm|npx|pnpm|php|ruby|java|manage\\.py)\\b", expect: absent, missing: unknown}}
+
+  - id: OPS-005
+    title: CI workflow present
+    description: >-
+      There is no repository without CI (CI-006): a workflow runs the repo's gate on every
+      push/PR. Presence only; triggers, pinning and permissions are not checked.
+    source: {document: "standards/annexes/CI-CD.md", locator: "CI-006 · L58-69 (anchored in STANDARDS.chrysa.md L1338)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: operational_readiness
+    profiles: [all]
+    severity: high
+    blocking: false
+    evidence: "at least one .github/workflows/*.yml|*.yaml"
+    method: {type: tree_glob, params: {glob: ".github/workflows/*.y*ml", min_count: 1}}
+
+  - id: OPS-006
+    title: Last CI run on the default branch succeeded
+    description: >-
+      A red check means the code is wrong (CI-040). Latest completed run on the default
+      branch (push event only, so schedule/dependabot/PR-helper workflows are ignored) must
+      conclude `success`; no run = unknown. A failed run shorter than min_failure_duration_s
+      executed no step (Actions billing / account block) and reads as unknown, not fail.
+    source: {document: "standards/annexes/CI-CD.md", locator: "CI-040 · L281 (anchored in STANDARDS.chrysa.md L1344)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: operational_readiness
+    profiles: [all]
+    severity: high
+    blocking: false
+    evidence: "conclusion and duration of the most recent completed push run on the default branch (max 90 days old)"
+    method: {type: ci_last_run, params: {branch: default, max_age_days: 90, min_failure_duration_s: 15}}
+
+  # ─── functional_maturity (signals only, never blocking) ─────────────────────
+  - id: MAT-001
+    title: Default branch touched within 180 days
+    description: >-
+      Activity signal, not a verdict. guideline-checker `repo-inactive` warns at 365 days;
+      180 days here marks "not active this half-year" for revival triage.
+    source: {document: "guideline_checker/fleet/lifecycle.py", locator: "repo-inactive / DEFAULT_STALE_AFTER_DAYS", repo: "chrysa/guideline-checker", ref: "9c7460c97a6cb83d59135c10d7bda1020ad692d9"}
+    dimension: functional_maturity
+    profiles: [all]
+    severity: info
+    blocking: false
+    evidence: "committer date of the default-branch head commit"
+    method: {type: last_commit_age, params: {max_days: 180}}
+
+  - id: MAT-002
+    title: Python tests present
+    description: "Tests are pytest only; a python repo with no test module is a maturity signal. Count/coverage not measured."
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Tests: pytest only · L119", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: functional_maturity
+    profiles: [python]
+    severity: info
+    blocking: false
+    evidence: "at least one test_*.py in the tree"
+    method: {type: tree_glob, params: {glob: "**/test_*.py", min_count: 1}}
+
+  - id: MAT-003
+    title: Frontend/JS tests present
+    description: "Vitest + Testing Library from the scaffold; a node repo with no *.test.* file is a maturity signal."
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Frontend tests: Vitest + Testing Library + MSW · L123", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: functional_maturity
+    profiles: [node]
+    severity: info
+    blocking: false
+    evidence: "at least one *.test.* file in the tree (node_modules excluded by CONF-008)"
+    method: {type: tree_glob, params: {glob: "**/*.test.*", min_count: 1}}
+
+  - id: MAT-004
+    title: CHANGELOG has at least one released version
+    description: >-
+      Keep-a-Changelog generated by git-cliff; a CHANGELOG with only `## [Unreleased]` (or
+      none) means nothing was ever released. Release tags themselves are not inspected.
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Release & changelog config › Changelog · L1303", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: functional_maturity
+    profiles: [python, node, container]
+    severity: info
+    blocking: false
+    evidence: "a `## [x.y.z]` / `## vx.y.z` heading in CHANGELOG.md"
+    method: {type: file_regex, params: {path: "CHANGELOG.md", pattern: "^##\\s+\\[?v?\\d+\\.\\d+\\.\\d+", expect: present, missing: fail}}
+
+  - id: MAT-005
+    title: docs/ directory present
+    description: "Docs live in docs/ (docs-site generator). Content and freshness not checked."
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Release & changelog config › Docs · L1310", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    dimension: functional_maturity
+    profiles: [all]
+    severity: info
+    blocking: false
+    evidence: "at least one path under docs/"
+    method: {type: tree_glob, params: {glob: "docs/**", min_count: 1}}

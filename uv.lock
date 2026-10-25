@@ -399,6 +399,7 @@ dev = [
     { name = "httpx2" },
     { name = "mypy" },
     { name = "pip-audit" },
+    { name = "pydantic" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-mock" },
@@ -409,6 +410,10 @@ dev = [
 e2e = [
     { name = "playwright" },
     { name = "pytest-playwright" },
+]
+scan = [
+    { name = "httpx" },
+    { name = "pydantic" },
 ]
 web = [
     { name = "fastapi" },
@@ -423,12 +428,15 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'dev'", specifier = ">=0.115" },
     { name = "fastapi", marker = "extra == 'web'", specifier = ">=0.115" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
+    { name = "httpx", marker = "extra == 'scan'", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'web'", specifier = ">=0.27" },
     { name = "httpx2", marker = "extra == 'dev'", specifier = ">=2.7" },
     { name = "ldap3", marker = "extra == 'web'", specifier = ">=2.9" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.7" },
     { name = "playwright", marker = "extra == 'e2e'", specifier = ">=1.48" },
+    { name = "pydantic", marker = "extra == 'dev'", specifier = ">=2.11" },
+    { name = "pydantic", marker = "extra == 'scan'", specifier = ">=2.11" },
     { name = "pyjwt", marker = "extra == 'web'", specifier = ">=2.8" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
@@ -443,7 +451,7 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'dev'", specifier = ">=0.34" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'web'", specifier = ">=0.34" },
 ]
-provides-extras = ["web", "dev", "e2e", "workshop", "fleet"]
+provides-extras = ["web", "dev", "e2e", "workshop", "scan", "fleet"]
 
 [[package]]
 name = "h11"

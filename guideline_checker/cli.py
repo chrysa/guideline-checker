@@ -14,6 +14,7 @@ from pathlib import Path
 from guideline_checker import __version__
 from guideline_checker.core.detection import RuleResult, resolve_rule_detectors, run_checks
 from guideline_checker.core.health import RuleHealth, compute_rule_health, summarize
+from guideline_checker.fleet.scan.arguments import add_fleet_scan_arguments
 from guideline_checker.loader import InstructionFile, load_all_sources, load_instructions
 from guideline_checker.reporters.html import HtmlReporter
 
@@ -312,6 +313,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Enable auto-reload on code changes (development only).",
     )
+
+    # ── fleet-scan subcommand (argparse only; the engine needs the `scan` extra) ──
+    fleet_scan_cmd = sub.add_parser(
+        "fleet-scan",
+        help="Scan many GitHub repos against config/fleet-scan rules (needs the 'scan' extra).",
+    )
+    add_fleet_scan_arguments(fleet_scan_cmd)
 
     return parser
 
@@ -919,6 +927,21 @@ def _cmd_web(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_fleet_scan(args: argparse.Namespace) -> int:
+    """Delegate to the fleet scanner, imported lazily: it depends on the optional `scan` extra."""
+    try:
+        scan_cli = importlib.import_module("guideline_checker.fleet.scan.cli")
+    except ModuleNotFoundError as exc:
+        print(
+            f"[guideline-checker] fleet-scan needs optional dependencies ({exc.name} missing). "
+            "Install them with: pip install 'guideline-checker[scan]'",
+            file=sys.stderr,
+        )
+        return 2
+    exit_code: int = scan_cli.run_fleet_scan(args)
+    return exit_code
+
+
 # Subcommand -> handler. A table, not an if/elif ladder: adding a command is a row,
 # and `fix` sharing `check`'s handler is visible here instead of buried in control flow.
 _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
@@ -928,6 +951,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "web": _cmd_web,
     "check": _cmd_check,
     "fix": _cmd_check,
+    "fleet-scan": _cmd_fleet_scan,
 }
 
 

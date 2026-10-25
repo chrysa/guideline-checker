@@ -1,0 +1,299 @@
+# fleet-scan — requirement -> source -> rule mapping (owned by the standards lot, L2).
+#
+# coverage:
+#   full          the remote rule decides the requirement on its own
+#   partial       the remote rule decides part of it (some sub-clauses unchecked)
+#   presence-only only file/marker presence is checked; content correctness lives elsewhere
+#   none          not implemented remotely (rule_ids: []); `limits` gives the reason
+# enforced_elsewhere: guideline-checker:<rule id> | prism-ai-lint:<finding code> | other:<tool>
+# The engine cross-checks every `rule_ids` entry against conformance.yaml.
+
+schema_version: "1.0"
+rules_version: "2026.10.24-1"
+sources:
+  - {repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb", branch: origin/develop, role: canon (STANDARDS.chrysa.md wins over annexes)}
+  - {repo: chrysa/dev-kit, ref: "3ed9f1210d09e46444d0efb9adc4715bf37436c2", branch: origin/develop, role: declared future authority, bootstrap; rules/ are synced copies of the canon}
+  - {repo: chrysa/guideline-checker, ref: "9c7460c97a6cb83d59135c10d7bda1020ad692d9", branch: feat/fleet-scan-mvp, role: local detectors (guidelines/*.yml, fleet/lifecycle.py, fleet/distribution.py)}
+  - {repo: chrysa/prism-ai-lint, ref: "0106d37ad296c6ee1fc2d125519b16c3de089061", branch: origin/main, role: AI-agent config lint}
+
+requirements:
+  # ─── documentation & agent context ──────────────────────────────────────────
+  - requirement_id: REQ-DOC-README
+    requirement: Root README reflects the current state
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Documentation and Notion in lockstep · L243; §Release & changelog config › Docs · L1310", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-001]
+    coverage: presence-only
+    limits: Freshness/accuracy and per-folder READMEs are not checked.
+    enforced_elsewhere: ["guideline-checker:md-documented-make-target-exists"]
+
+  - requirement_id: REQ-DOC-LICENSE
+    requirement: LICENSE file, profile permitting
+    source: {document: "standards/repository-configuration.md", locator: "§Required community and automation files · L69", repo: chrysa/dev-kit, ref: "3ed9f1210d09e46444d0efb9adc4715bf37436c2"}
+    rule_ids: [CONF-002]
+    coverage: partial
+    limits: "Profile/visibility condition not expressible; canon (shared-standards) has no explicit LICENSE rule, only templates/LICENSE.mit. Text equality not checked."
+    enforced_elsewhere: ["guideline-checker:license-present"]
+
+  - requirement_id: REQ-DOC-DOCSDIR
+    requirement: Docs live in docs/ (docs-site generator, pages.yml)
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Release & changelog config › Docs · L1310", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [MAT-005]
+    coverage: presence-only
+    limits: Used as a maturity signal only; pages.yml deployment not checked.
+    enforced_elsewhere: []
+
+  - requirement_id: REQ-AGENT-CLAUDEMD
+    requirement: CLAUDE.md carries the managed standards block (repo kept in sync with project-init / distribute-standards)
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Repo provenance · L111; §repository legible to an agent · L1036-1043", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-011]
+    coverage: presence-only
+    limits: "Block freshness vs CORE.chrysa.md not checked. guideline-checker `claude-import` still expects the legacy `@.chrysa/STANDARDS.md` import (pre-inline model) and is stale against the canon."
+    enforced_elsewhere: ["guideline-checker:claude-import", "prism-ai-lint:INSTR_TOO_LARGE", "prism-ai-lint:INSTR_VAGUE", "prism-ai-lint:IMPORT_MISSING"]
+
+  - requirement_id: REQ-AGENT-AGENTSMD
+    requirement: AGENTS.md / copilot-instructions generated from the same source, never hand-diverged
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§repository legible to an agent · L1042", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: []
+    coverage: none
+    limits: "Deliberately delegated: prism-ai-lint lints AGENTS.md (symlink/mention/drift); a remote presence rule would duplicate it without proving non-divergence."
+    enforced_elsewhere: ["prism-ai-lint:AGENTS_SYMLINK", "prism-ai-lint:AGENTS_MENTION"]
+
+  - requirement_id: REQ-AGENT-CONTEXTFILES
+    requirement: Generated context files (handover.md, context-map.json, llms-full.txt, ai-instructions.md), drift-gated
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Every repo ships generated context files · L264 (ADR D-0012)", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: []
+    coverage: none
+    limits: "Not in MVP: recent rule, fleet rollout state unknown; per GV-020 it would land as info. Candidate rule: file_exists context-map.json (info)."
+    enforced_elsewhere: ["other:shared-standards context-files-drift pre-commit gate"]
+
+  - requirement_id: REQ-AGENT-AICONFIG
+    requirement: AI-agent configuration (settings, permissions, hooks, MCP, skills, subagents) is safe and lean
+    source: {document: "README.md", locator: "§What it covers", repo: chrysa/prism-ai-lint, ref: "0106d37ad296c6ee1fc2d125519b16c3de089061"}
+    rule_ids: []
+    coverage: none
+    limits: Out of scope for the remote scanner by design — needs full file parsing and policy; run prism-ai-lint locally/CI.
+    enforced_elsewhere: ["prism-ai-lint:SETTINGS_SCHEMA", "prism-ai-lint:PERM_DUPLICATE", "prism-ai-lint:HOOK_SHAPE", "prism-ai-lint:MCP_SHAPE", "prism-ai-lint:SKILL_MISSING", "prism-ai-lint:SECURITY_GITIGNORE", "prism-ai-lint:LOCAL_NOT_IGNORED"]
+
+  # ─── SCM / commits ──────────────────────────────────────────────────────────
+  - requirement_id: REQ-SCM-NOATTRIBUTION
+    requirement: No assistant attribution trailer in commits
+    source: {document: ".claude/skills/commit/SKILL.md", locator: "L41 (also templates/claude/commands/commit.md L40)", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-010]
+    coverage: partial
+    limits: "Last 50 default-branch commits only; other branches/PR bodies not seen. Not a canon rule in STANDARDS.chrysa.md (lives in the commit skill + owner rule) — candidate for canon. Session-link trailers (e.g. `Claude-Session:`) not matched: owner to decide whether they count as attribution."
+    enforced_elsewhere: ["prism-ai-lint:ATTR_HISTORY", "prism-ai-lint:ATTR_TRACE", "prism-ai-lint:ATTR_ENABLED", "prism-ai-lint:ATTR_HOOK_MISSING"]
+
+  - requirement_id: REQ-SCM-CONVENTIONAL
+    requirement: Conventional Commits, enforced by a commit-msg hook
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Commits · L57", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: []
+    coverage: none
+    limits: "Not in MVP: commit_messages_absent can only express a negative pattern; squash-merge and release-promotion messages would produce noise. Candidate: an inverse regex on the last 20 commits, info."
+    enforced_elsewhere: ["other:conventional-pre-commit hook (commit-msg)"]
+
+  - requirement_id: REQ-SCM-BRANCHES
+    requirement: Default branch develop, main = production, protected branches
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Branches / Branch model · L58-59", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: []
+    coverage: none
+    limits: "repo_field default_branch eq develop is expressible, but fleet settings were already uniformised and verified (85/85) by apply-repo-settings.sh; branch protection is not in repo metadata. Kept out to avoid a second, weaker source."
+    enforced_elsewhere: ["other:shared-standards apply-repo-settings.sh"]
+
+  # ─── pre-commit & security ──────────────────────────────────────────────────
+  - requirement_id: REQ-PC-CONFIG
+    requirement: All git hooks via pre-commit (.pre-commit-config.yaml), shared hooks from chrysa/pre-commit-tools
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Pre-commit & git hooks · L1401-1475", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-003]
+    coverage: presence-only
+    limits: "rev pinning, pre-commit-tools usage, no husky/lefthook, no language: docker not checked remotely."
+    enforced_elsewhere: ["guideline-checker:precommit-pin"]
+
+  - requirement_id: REQ-SEC-SECRETSCAN
+    requirement: Secret scanner (gitleaks) in pre-commit and CI; positive = hard failure
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Security scanning is a gate · L438-446", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-004]
+    coverage: partial
+    limits: "Pre-commit declaration only; CI secret-scan.yml caller, bandit/SAST, Trivy, hadolint not checked."
+    enforced_elsewhere: ["guideline-checker:secrets-via-env"]
+
+  - requirement_id: REQ-SEC-NOENVFILE
+    requirement: .env never committed; committed secret is rotated
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§machine-agnostic · L661; §Security scanning is a gate · L444-446", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-009]
+    coverage: partial
+    limits: "Path-based on the default-branch head only: secrets inside other files, other branches or git history are not seen (gitleaks covers content)."
+    enforced_elsewhere: ["guideline-checker:secrets-via-env", "prism-ai-lint:SECRET_INLINE"]
+
+  - requirement_id: REQ-SEC-SAST
+    requirement: SAST (bandit), Trivy fs/image, hadolint in CI; SBOM + signature on releases
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Security scanning is a gate › 2 and 4 · L447-458", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: []
+    coverage: none
+    limits: Requires parsing workflow callers of chrysa/github-actions reusable workflows; out of MVP.
+    enforced_elsewhere: ["guideline-checker:py-no-eval-exec", "guideline-checker:py-safe-yaml", "guideline-checker:pack-no-pickle-loads"]
+
+  # ─── Makefile / dev loop ────────────────────────────────────────────────────
+  - requirement_id: REQ-MK-SOCLE
+    requirement: Application repos expose the 14-target Makefile socle with canonical names
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Makefile targets › Mandatory socle · L1260-1264", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-005]
+    coverage: partial
+    limits: "Root Makefile only (make/*.mk includes invisible → possible false fail). Non-applicative subset (help lint pre-commit clean) not checked separately; renamed variants (type-check) not flagged remotely."
+    enforced_elsewhere: ["guideline-checker:mk-mandatory-target-socle", "guideline-checker:mk-canonical-target-names", "guideline-checker:md-documented-make-target-exists"]
+
+  # ─── containers ─────────────────────────────────────────────────────────────
+  - requirement_id: REQ-CT-NOVENV
+    requirement: No virtualenv in a repo
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§No virtualenv in a repo — ever · L726", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-007]
+    coverage: full
+    limits: Tracked tree only (an untracked on-disk venv is a local concern).
+    enforced_elsewhere: ["guideline-checker:tracked-artefact"]
+
+  - requirement_id: REQ-CT-NOCACHES
+    requirement: Tool caches & dependency dirs never tracked
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Tool caches & deps never touch the project tree · L731", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-008]
+    coverage: partial
+    limits: Cache-dir env redirection (the "fewest cache files" target) not checked.
+    enforced_elsewhere: ["guideline-checker:tracked-artefact"]
+
+  - requirement_id: REQ-CT-DOCKERIGNORE
+    requirement: .dockerignore mandatory & exhaustive
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§.dockerignore mandatory & exhaustive · L889", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-006]
+    coverage: presence-only
+    limits: Exhaustiveness and nested build contexts not checked.
+    enforced_elsewhere: []
+
+  - requirement_id: REQ-CT-HEALTHCHECK
+    requirement: HEALTHCHECK in the Dockerfile, native, never the language runtime (CT-004)
+    source: {document: "standards/annexes/CONTAINERS-K3S.md", locator: "CT-004 · L55-80", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [OPS-003, OPS-004]
+    coverage: partial
+    limits: "Root Dockerfile only; 'curl installed just for the probe' and duplicate compose healthchecks not checked. Note: guideline-checker OP-000 detector requires `healthcheck:` in the compose file, which contradicts CT-004 (Dockerfile placement) — to reconcile in guideline-checker."
+    enforced_elsewhere: ["guideline-checker:OP-000"]
+
+  - requirement_id: REQ-CT-RUNTIME
+    requirement: "runtime: container repos ship Dockerfile(s) + compose + HEALTHCHECK + docker-up/down/test targets"
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Container-runtime policy · L1283-1297", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [OPS-001, OPS-002, OPS-003]
+    coverage: partial
+    limits: "`app` profile is a tree heuristic, not the repos.yml runtime tier; docker-up/docker-down/docker-test targets not checked."
+    enforced_elsewhere: ["other:shared-standards audit-docker-compliance.sh"]
+
+  - requirement_id: REQ-CT-MULTISTAGE
+    requirement: Application Dockerfiles are multi-stage with production + dev targets
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Dockerfiles are multi-stage · L801-813", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: []
+    coverage: none
+    limits: "Deliberately not in MVP: applies to application Dockerfiles only, container-collection repos are exempt, and the exemption is not detectable from the tree. Must never be extended to all profiles. Candidate later: file_regex `AS production` on profile app, low."
+    enforced_elsewhere: []
+
+  - requirement_id: REQ-CT-K3S
+    requirement: k3s workload baseline (probes, resources, securityContext) — CT-020..CT-024
+    source: {document: "standards/annexes/CONTAINERS-K3S.md", locator: "§4 k3s workload baseline · L324-360", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: []
+    coverage: none
+    limits: "Only for repos that ship manifests (profile infra); not mandatory for other project types. Note: the k3s cluster version is not the Kubernetes resource apiVersion of manifests — no rule mixes them."
+    enforced_elsewhere: []
+
+  # ─── language / packaging ───────────────────────────────────────────────────
+  - requirement_id: REQ-PY-PYPROJECT
+    requirement: pyproject.toml single source of truth; setup.py forbidden; tool config in [tool.*]
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Python packaging · L599-605", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-013]
+    coverage: partial
+    limits: "setup.py absence, setuptools backend and external ruff.toml/mypy.ini/pytest.ini not checked (kept out to stay within ~25 rules)."
+    enforced_elsewhere: []
+
+  - requirement_id: REQ-JS-PNPM
+    requirement: pnpm only — pnpm-lock.yaml committed, no package-lock.json / yarn.lock
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§The JS/TS package manager is pnpm · L136-148", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-014, CONF-015]
+    coverage: partial
+    limits: packageManager pin, CI --frozen-lockfile and npm/npx in scripts not checked.
+    enforced_elsewhere: []
+
+  # ─── CI / release ───────────────────────────────────────────────────────────
+  - requirement_id: REQ-CI-EXISTS
+    requirement: Every repo runs CI (CI-006)
+    source: {document: "standards/annexes/CI-CD.md", locator: "CI-006 · L58-69", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [OPS-005]
+    coverage: presence-only
+    limits: Triggers (push/PR to develop, PR to main) not verified.
+    enforced_elsewhere: []
+
+  - requirement_id: REQ-CI-GREEN
+    requirement: A red check means the code is wrong (CI-040)
+    source: {document: "standards/annexes/CI-CD.md", locator: "CI-040 · L281-287", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [OPS-006]
+    coverage: partial
+    limits: "Latest completed default-branch run only; billing/onboarding failures read as fail; skipped-as-passed (CI-032) and continue-on-error (CI-037) not detectable."
+    enforced_elsewhere: []
+
+  - requirement_id: REQ-CI-HYGIENE
+    requirement: SHA-pinned actions, permissions, timeout-minutes, concurrency, no secrets inherit (CI-010..CI-031)
+    source: {document: "standards/annexes/CI-CD.md", locator: "§2-4 · L72-258", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: []
+    coverage: none
+    limits: "Needs per-workflow YAML parsing; file_regex on one file cannot cover N workflows. Out of MVP."
+    enforced_elsewhere: ["prism-ai-lint:CI_ACTION", "other:actionlint"]
+
+  - requirement_id: REQ-REL-CLIFF
+    requirement: git-cliff changelog (cliff.toml canonical) and GitVersion.yml
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Release & changelog config · L1298-1309", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [CONF-012, MAT-004]
+    coverage: partial
+    limits: "GitVersion.yml presence not checked; byte-equality with the canonical cliff.toml is a local drift hook."
+    enforced_elsewhere: ["other:shared-standards cliff-canonical-drift / gitversion-canonical-drift hooks"]
+
+  # ─── testing / maturity ─────────────────────────────────────────────────────
+  - requirement_id: REQ-TEST-PRESENCE
+    requirement: pytest (Python) and Vitest + Testing Library (frontend) from the scaffold
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Tests: pytest only · L119; §Frontend tests · L123", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: [MAT-002, MAT-003]
+    coverage: presence-only
+    limits: Maturity signal only; framework choice, count and coverage not measured.
+    enforced_elsewhere: []
+
+  - requirement_id: REQ-QG-COVERAGE
+    requirement: Coverage >= 85%, 0 lint warnings, quality rating A
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Quality gates · L1204-1215", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: []
+    coverage: none
+    limits: Needs executing the suite or querying the code-quality service; the scanner never runs repo code.
+    enforced_elsewhere: ["guideline-checker:py-file-length", "guideline-checker:py-function-length", "guideline-checker:py-branch-count"]
+
+  - requirement_id: REQ-LIFECYCLE-ACTIVITY
+    requirement: Inactive repositories are surfaced (repo-inactive)
+    source: {document: "guideline_checker/fleet/lifecycle.py", locator: "repo-inactive (365 days)", repo: chrysa/guideline-checker, ref: "9c7460c97a6cb83d59135c10d7bda1020ad692d9"}
+    rule_ids: [MAT-001]
+    coverage: partial
+    limits: "180-day signal (vs 365 locally) — activity is not maturity."
+    enforced_elsewhere: ["guideline-checker:repo-inactive"]
+
+  # ─── governance / operations (not implementable remotely) ───────────────────
+  - requirement_id: REQ-AR-PROFILE
+    requirement: Every repo declares project_profile, ddd_level, bounded_context, standards_version (AR-002)
+    source: {document: "standards/annexes/ARCHITECTURE-DDD.md", locator: "AR-000..AR-002 · L10-44", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: []
+    coverage: none
+    limits: "The declaration file has no normative filename (AR-002 shows only the YAML body) — nothing deterministic to check. dev-kit profiles/profile.schema.yaml defines a different field set (lifecycle, canonicality, runtime...). Needs a decision first."
+    enforced_elsewhere: []
+
+  - requirement_id: REQ-OPS-PRODREADY
+    requirement: Production Ready checklist (OP-050) — probes green, telemetry, runbooks, backup/rollback, failure injection
+    source: {document: "standards/annexes/OBSERVABILITY-OPS.md", locator: "OP-050 · L125-140", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: []
+    coverage: none
+    limits: "Requires runtime validation; static scan cannot grant it. See lots/L2/gates.md: the technical-conformance gate is NOT production readiness."
+    enforced_elsewhere: ["guideline-checker:OP-000", "guideline-checker:OP-040", "guideline-checker:OP-023"]
+
+  - requirement_id: REQ-OPS-SENTRY
+    requirement: status:dev repos ship an error-tracking project linked to GitHub issues
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Observability — error-tracking → GitHub issues · L1495", repo: chrysa/shared-standards, ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    rule_ids: []
+    coverage: none
+    limits: "Lives outside the repo (error-tracking SaaS integration); applies only to deployed products, never to libs/docs/games — not a fleet-wide rule."
+    enforced_elsewhere: []

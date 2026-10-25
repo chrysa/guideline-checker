@@ -284,3 +284,7 @@ Thumbs.db
 *.key
 secrets/
 CLAUDE.local.md
+
+# fleet-scan run outputs and HTTP cache (may contain private-repo content)
+.fleet-scan/
+.cache/fleet-scan/

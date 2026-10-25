@@ -61,12 +61,16 @@ dev = [
     "types-PyYAML>=6",
     "httpx2>=2.7",
     "httpx>=0.27",
+    "pydantic>=2.11",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
 ]
 e2e = ["playwright>=1.48", "pytest-playwright>=0.5"]
 workshop = []  # LLM detector authoring (proposer/persist/interpret) — no extra deps today;
                # reserved for a future LLM SDK so it never lands in the default install.
+# fleet-scan (guideline_checker/fleet/scan): typed config/results + async GitHub REST client.
+# pydantic >= 2.11 for `serialize_by_alias` (the report contract uses a `pass` key).
+scan = ["pydantic>=2.11", "httpx>=0.27"]
 fleet = []     # gh-backed multi-repo governance — no extra deps today (gh_client shells to
                # the `gh` CLI); reserved so a future PyGithub dependency never lands by default.
 
@@ -164,6 +168,7 @@ indent-style = "space"
 [tool.mypy]
 python_version = "3.14"
 strict = true
+plugins = ["pydantic.mypy"]
 warn_return_any = true
 warn_unused_configs = true
 
