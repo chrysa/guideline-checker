@@ -7,10 +7,10 @@
 # readiness (see reports/convergence-2026-10-24/lots/L2/gates.md).
 #
 # Normative refs used below (git commit SHAs, read 2026-10-24):
-#   chrysa/shared-standards  origin/develop 76334385c50eaa8ac0a304f87deb1e5cf17932cb  (canon)
-#   chrysa/dev-kit           origin/develop 3ed9f1210d09e46444d0efb9adc4715bf37436c2  (declared future authority, bootstrap)
-#   chrysa/guideline-checker feat/fleet-scan-mvp 9c7460c97a6cb83d59135c10d7bda1020ad692d9 (local detectors)
-#   chrysa/prism-ai-lint     origin/main 0106d37ad296c6ee1fc2d125519b16c3de089061 (AI-config lint)
+#   chrysa/shared-standards  origin/develop 76334385c50eaa8ac0a304f87deb1e5cf17932cb  (canon)  # pragma: allowlist secret
+#   chrysa/dev-kit           origin/develop 3ed9f1210d09e46444d0efb9adc4715bf37436c2  (declared future authority, bootstrap)  # pragma: allowlist secret
+#   chrysa/guideline-checker feat/fleet-scan-mvp 9c7460c97a6cb83d59135c10d7bda1020ad692d9 (local detectors)  # pragma: allowlist secret
+#   chrysa/prism-ai-lint     origin/main 0106d37ad296c6ee1fc2d125519b16c3de089061 (AI-config lint)  # pragma: allowlist secret
 # STANDARDS.chrysa.md locators are "§section · Lnnn" (line in the file at that SHA).
 #
 # Rollout (GOVERNANCE.md GV-020): new automated checks land as info/warning and are never
@@ -74,7 +74,7 @@ rules:
     description: >-
       Every repo carries a root README.md reflecting its actual current state (updated at
       least each release). Content freshness is not checked remotely.
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Documentation and Notion in lockstep · L243; §Release & changelog config › Docs · L1310", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Documentation and Notion in lockstep · L243; §Release & changelog config › Docs · L1310", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [all]
     severity: medium
@@ -89,7 +89,7 @@ rules:
       the shared-standards canon ships templates/LICENSE.mit and guideline-checker's
       origin audit checks `license-present`. Visibility-dependent ("where required") is
       not expressible in a profile, so this stays low severity for every repo.
-    source: {document: "standards/repository-configuration.md", locator: "§Required community and automation files · L69", repo: "chrysa/dev-kit", ref: "3ed9f1210d09e46444d0efb9adc4715bf37436c2"}
+    source: {document: "standards/repository-configuration.md", locator: "§Required community and automation files · L69", repo: "chrysa/dev-kit", ref: "3ed9f1210d09e46444d0efb9adc4715bf37436c2"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [all]
     severity: low
@@ -102,7 +102,7 @@ rules:
     description: >-
       Every git hook goes through pre-commit, configured in .pre-commit-config.yaml; the
       security gate (secrets + SAST) is wired in pre-commit from the scaffold.
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Pre-commit & git hooks · L1401-1420", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Pre-commit & git hooks · L1401-1420", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [all]
     severity: high
@@ -116,7 +116,7 @@ rules:
       Secrets never reach a commit: a secret scanner (gitleaks; detect-secrets accepted)
       runs in pre-commit and in CI. Remote check = the hook id is declared; whether it
       runs, its version and its allowlist are not verified here.
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Security scanning is a gate · L438-446", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Security scanning is a gate · L438-446", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [all]
     severity: high
@@ -131,7 +131,7 @@ rules:
       `help install install-dev lint format format-check typecheck test test-cov pre-commit
       clean ci quality-gate-baseline quality-gate-verify`. Only the root Makefile is read:
       targets defined in included make/*.mk files are not seen (possible false fail).
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Makefile targets › Mandatory socle · L1260-1264", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Makefile targets › Mandatory socle · L1260-1264", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [python, node]
     severity: medium
@@ -149,7 +149,7 @@ rules:
       `.dockerignore` is mandatory and exhaustive (at minimum .git, node_modules,
       __pycache__, .env*, *.log). Remote check = root file presence only; exhaustiveness
       and per-context files for nested Dockerfiles are not checked.
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › .dockerignore mandatory & exhaustive · L889", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › .dockerignore mandatory & exhaustive · L889", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [container]
     severity: medium
@@ -162,7 +162,7 @@ rules:
     description: >-
       venv/, .venv/, env/ are forbidden inside a project tree. A committed virtualenv is
       detected by its directory name or its pyvenv.cfg marker (catches any name, incl. env/).
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › No virtualenv in a repo — ever · L726", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › No virtualenv in a repo — ever · L726", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [all]
     severity: high
@@ -175,7 +175,7 @@ rules:
     description: >-
       __pycache__, .pytest_cache, .ruff_cache, .mypy_cache and node_modules are regenerable
       machine artifacts and must be invisible in the repo.
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Tool caches & deps never touch the project tree · L731", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Tool caches & deps never touch the project tree · L731", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [all]
     severity: medium
@@ -191,7 +191,7 @@ rules:
       material is in the default-branch tree and must be rotated — hence blocking.
       Content-level secret detection stays with gitleaks (CI/pre-commit) and
       guideline-checker `secrets-via-env`.
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › machine-agnostic (.env never) · L661; › Security scanning is a gate (rotate, not .gitignore) · L444-446", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › machine-agnostic (.env never) · L661; › Security scanning is a gate (rotate, not .gitignore) · L444-446", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [all]
     severity: critical
@@ -211,7 +211,7 @@ rules:
       not blocking: the fleet has known history debt (GV-020) and rewriting published
       history is an explicit owner decision (prism-ai-lint ATTR_HISTORY). Only the last
       50 default-branch commits are inspected.
-    source: {document: ".claude/skills/commit/SKILL.md", locator: "L41, rule that forbids any assistant co-author or generated-with trailer (same in templates/claude/commands/commit.md L40)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: ".claude/skills/commit/SKILL.md", locator: "L41, rule that forbids any assistant co-author or generated-with trailer (same in templates/claude/commands/commit.md L40)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [all]
     severity: high
@@ -230,7 +230,7 @@ rules:
       core into a managed `<!-- chrysa:standards:start ... -->` block of CLAUDE.md
       (AGENTS.md / copilot views are generated from the same source). Block freshness
       and instruction quality are not checked here (prism-ai-lint owns instruction lint).
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Repo provenance · L111; › repository legible to an agent · L1036-1043; scripts/distribute-standards.sh L67 (marker)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Repo provenance · L111; › repository legible to an agent · L1036-1043; scripts/distribute-standards.sh L67 (marker)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [all]
     severity: medium
@@ -244,7 +244,7 @@ rules:
       The changelog is generated by git-cliff from Conventional Commits; cliff.toml is a
       canonical file (byte-drift gated locally by `cliff-canonical-drift`). Remote check =
       presence only.
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Release & changelog config (canonical) › Changelog · L1303-1309", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Release & changelog config (canonical) › Changelog · L1303-1309", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [python, node, container]
     severity: low
@@ -257,7 +257,7 @@ rules:
     description: >-
       pyproject.toml is the single source of truth for Python packaging; setup.py is
       forbidden. Tool-config placement ([tool.*]) and build backend are not checked.
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Python packaging · L599", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Python packaging · L599", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [python]
     severity: medium
@@ -270,7 +270,7 @@ rules:
     description: >-
       pnpm is the only JS/TS package manager; a package-lock.json or yarn.lock anywhere in
       the tree is a defect (delete, regenerate with pnpm).
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › The JS/TS package manager is pnpm · L136", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › The JS/TS package manager is pnpm · L136", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [node]
     severity: high
@@ -283,7 +283,7 @@ rules:
     description: >-
       The committed lockfile is pnpm-lock.yaml (root or workspace package dir). The
       `packageManager` pin and CI `--frozen-lockfile` are not checked.
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › The JS/TS package manager is pnpm · L136-141", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › The JS/TS package manager is pnpm · L136-141", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: conformance
     profiles: [node]
     severity: medium
@@ -298,7 +298,7 @@ rules:
       A `runtime: container` repo provides Dockerfile(s) + docker-compose + HEALTHCHECK.
       Fails for a compose-only stack (third-party images only) — a real signal that
       nothing of this repo is built.
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Container-runtime policy › container · L1289-1290", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Container-runtime policy › container · L1289-1290", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: operational_readiness
     profiles: [app]
     severity: high
@@ -312,7 +312,7 @@ rules:
       One-command local startup goes through docker compose (`make docker-up`). Fails for a
       repo with a root Dockerfile but no compose file (container-collection repos are a
       documented exception — set an explicit profile in the catalog).
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Container-runtime policy › container · L1289-1290", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Container-runtime policy › container · L1289-1290", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: operational_readiness
     profiles: [app]
     severity: medium
@@ -325,7 +325,7 @@ rules:
     description: >-
       Healthchecks live in the Dockerfile (CT-004); a compose healthcheck only overrides
       locally or covers a third-party image. Only the root Dockerfile is read.
-    source: {document: "standards/annexes/CONTAINERS-K3S.md", locator: "CT-004 › Placement · L55-68 (anchored in STANDARDS.chrysa.md L893)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/annexes/CONTAINERS-K3S.md", locator: "CT-004 › Placement · L55-68 (anchored in STANDARDS.chrysa.md L893)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: operational_readiness
     profiles: [dockerfile]
     severity: medium
@@ -340,7 +340,7 @@ rules:
       java, manage.py, npm): use the service's own probe, bash /dev/tcp, or an HTTP client
       already in the base image. Passes when there is no HEALTHCHECK at all (OPS-003
       reports that).
-    source: {document: "standards/annexes/CONTAINERS-K3S.md", locator: "CT-004 › Probe · L70-80", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/annexes/CONTAINERS-K3S.md", locator: "CT-004 › Probe · L70-80", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: operational_readiness
     profiles: [dockerfile]
     severity: low
@@ -353,7 +353,7 @@ rules:
     description: >-
       There is no repository without CI (CI-006): a workflow runs the repo's gate on every
       push/PR. Presence only; triggers, pinning and permissions are not checked.
-    source: {document: "standards/annexes/CI-CD.md", locator: "CI-006 · L58-69 (anchored in STANDARDS.chrysa.md L1338)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/annexes/CI-CD.md", locator: "CI-006 · L58-69 (anchored in STANDARDS.chrysa.md L1338)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: operational_readiness
     profiles: [all]
     severity: high
@@ -368,7 +368,7 @@ rules:
       branch (push event only, so schedule/dependabot/PR-helper workflows are ignored) must
       conclude `success`; no run = unknown. A failed run shorter than min_failure_duration_s
       executed no step (Actions billing / account block) and reads as unknown, not fail.
-    source: {document: "standards/annexes/CI-CD.md", locator: "CI-040 · L281 (anchored in STANDARDS.chrysa.md L1344)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/annexes/CI-CD.md", locator: "CI-040 · L281 (anchored in STANDARDS.chrysa.md L1344)", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: operational_readiness
     profiles: [all]
     severity: high
@@ -382,7 +382,7 @@ rules:
     description: >-
       Activity signal, not a verdict. guideline-checker `repo-inactive` warns at 365 days;
       180 days here marks "not active this half-year" for revival triage.
-    source: {document: "guideline_checker/fleet/lifecycle.py", locator: "repo-inactive / DEFAULT_STALE_AFTER_DAYS", repo: "chrysa/guideline-checker", ref: "9c7460c97a6cb83d59135c10d7bda1020ad692d9"}
+    source: {document: "guideline_checker/fleet/lifecycle.py", locator: "repo-inactive / DEFAULT_STALE_AFTER_DAYS", repo: "chrysa/guideline-checker", ref: "9c7460c97a6cb83d59135c10d7bda1020ad692d9"}  # pragma: allowlist secret
     dimension: functional_maturity
     profiles: [all]
     severity: info
@@ -393,7 +393,7 @@ rules:
   - id: MAT-002
     title: Python tests present
     description: "Tests are pytest only; a python repo with no test module is a maturity signal. Count/coverage not measured."
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Tests: pytest only · L119", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Tests: pytest only · L119", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: functional_maturity
     profiles: [python]
     severity: info
@@ -404,7 +404,7 @@ rules:
   - id: MAT-003
     title: Frontend/JS tests present
     description: "Vitest + Testing Library from the scaffold; a node repo with no *.test.* file is a maturity signal."
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Frontend tests: Vitest + Testing Library + MSW · L123", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Non-negotiable conventions › Frontend tests: Vitest + Testing Library + MSW · L123", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: functional_maturity
     profiles: [node]
     severity: info
@@ -417,7 +417,7 @@ rules:
     description: >-
       Keep-a-Changelog generated by git-cliff; a CHANGELOG with only `## [Unreleased]` (or
       none) means nothing was ever released. Release tags themselves are not inspected.
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Release & changelog config › Changelog · L1303", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Release & changelog config › Changelog · L1303", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: functional_maturity
     profiles: [python, node, container]
     severity: info
@@ -428,7 +428,7 @@ rules:
   - id: MAT-005
     title: docs/ directory present
     description: "Docs live in docs/ (docs-site generator). Content and freshness not checked."
-    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Release & changelog config › Docs · L1310", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}
+    source: {document: "standards/STANDARDS.chrysa.md", locator: "§Release & changelog config › Docs · L1310", repo: "chrysa/shared-standards", ref: "76334385c50eaa8ac0a304f87deb1e5cf17932cb"}  # pragma: allowlist secret
     dimension: functional_maturity
     profiles: [all]
     severity: info
