@@ -37,6 +37,8 @@ RUN pip install --no-cache-dir -e ".[dev]"
 COPY tests/ ./tests/
 # The shipped referential — tests assert against it (test_guidelines, test_declarative_detectors).
 COPY guidelines/ ./guidelines/
+# The fleet-scan suite also validates the shipped configuration.
+COPY config/fleet-scan/ ./config/fleet-scan/
 # The quality-gate script is repo machinery with its own tests (test_quality_gate).
 COPY scripts/ ./scripts/
 
@@ -131,3 +133,57 @@ USER appuser
 
 ENTRYPOINT []
 CMD ["bash"]
+
+# ── Stage 7: scan-deps — fleet-scan dependencies (the optional `scan` extra) ───
+FROM deps AS scan-deps
+
+RUN pip install --no-cache-dir ".[scan]"
+
+# ── Stage 8: scan — fleet-scan runtime (batch CLI, non-root) ──────────────────
+# Read-only GitHub REST client: never clones or executes scanned repositories. The
+# token comes from the environment at run time (compose passes GITHUB_TOKEN through);
+# nothing secret is baked into the image.
+FROM python:3.14-slim AS scan
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/tmp
+
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+COPY --from=scan-deps /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
+COPY --from=scan-deps /usr/local/bin /usr/local/bin
+
+# Config is bind-mounted read-only under /work/config/fleet-scan, outputs under /work/.fleet-scan.
+WORKDIR /work
+
+USER appuser
+
+# A one-shot batch job, not a service: there is no endpoint to probe.
+HEALTHCHECK NONE
+
+ENTRYPOINT ["guideline-checker", "fleet-scan"]
+CMD ["--help"]
+
+# ── Stage 9: scan-test — fleet-scan test suite (no network: httpx MockTransport) ─
+FROM scan-deps AS scan-test
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    COVERAGE_FILE=/tmp/.coverage \
+    HOME=/tmp
+
+RUN pip install --no-cache-dir -e ".[dev,scan]" \
+    && groupadd -r appuser && useradd -r -g appuser appuser
+
+COPY tests/__init__.py ./tests/__init__.py
+COPY tests/fleet_scan/ ./tests/fleet_scan/
+# The shipped configuration is tested too: it must load and keep its rule semantics.
+COPY config/fleet-scan/ ./config/fleet-scan/
+
+USER appuser
+
+# addopts is reset: the repo-wide options measure the whole package against an 85% floor,
+# which a scan-only run cannot meet. The scan package carries its own floor instead.
+CMD ["pytest", "tests/fleet_scan", "-v", "-o", "addopts=", "-p", "no:cacheprovider", \
+    "--cov=guideline_checker.fleet.scan", "--cov-report=term-missing", "--cov-fail-under=90"]

@@ -148,6 +148,31 @@ web-logs: ## Tail dashboard logs
 web-build: ## Build the web Docker image
 	@docker compose build frontend
 
+# ─── fleet-scan (containerised; see docs/fleet-scan/SPEC.md) ─────────────────
+# Bind-mount sources are pre-created so Docker does not create them root-owned.
+SCAN_RUN = docker compose run --rm -T --build scan
+
+_scan-dirs:
+	@mkdir -p .fleet-scan .cache/fleet-scan
+
+scan-validate: _scan-dirs ## Validate every config/fleet-scan/*.yaml file (docker)
+	@$(SCAN_RUN) validate-config
+
+scan-test: ## Run the fleet-scan test suite (docker, no network)
+	@docker compose run --rm -T --build scan-test
+
+scan-run: _scan-dirs ## Scan a repos.yaml subset: make scan-run SUBSET=pilot (needs GITHUB_TOKEN in env)
+	@test -n "$(SUBSET)" || { echo "usage: make scan-run SUBSET=<name>"; exit 2; }
+	@$(SCAN_RUN) run --subset "$(SUBSET)"
+
+scan-resume: _scan-dirs ## Resume an interrupted run: make scan-resume RUN=<run_id>
+	@test -n "$(RUN)" || { echo "usage: make scan-resume RUN=<run_id>"; exit 2; }
+	@$(SCAN_RUN) run --resume "$(RUN)"
+
+scan-report: _scan-dirs ## Regenerate reports of a saved run: make scan-report RUN=<run_id>
+	@test -n "$(RUN)" || { echo "usage: make scan-report RUN=<run_id>"; exit 2; }
+	@$(SCAN_RUN) report --run-id "$(RUN)"
+
 # ─── Cleanup ─────────────────────────────────────────────────────────────────
 
 clean: ## Clean build artifacts

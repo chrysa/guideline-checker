@@ -23,3 +23,5 @@ guideline-report.html
 docs/
 *.md
 !README.md
+.fleet-scan/
+.cache/
