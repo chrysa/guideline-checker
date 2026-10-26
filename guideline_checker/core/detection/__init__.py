@@ -137,6 +137,9 @@ _DEFAULT_MAX_FILE_SIZE: int = 200 * 1024
 
 _MAX_FILE_SIZE_ENV = "GUIDELINE_MAX_FILE_SIZE"
 
+# An extension-less file is scanned as text only below this size (Makefile, Dockerfile, …).
+_EXTENSIONLESS_MAX_SIZE = 512_000
+
 
 def _resolve_max_file_size(override: int | None = None) -> int:
     """Resolve the max scannable file size: explicit override > env var > default.
@@ -166,7 +169,7 @@ def _is_text_file(path: Path, max_file_size: int) -> bool:
     except OSError:
         return False
     suffix = path.suffix.lower()
-    return suffix in _TEXT_EXTENSIONS or (suffix == "" and path.stat().st_size < 512_000)
+    return suffix in _TEXT_EXTENSIONS or (suffix == "" and path.stat().st_size < _EXTENSIONLESS_MAX_SIZE)
 
 
 @dataclass

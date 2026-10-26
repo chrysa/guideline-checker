@@ -348,7 +348,7 @@ const I18N = {
     fleet: "Fleet", fleet_scanned_at: "Fleet scanned {t}", compliance: "compliance",
     all_projects: "◇ All projects ({n})", filter_projects_ph: "filter projects (name or grade)…",
     filter_rules_ph: "filter rules…", resolve: "Resolve", resolve_title: "Derive, prove and arm a detector",
-    resolving: "Resolving…", resolvable_count: "resolvable", api_key_prompt: "API key required for this dashboard:",
+    resolving: "Resolving…", resolvable_count: "resolvable", auth_prompt: "API key required for this dashboard:",
     enter_rule_first: "Enter a rule first", replaying: "Replaying…", deriving_proving: "Deriving & proving a detector…",
     no_matches: "no matches", review_hits: "Review the hits for false positives before arming.",
     error_grade: "error", na: "n/a",
@@ -402,7 +402,7 @@ const I18N = {
     fleet: "Flotte", fleet_scanned_at: "Flotte scannée {t}", compliance: "conformité",
     all_projects: "◇ Tous les projets ({n})", filter_projects_ph: "filtrer les projets (nom ou note)…",
     filter_rules_ph: "filtrer les règles…", resolve: "Résoudre", resolve_title: "Dériver, prouver et armer un détecteur",
-    resolving: "Résolution…", resolvable_count: "résolvable(s)", api_key_prompt: "Clé API requise pour ce tableau de bord :",
+    resolving: "Résolution…", resolvable_count: "résolvable(s)", auth_prompt: "Clé API requise pour ce tableau de bord :",
     enter_rule_first: "Entrez d'abord une règle", replaying: "Rejeu…", deriving_proving: "Dérivation & preuve d'un détecteur…",
     no_matches: "aucune correspondance", review_hits: "Vérifiez les correspondances (faux positifs) avant d'armer.",
     error_grade: "erreur", na: "n/a",
@@ -480,7 +480,7 @@ async function api(path, opts) {
   opts = opts || {};
   let res = await fetch(path, Object.assign({}, opts, { headers: authHeaders(opts.headers) }));
   if (res.status === 401) {
-    const key = prompt(t("api_key_prompt"));
+    const key = prompt(t("auth_prompt"));
     if (key) {
       sessionStorage.setItem("gc-api-key", key);
       res = await fetch(path, Object.assign({}, opts, { headers: authHeaders(opts.headers) }));
