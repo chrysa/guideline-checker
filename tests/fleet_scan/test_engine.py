@@ -229,6 +229,41 @@ class TestFullRun:
         assert result.checks == []
         assert [c for c in fake_github.calls if "/repos/chrysa/beta" in c] == [f"{API}/repos/chrysa/beta"]
 
+    def test_fork_is_judged_on_its_own_commits_only(self, config, make_client, fake_github, tmp_path) -> None:
+        beta = fake_github.repos["chrysa/beta"]  # its recent history holds an upstream WIP commit
+        beta.metadata.update(fork=True, parent={"full_name": "upstream/beta", "default_branch": "dev"})
+        beta.compare_commits = [{"sha": "o1", "commit": {"message": "feat: own"}}]
+        report, _ = _scan(config, make_client, tmp_path, ["chrysa/beta"])
+
+        scm = next(c for c in report.repos[0].checks if c.rule_id == "SCM-001")
+        assert scm.status is Status.PASS
+        assert "on top of upstream/beta" in scm.message
+        assert f"{API}/repos/chrysa/beta/compare/upstream:dev...{'a' * 40}" in fake_github.calls
+        assert not [c for c in fake_github.calls if "/repos/chrysa/beta/commits?" in c]
+
+    def test_fork_own_commits_still_fail(self, config, make_client, fake_github, tmp_path) -> None:
+        beta = fake_github.repos["chrysa/beta"]
+        beta.metadata.update(fork=True, parent={"full_name": "upstream/beta", "default_branch": "dev"})
+        beta.compare_commits = [
+            {"sha": "o1", "commit": {"message": "WIP own"}},
+            {"sha": "o2", "commit": {"message": "fix: newest"}},
+        ]
+        report, _ = _scan(config, make_client, tmp_path, ["chrysa/beta"])
+
+        scm = next(c for c in report.repos[0].checks if c.rule_id == "SCM-001")
+        assert scm.status is Status.FAIL
+        assert [e.locator for e in scm.evidence] == ["o1"]
+
+    def test_fork_without_parent_is_an_error_not_judged_on_upstream(
+        self, config, make_client, fake_github, tmp_path
+    ) -> None:
+        fake_github.repos["chrysa/beta"].metadata["fork"] = True
+        report, _ = _scan(config, make_client, tmp_path, ["chrysa/beta"])
+
+        statuses = {c.rule_id: c.status for c in report.repos[0].checks}
+        assert statuses["SCM-001"] is Status.ERROR
+        assert not [c for c in fake_github.calls if "/repos/chrysa/beta/commits?" in c]
+
     def test_history_retention(self, config, make_client, tmp_path) -> None:
         for _ in range(3):
             _scan(config, make_client, tmp_path, ["chrysa/gamma"])

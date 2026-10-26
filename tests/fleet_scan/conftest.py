@@ -34,6 +34,7 @@ class FakeRepo:
     truncated: bool = False
     runs: list[dict[str, Any]] = field(default_factory=list)
     commits: list[dict[str, Any]] = field(default_factory=list)
+    compare_commits: list[dict[str, Any]] = field(default_factory=list)  # a fork's own commits, oldest first
     tags: list[dict[str, Any]] = field(default_factory=list)
     status: int | None = None  # force every call for this repo to this HTTP status
 
@@ -75,6 +76,8 @@ class FakeGithub:
         head = rest[0]
         if head == "commits" and len(rest) == 2:
             return httpx.Response(200, json={"sha": repo.sha, "commit": {"committer": {"date": repo.committed_at}}})
+        if head == "compare":
+            return httpx.Response(200, json={"commits": repo.compare_commits})
         if head == "commits":
             per_page = int(request.url.params.get("per_page", "30"))
             return httpx.Response(200, json=repo.commits[:per_page])

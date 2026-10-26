@@ -304,6 +304,7 @@ def eval_commit_messages_absent(method: CommitMessagesAbsentMethod, ctx: RuleCon
     pattern = re.compile(params.pattern)
     window = commits.commits[: params.last_n]
     hits = [c for c in window if pattern.search(c.message)]
+    scope = "recent commit(s)" if commits.fork_parent is None else f"commit(s) on top of {commits.fork_parent}"
     if hits:
         evidence = [
             _ev(
@@ -314,11 +315,9 @@ def eval_commit_messages_absent(method: CommitMessagesAbsentMethod, ctx: RuleCon
             )
             for c in hits[:MAX_EVIDENCE_ITEMS]
         ]
-        return Outcome(
-            status=Status.FAIL, message=f"{len(hits)}/{len(window)} recent commit(s) match", evidence=evidence
-        )
+        return Outcome(status=Status.FAIL, message=f"{len(hits)}/{len(window)} {scope} match", evidence=evidence)
     evidence = [_ev(kind="commit_window", locator=params.pattern, value=len(window), provenance=commits.provenance)]
-    return Outcome(status=Status.PASS, message=f"none of {len(window)} recent commit(s) match", evidence=evidence)
+    return Outcome(status=Status.PASS, message=f"none of {len(window)} {scope} match", evidence=evidence)
 
 
 def eval_last_commit_age(method: LastCommitAgeMethod, ctx: RuleContext) -> Outcome:

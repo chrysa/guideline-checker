@@ -208,3 +208,16 @@ Owner decision of 2026-10-25: archived projects are not processed.
 - A repo found archived at scan time is stopped after its metadata call: no tree, file, CI,
   commit or tag request, no check. It is reported `excluded` with reason
   "archived on GitHub; out of scope, not evaluated", so the requested scope still adds up.
+
+## Forks are judged on their own commits
+
+Commit-message rules (`commit_messages_absent`, e.g. CONF-010 and SCM-001) read a fork's own
+commits only. Upstream history was written by someone else, so it is not held against the fork.
+
+- For a repo whose metadata says `fork: true`, the collector calls
+  `compare/{upstream_owner}:{upstream_default_branch}...{head}` instead of `commits`. It keeps
+  the newest `last_n` commits the fork carries on top of its parent.
+- The check message then reads "commit(s) on top of <parent>" instead of "recent commit(s)".
+- A fork whose parent is not reported cannot have its own commits told apart. Its commit facet
+  is recorded as an `invalid_response` collection error, so these rules report `error` rather
+  than judge upstream commits.

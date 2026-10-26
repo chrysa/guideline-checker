@@ -143,6 +143,8 @@ class CommitInfo:
 class RecentCommits:
     commits: list[CommitInfo]
     provenance: Provenance
+    # Set on a fork: only the commits it carries on top of this upstream are listed.
+    fork_parent: str | None = None
 
 
 @dataclass(frozen=True)
@@ -176,6 +178,29 @@ class RepoEvidence:
     def archived(self) -> bool:
         """Archived on GitHub: out of scope, so nothing past the metadata is fetched."""
         return (self.metadata or {}).get("archived") is True
+
+    @property
+    def fork(self) -> bool:
+        return (self.metadata or {}).get("fork") is True
+
+    @property
+    def fork_parent(self) -> tuple[str, str] | None:
+        """``(owner/name, default_branch)`` of the upstream a fork was made from, when reported."""
+        parent = (self.metadata or {}).get("parent")
+        if not isinstance(parent, dict):
+            return None
+        full_name, branch = parent.get("full_name"), parent.get("default_branch")
+        if isinstance(full_name, str) and "/" in full_name and isinstance(branch, str) and branch:
+            return full_name, branch
+        return None
+
+
+def _commit_infos(items: list[Any]) -> list[CommitInfo]:
+    return [
+        CommitInfo(sha=str(item.get("sha", "")), message=str((item.get("commit") or {}).get("message", "")))
+        for item in items
+        if isinstance(item, dict)
+    ]
 
 
 def to_collection_error(exc: GithubError) -> CollectionError:
@@ -356,6 +381,8 @@ class Collector:
         )
 
     async def _commits(self, *, evidence: RepoEvidence, base: str, ref: str) -> RecentCommits | None:
+        if evidence.fork:
+            return await self._fork_commits(evidence=evidence, base=base, ref=ref)
         resp = await self._facet(
             evidence=evidence,
             facet="commits",
@@ -364,12 +391,37 @@ class Collector:
         if resp is None:
             return None
         items = resp.data if isinstance(resp.data, list) else []
-        commits = [
-            CommitInfo(sha=str(item.get("sha", "")), message=str((item.get("commit") or {}).get("message", "")))
-            for item in items
-            if isinstance(item, dict)
-        ]
-        return RecentCommits(commits=commits, provenance=Provenance(endpoint=resp.endpoint, fetched_at=resp.fetched_at))
+        return RecentCommits(
+            commits=_commit_infos(items), provenance=Provenance(endpoint=resp.endpoint, fetched_at=resp.fetched_at)
+        )
+
+    async def _fork_commits(self, *, evidence: RepoEvidence, base: str, ref: str) -> RecentCommits | None:
+        """A fork's own commits only: upstream history is someone else's and must not be judged."""
+        parent = evidence.fork_parent
+        if parent is None:
+            evidence.errors["commits"] = CollectionError(
+                kind=ErrorKind.INVALID_RESPONSE, message="fork without a reported parent: own commits unknown"
+            )
+            return None
+        upstream, upstream_branch = parent
+        basehead = f"{upstream.split('/', 1)[0]}:{upstream_branch}...{ref}"
+        resp = await self._facet(
+            evidence=evidence,
+            facet="commits",
+            call=self._gh.get_json(f"{base}/compare/{quote(basehead, safe=':/')}"),
+        )
+        if resp is None:
+            return None
+        data = resp.data if isinstance(resp.data, dict) else {}
+        raw = data.get("commits")
+        items = raw if isinstance(raw, list) else []
+        # compare lists oldest first; the rules read the most recent commits first.
+        newest_first = list(reversed(items))[: self._needs.commits_n]
+        return RecentCommits(
+            commits=_commit_infos(newest_first),
+            provenance=Provenance(endpoint=resp.endpoint, fetched_at=resp.fetched_at),
+            fork_parent=upstream,
+        )
 
     async def _tags(self, *, evidence: RepoEvidence, base: str) -> TagsInfo | None:
         resp = await self._facet(
