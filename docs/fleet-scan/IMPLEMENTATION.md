@@ -101,3 +101,5 @@ Open (documented, not fixed in the MVP):
 - Low: response bodies are read whole (no streaming byte cap); config regexes have no timeout;
   the redaction filter does not rewrite `exc_text`/`stack_info`; output paths from config are not
   confined; `scan-test` service lacks `read_only`/`cap_drop`; no `mem_limit`/`pids_limit`.
+
+<!-- PR link gate check (docs/gate-check-d), not to be merged. -->
