@@ -28,6 +28,12 @@ concurrency:
 
 jobs:
   call:
+    # Required: the reusable workflow reads issues/PRs through the API, and the repo
+    # default token (restricted) grants neither scope; without this the run fails at startup.
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     uses: chrysa/github-actions/.github/workflows/enforce-shortcut-link.yml@v1.11.0
     with:
       accept-github-issue: true
