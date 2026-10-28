@@ -1,7 +1,8 @@
 # guideline-checker
 
 [![CI](https://github.com/chrysa/guideline-checker/actions/workflows/ci.yml/badge.svg)](https://github.com/chrysa/guideline-checker/actions/workflows/ci.yml)
-[![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](https://github.com/chrysa/guideline-checker)
+[![PyPI](https://img.shields.io/pypi/v/guideline-checker.svg)](https://pypi.org/project/guideline-checker/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://github.com/chrysa/guideline-checker/blob/main/pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![SonarCloud](https://sonarcloud.io/api/project_badges/measure?project=chrysa_guideline-checker&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=chrysa_guideline-checker)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
@@ -31,25 +32,54 @@ Teams and solo developers who maintain AI-agent instruction files (`.github/inst
 
 ## Installation
 
-Not published on PyPI — distribution is the pre-commit hook (by git ref), the ghcr Docker image, and installing from source. Pick the channel that fits:
+Requires Python ≥ 3.12. Each release is published to PyPI and Docker Hub, and every tag is installable from git — none of them needs an account. Pick the channel that fits:
 
 ```bash
-# From the git repo (pipx keeps it isolated)
+# PyPI (pipx keeps the CLI isolated; `pip install guideline-checker` works too)
+pipx install guideline-checker
+
+# Docker Hub — the CLI image (non-root); --user keeps the reports owned by you
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo \
+  docker.io/chrysa/guideline-checker check
+
+# git — a branch or tag not yet released
 pipx install 'git+https://github.com/chrysa/guideline-checker.git'
-
-# Or as a pre-commit hook — see "As a pre-commit hook" below
-
-# Or the container image
-docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/chrysa/guideline-checker check
 ```
 
-From source (with dev tooling):
+It also runs as a pre-commit hook pinned by git tag (see [Pre-commit hook](#pre-commit-hook)) and as a GitHub Action (see [GitHub Action](#github-action)).
+
+`guideline-checker --version` prints the installed version. From source, with dev tooling:
 
 ```bash
 pip install -e '.[dev]'
 ```
 
-Requires Python ≥ 3.14. The core CLI has two runtime dependencies (`PyYAML` for the YAML rule referential, `tree-sitter` for JS/TS AST detection); the optional web dashboard needs the `web` extra (see below).
+The core CLI has two runtime dependencies (`PyYAML` for the YAML rule referential, `tree-sitter` for JS/TS AST detection); the optional web dashboard needs the `web` extra (see below).
+
+## Quick start
+
+A two-file project: one rule in `AGENTS.md`, one file that breaks it.
+
+```bash
+mkdir demo && cd demo
+printf '# Agent rules\n\n- No print() calls\n' > AGENTS.md
+printf 'def greet(name: str) -> str:\n    print("debug")\n    return f"hello {name}"\n' > app.py
+
+guideline-checker check --fail-on warning --markdown summary.md
+echo "exit code: $?"
+```
+
+Expected output:
+
+```text
+[guideline-checker] Multi-source mode: loading Copilot instructions, CLAUDE.md, AGENTS.md, and the guidelines/ YAML referential.
+[guideline-checker] Report written to: guideline-report.html
+[guideline-checker] Markdown report written to: summary.md
+[guideline-checker] 1 violation(s) found (0 error(s), 1 warning(s)).
+exit code: 1
+```
+
+`summary.md` points at `app.py` line 2 (`print("debug")`, rule `No print() calls`); `guideline-report.html` is the same report for a browser. The rule's phrasing gives it the `warning` severity, so the default `--fail-on error` would exit `0`. With the Docker image, replace `guideline-checker` with the `docker run …` prefix above.
 
 ## Usage
 

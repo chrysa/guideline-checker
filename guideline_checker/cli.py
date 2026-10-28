@@ -164,6 +164,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="guideline-checker",
         description="Check project compliance against Copilot instruction rules.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command")
 
     # ── init subcommand ──────────────────────────────────────────────────────
