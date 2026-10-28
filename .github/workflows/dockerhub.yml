@@ -1,0 +1,100 @@
+---
+# Publish the public CLI image to Docker Hub when a GitHub release is published.
+#
+# Public channel for external users (DEC-V3-010): docker.io/chrysa/guideline-checker,
+# built from the Dockerfile `production` stage (non-root, ENTRYPOINT guideline-checker).
+# The internal channel is unchanged: deploy.yml still pushes the `web` image to the
+# private GHCR registry and updates gitops.
+#
+# Owner prerequisites (once), in the repository settings:
+#   - variable DOCKERHUB_USERNAME (the Docker Hub account owning `chrysa/`);
+#   - secret DOCKERHUB_TOKEN (Docker Hub access token, Read & Write, scoped to
+#     the chrysa/guideline-checker repository).
+#
+# Only clean SemVer tags (vX.Y.Z) are published, so a GitVersion
+# pseudo-prerelease tag (v1.31.0-14) never moves `latest`.
+
+name: Publish to Docker Hub
+
+on:
+    release:
+        types: [published]
+
+permissions:
+    contents: read
+
+concurrency:
+    group: dockerhub-${{ github.event.release.tag_name }}
+    cancel-in-progress: false
+
+env:
+    IMAGE: docker.io/chrysa/guideline-checker
+
+jobs:
+    publish:
+        name: Build and push the production image
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - name: Resolve version from the release tag
+              id: version
+              env:
+                  TAG: ${{ github.event.release.tag_name }}
+              run: |
+                  if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+                    echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+                    echo "publish=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "::notice::Tag '$TAG' is not a clean vX.Y.Z SemVer tag; no image is pushed."
+                    echo "publish=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Checkout the release tag
+              if: steps.version.outputs.publish == 'true'
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.event.release.tag_name }}
+                  persist-credentials: false
+
+            - name: Set up Docker Buildx
+              if: steps.version.outputs.publish == 'true'
+              uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+            - name: Log in to Docker Hub
+              if: steps.version.outputs.publish == 'true'
+              uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+              with:
+                  registry: docker.io
+                  username: ${{ vars.DOCKERHUB_USERNAME }}
+                  password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+            - name: Build and push
+              if: steps.version.outputs.publish == 'true'
+              uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+              with:
+                  context: .
+                  target: production
+                  platforms: linux/amd64
+                  push: true
+                  # setuptools-scm reads VERSION through SETUPTOOLS_SCM_PRETEND_VERSION
+                  # (Dockerfile), so `--version` reports the release, not 0.0.0+unknown.
+                  build-args: |
+                      VERSION=${{ steps.version.outputs.version }}
+                  tags: |
+                      ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+                      ${{ env.IMAGE }}:latest
+                  labels: |
+                      org.opencontainers.image.title=guideline-checker
+                      org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+                      org.opencontainers.image.version=${{ steps.version.outputs.version }}
+                      org.opencontainers.image.revision=${{ github.sha }}
+                      org.opencontainers.image.licenses=MIT
+
+            - name: Smoke-test the pushed image
+              if: steps.version.outputs.publish == 'true'
+              env:
+                  VERSION: ${{ steps.version.outputs.version }}
+              run: |
+                  out="$(docker run --rm "$IMAGE:$VERSION" --version)"
+                  echo "$out"
+                  [ "$out" = "guideline-checker $VERSION" ]
