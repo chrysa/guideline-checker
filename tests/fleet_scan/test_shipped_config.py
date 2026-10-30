@@ -30,8 +30,13 @@ def shipped(tmp_path_factory: pytest.TempPathFactory) -> EffectiveConfig:
 
 
 def test_private_catalog_is_not_shipped() -> None:
-    ignored = (SHIPPED.parents[1] / ".gitignore").read_text(encoding="utf-8").splitlines()
-    assert "config/fleet-scan/repos.yaml" in ignored
+    gitignore = SHIPPED.parents[1] / ".gitignore"
+    if gitignore.is_file():
+        # Source checkout: the private catalog may exist locally, but git must ignore it.
+        assert "config/fleet-scan/repos.yaml" in gitignore.read_text(encoding="utf-8").splitlines()
+    else:
+        # Image build (no .gitignore inside): .dockerignore must have kept the catalog out.
+        assert not (SHIPPED / "repos.yaml").exists()
 
 
 def _attribution_pattern(config: EffectiveConfig) -> re.Pattern[str]:
