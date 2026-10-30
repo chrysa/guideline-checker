@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -19,8 +20,18 @@ SESSION = ASSISTANT + "-Session: https://claude" + ".ai/code/session_01ABC"
 
 
 @pytest.fixture(scope="module")
-def shipped() -> EffectiveConfig:
-    return load_config(SHIPPED)
+def shipped(tmp_path_factory: pytest.TempPathFactory) -> EffectiveConfig:
+    # The real catalog (repos.yaml) is private and git-ignored: load the shipped rules
+    # with the public example catalog in its place.
+    config_dir = tmp_path_factory.mktemp("shipped") / "fleet-scan"
+    shutil.copytree(SHIPPED, config_dir, ignore=shutil.ignore_patterns("repos.yaml"))
+    shutil.copyfile(SHIPPED / "repos.example.yaml", config_dir / "repos.yaml")
+    return load_config(config_dir)
+
+
+def test_private_catalog_is_not_shipped() -> None:
+    ignored = (SHIPPED.parents[1] / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "config/fleet-scan/repos.yaml" in ignored
 
 
 def _attribution_pattern(config: EffectiveConfig) -> re.Pattern[str]:

@@ -180,6 +180,8 @@ COPY tests/__init__.py ./tests/__init__.py
 COPY tests/fleet_scan/ ./tests/fleet_scan/
 # The shipped configuration is tested too: it must load and keep its rule semantics.
 COPY config/fleet-scan/ ./config/fleet-scan/
+# The private catalog must stay git-ignored: a test reads the ignore list.
+COPY .gitignore ./.gitignore
 
 USER appuser
 

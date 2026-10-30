@@ -288,3 +288,6 @@ CLAUDE.local.md
 # fleet-scan run outputs and HTTP cache (may contain private-repo content)
 .fleet-scan/
 .cache/fleet-scan/
+
+# Fleet-scan catalog: private (names private projects and workspace pages)
+config/fleet-scan/repos.yaml
