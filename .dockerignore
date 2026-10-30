@@ -25,3 +25,5 @@ docs/
 !README.md
 .fleet-scan/
 .cache/
+# Private fleet catalog: bind-mounted at run time, never baked into an image
+config/fleet-scan/repos.yaml

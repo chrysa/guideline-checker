@@ -27,7 +27,8 @@ Out: auto-fix, project generation, Notion/Shortcut writes, deployment, dashboard
 config/fleet-scan/
   github.yaml             # client: auth env ref, timeouts, concurrency, retries, rate limits, cache
   conformance.yaml        # rules + profiles (owned by the standards lot)
-  repos.yaml              # project/repo catalog + subsets (owned by the catalog lot)
+  repos.yaml              # project/repo catalog + subsets: PRIVATE, git- and docker-ignored
+  repos.example.yaml      # public example of the catalog schema (fictional repos)
   reporters.yaml          # outputs, paths, retention
   standards-mapping.yaml  # requirement -> source -> rule (owned by the standards lot)
   skills-mapping.yaml     # skill recommendation -> rule/profile (owned by the standards lot)
@@ -106,6 +107,10 @@ Closed method registry (engine rejects unknown types at config validation):
 | `last_commit_age` | `max_days` | default-branch head commit newer than max_days |
 
 ## repos.yaml schema
+
+The catalog names private projects and workspace pages, so it is never committed: create it
+from `config/fleet-scan/repos.example.yaml`. `docker compose` bind-mounts `config/fleet-scan`
+read-only at run time, so the scan sees the local catalog without baking it into an image.
 
 ```yaml
 schema_version: "1.0"
