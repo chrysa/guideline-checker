@@ -10,7 +10,7 @@ CLI and stay deterministic.
 from __future__ import annotations
 
 from guideline_checker.loader import RuleDetector
-from guideline_checker.proposer import ClaudeProposer, Proposal, Proposer
+from guideline_checker.workshop.proposer import ClaudeProposer, Proposal, Proposer
 
 
 def _fake(reply: str):

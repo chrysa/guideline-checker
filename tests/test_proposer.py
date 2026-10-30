@@ -1,7 +1,7 @@
 """Tests for the proposer seam and the heuristic backend.
 
 A ``Proposer`` turns a rule statement into a candidate ``detect:`` block. The
-heuristic backend recycles the checker's own phrase table (``_build_checks``) —
+heuristic backend recycles the checker's own phrase table (``derive_seed_rules``) —
 free, instant, and deterministic — so a dead rule whose prose the checker
 already recognises gets an armed detector proposed with no LLM involved.
 """
@@ -9,7 +9,7 @@ already recognises gets an armed detector proposed with no LLM involved.
 from __future__ import annotations
 
 from guideline_checker.loader import RuleDetector
-from guideline_checker.proposer import HeuristicProposer, Proposal
+from guideline_checker.workshop.proposer import HeuristicProposer, Proposal
 
 
 def test_heuristic_proposes_a_detector_for_a_known_phrase() -> None:

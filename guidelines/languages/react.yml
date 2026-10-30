@@ -54,3 +54,15 @@ rules:
   detect:
     forbid:
     - 'findDOMNode'
+- category: correctness
+  id: react-mutation-feedback
+  standard: FE-081
+  rationale: "FE-081 (annexe FRONTEND.md) — a data-mutating interaction confirms its\
+    \ outcome on success AND failure; a useMutation with no onError/onSuccess handler\
+    \ resolves silently and a failure reads as success. onSettled counts. Info under\
+    \ GV-020; not flagged when options are built off-object (single-file pass)."
+  rule: A useMutation declares an outcome handler (onError/onSuccess)
+  severity: info
+  detect:
+    ast:
+    - mutation-without-feedback

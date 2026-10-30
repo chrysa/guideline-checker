@@ -1,0 +1,16 @@
+language_target: python
+apply_to_glob: '**/migrations/**/*.py, **/versions/**/*.py'
+rules:
+- category: data
+  detect:
+    ast:
+    - irreversible-runpython
+  id: DA-013
+  standard: DA-013
+  rationale: "DA-013 (annexe DATA-MIGRATIONS.md) — every migration is reversible: a\
+    \ RunPython data migration ships its reverse (second positional arg or reverse_code=,\
+    \ RunPython.noop counting as a deliberate reverse). A forward-only RunPython has\
+    \ no recovery path and is the finding. Scoped to migration/version dirs. Lands at\
+    \ info under GV-020. CheckKind: python-ast (irreversible-runpython)."
+  rule: A data migration ships a reverse (no forward-only RunPython)
+  severity: info

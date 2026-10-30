@@ -8,7 +8,7 @@ synchronous — and ``async def`` there would stall the loop until the write ret
 
 from __future__ import annotations
 
-from guideline_checker.ast_python import run_ast_checks
+from guideline_checker.core.detection.ast_python import run_ast_checks
 
 
 def test_a_handler_doing_nothing_blocking_is_flagged() -> None:

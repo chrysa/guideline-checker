@@ -13,6 +13,8 @@ _DESCRIPTION_RE = re.compile(r"^description:\s*[\"']?(.+?)[\"']?\s*$", re.MULTIL
 _NUMBERED_RE = re.compile(r"^\d+\.\s+")
 _TABLE_SEP_RE = re.compile(r"^[-:]+$")
 _CONSTRAINT_KEYWORDS = frozenset(("must", "never", "always", "forbidden", "required", "non-negotiable", "mandatory"))
+# A list item this short or shorter is a label, not a rule.
+_MIN_RULE_LENGTH = 10
 # A definition entry: a short code-or-bold *term*, a dash, then its meaning
 # ("- `exempt:config` — no executable runtime"). Two or more in one list is a
 # glossary — the bullets define the allowed *values* of a field, they impose
@@ -69,7 +71,7 @@ class CrossReference:
 class NumericThreshold:
     """A metric to measure and the bound it must not cross.
 
-    The engine owns the *measuring* (see :mod:`guideline_checker.metrics`); this
+    The engine owns the *measuring* (see :mod:`guideline_checker.core.detection.numeric`); this
     carries the host's chosen metric name and bound, and nothing else. Keeping the
     number here — read from ``guidelines/*.yml`` — rather than in engine code is
     ADR D-0016's line: mechanisms in the tool, values in the host.
@@ -101,7 +103,7 @@ class RuleDetector:
     cross_reference: CrossReference | None = None  # a citation here, its definition elsewhere
     stale_after_days: int | None = None  # a matching file older than this is stale (file-freshness kind)
     numeric_threshold: NumericThreshold | None = None  # a measured metric vs a bound (numeric-threshold kind)
-    exclude: tuple[str, ...] = ()  # paths this detector must not judge (see checker._is_excluded)
+    exclude: tuple[str, ...] = ()  # paths this detector must not judge (see pattern._is_excluded)
     match_in_comments: bool = False  # applies to forbid / forbid_regex
 
 
@@ -143,6 +145,11 @@ class InstructionFile:
     # D-0016). Populated only by YAML rules carrying a ``provenance:`` field; a
     # rule with no entry was hand-authored and traces to nothing in host prose.
     rule_provenance: dict[str, str] = field(default_factory=dict)
+    # Maps a rule statement to the chrysa standards rule id it mechanises (e.g.
+    # "FE-070"), for GV-012 traceability. Populated only by YAML rules carrying a
+    # ``standard:`` field; a rule with no entry enforces a socle-prose rule or a
+    # generic idiom with no single owning annexe id.
+    rule_standard: dict[str, str] = field(default_factory=dict)
 
 
 def load_instructions(instructions_dir: Path) -> list[InstructionFile]:
@@ -376,7 +383,7 @@ def _extract_rules(content: str) -> list[str]:
             continue
         for rule_text in block:
             clean = _strip_markdown(rule_text)
-            if len(clean) > 10 and clean not in seen:
+            if len(clean) > _MIN_RULE_LENGTH and clean not in seen:
                 seen.add(clean)
                 rules.append(clean)
 

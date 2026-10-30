@@ -60,11 +60,15 @@ def test_resolve_mode_invalid_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 # ── _check_api_key ────────────────────────────────────────────────────────────
 
 
-def test_check_api_key_skips_when_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_check_api_key_fails_closed_when_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi import HTTPException, status
+
+    # api_key mode selected but API_KEY unset must refuse, never serve open access.
     monkeypatch.delenv("API_KEY", raising=False)
-    # Should not raise
-    _check_api_key(None)
-    _check_api_key("anything")
+    for supplied in (None, "anything"):
+        with pytest.raises(HTTPException) as exc_info:
+            _check_api_key(supplied)
+        assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
 def test_check_api_key_accepts_correct_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,10 +98,26 @@ def test_check_api_key_rejects_missing_key(monkeypatch: pytest.MonkeyPatch) -> N
 # ── _check_local ──────────────────────────────────────────────────────────────
 
 
-def test_check_local_skips_when_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_check_local_fails_closed_when_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi import HTTPException, status
+
+    # local mode selected but credentials unset must refuse, never serve open access.
     monkeypatch.delenv("LOCAL_USERNAME", raising=False)
     monkeypatch.delenv("LOCAL_PASSWORD", raising=False)
-    _check_local(None)
+    with pytest.raises(HTTPException) as exc_info:
+        _check_local(None)
+    assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+
+def test_check_local_fails_closed_when_partially_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi import HTTPException, status
+
+    # Only one of username/password set is a misconfiguration, not open access.
+    monkeypatch.setenv("LOCAL_USERNAME", "admin")
+    monkeypatch.delenv("LOCAL_PASSWORD", raising=False)
+    with pytest.raises(HTTPException) as exc_info:
+        _check_local(None)
+    assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
 def test_check_local_accepts_correct_credentials(monkeypatch: pytest.MonkeyPatch) -> None:

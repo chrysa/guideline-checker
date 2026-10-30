@@ -41,6 +41,7 @@ are self-sufficient.
 
 **Date**: 2026-06-10
 **Status**: accepted
+**Archived by D-0024** — superseded; see D-0024.
 
 A central server (`guideline_checker/web/central.py`, served by `guideline-checker central`)
 aggregates compliance across all chrysa repos. The flow is **push, not pull**: each repo's CI
@@ -436,6 +437,7 @@ a release surface without addressing the drift.
 
 **Date**: 2026-07-18
 **Status**: accepted
+**Archived by D-0024** — superseded; see D-0024.
 
 The deterministic health engine (`rule_health.py`, GET `/api/rules-health`) initially
 classed every extracted rule as `proven` / `armed` / `dead` uniformly. On a self-scan that
@@ -493,6 +495,7 @@ front — postpones the same debt while the workshop grows on top of it.
 
 **Date**: 2026-07-18
 **Status**: accepted
+**Archived by D-0024** — superseded; see D-0024.
 
 The workshop proposes fixes to dead/undetectable rules and to violating code. Those
 proposals may come from an LLM, but detection must stay deterministic and offline (CI must
@@ -704,6 +707,7 @@ that is not a closed set cannot be reasoned about or kill-tested.
 
 **Date**: 2026-07-23
 **Status**: accepted
+**Archived by D-0024** — superseded; see D-0024.
 
 The web workshop scanned only its own root (`SCAN_ROOT`). To operate the tool as
 a fleet cockpit — pick any repo, see its rule health, work on it — the UI needs a
@@ -861,3 +865,96 @@ release with no payload change would signal a contract change, and a payload
 change inside a patch would signal none; (b) publish a JSON Schema file and skip
 the inline version — a consumer that fetches a schema out of band cannot tell
 which version *this* file was produced against.
+
+---
+
+## D-0023 — The self-check hook runs the in-tree engine, not a pinned release
+
+**Date**: 2026-08-07
+**Status**: accepted
+
+D-0021 shipped every new `detect.*` key in two steps — mechanism, **release**,
+then the rules that use it — because this repo linted itself with its own hook
+pinned at a published tag (`.pre-commit-config.yaml`). A referential using a key
+the pinned build did not know **fails to load**, reddening the gate on the repo's
+own rules until a release caught up. When the numeric-threshold rules (#345)
+merged into `develop` before such a release existed, the deadlock became real:
+no published tag carried the `numeric_threshold` parser, so **every commit and
+push in the repo was blocked**, and `guideline-check` was red on every PR.
+
+**Decision.** The repo's own `guideline-check` hook is a `repo: local`,
+`language: python` hook that runs the **working tree** (`python -m
+guideline_checker.cli check --fail-on error`; `python -m` puts the repo root on
+`sys.path`, so the in-tree package wins over any installed copy). Its runtime
+deps are declared as `additional_dependencies`, so it stays host-native — no
+Docker, installable with a single `pipx install pre-commit`. The tool now always
+understands the rules it ships: a new `detect.*` key is enforceable in the same
+commit that adds both the parser and the rule. The two-step dance of D-0021 is
+retired — mechanism and rules may land together.
+
+This governs **only this repository's self-check**. Consumer repos still pin a
+published tag (`rev:`) as before — they want a stable, released detector set, not
+this repo's bleeding edge.
+
+**Fatal hypothesis.** Running the working tree's engine over the working tree's
+referential is strictly more correct than a pinned tag can be, with no case where
+the pinned tag would have caught a defect the in-tree run misses.
+
+**Kill-test.** If a commit passes the in-tree hook but the same tree fails
+`guideline-check` once released and re-pinned in a consumer, the in-tree run is
+lying about the shipped behaviour and the self-check must additionally run the
+last released tag. Checked at the next consumer bump that pins a tag built from
+this repo.
+
+**Validation gate.** A commit adding a new `detect.*` key together with a rule
+that uses it passes `pre-commit run guideline-check` with no prior release. Met:
+this change's own commit is gated by the new hook.
+
+**Consequences.** The self-check is only as good as the working tree — a broken
+local engine reddens the gate, which is the correct signal (the tool is broken).
+CI runs the same `pre-commit` hook, so the in-tree engine is exercised there too;
+`docker-test` remains the authoritative suite. `.pre-commit-config.yaml` no longer
+carries a `rev:` for this repo's own hook, so the weekly autoupdate cannot bump it.
+
+
+## D-0024 — core/workshop/fleet split + auto-derived proven detectors
+
+**Date**: 2026-08-19
+**Status**: accepted
+
+**Context.** guideline-checker had grown four identities in one package — lint engine,
+rule-health, an LLM detector-authoring workshop, and gh-backed fleet governance — with no
+enforced boundary, and a 113K `CLAUDE.md` duplicating the fleet-wide constitution.
+
+**Decision.** Split into `core/` (no LLM/gh deps, default), `workshop/` (LLM detector
+authoring, `[workshop]` extra), `fleet/` (gh-backed governance, `[fleet]` extra), with an
+enforced one-way dependency rule (`core/` never imports the other two). Replace the hardcoded
+phrase table with a heuristic seed-translator (`core/derive/`) feeding a local, ephemeral,
+hash-keyed cache — `check` writes only that cache, never the repo tree. Rule-health becomes
+the report headline.
+
+**Fatal hypothesis.** A detector derived from a given prose hash is deterministic — the same
+prose always re-derives the same verdict — so a detector once proven stays proven without
+re-invoking an LLM.
+
+**Kill-test.** A detector proven for a given prose hash that flips to a different verdict when
+re-derived from the same prose in CI, with no prose change, falsifies the determinism claim —
+treat any such flip as a P1 bug in `core/derive/seed.py`.
+
+**Validation gate.** `pip install guideline-checker` (no extras) resolves with zero LLM/gh
+transitive dependencies, and an import check confirms `core/` imports neither `workshop/` nor
+`fleet/`.
+
+**Consequences.** `pip install guideline-checker` (no extras) has zero LLM/gh transitive
+deps. `central.py`, `push`, and `web/central` are removed (breaking, v2.0.0). This archives the
+meta-layer ADRs about the workshop/proposer/health/central philosophy that predate the split:
+
+- **D-0003** — central aggregation server (push model): `central.py`, `push`, and `web/central`
+  are removed by this split.
+- **D-0010** — rule-health phrase-match / advisory taxonomy: the hardcoded phrase table is
+  replaced by the `core/derive/` seed-translator and rule-health is rearchitected as the report
+  headline.
+- **D-0012** — proposer seam (`_build_checks` phrase table, `[assist]` extra): LLM detector
+  authoring moves into the `[workshop]` extra, over the seed-translator rather than a phrase table.
+- **D-0015** — multi-project web workshop (workspace selector): the multi-repo / central web
+  surface it built on is removed; fleet governance is now the `[fleet]` extra.

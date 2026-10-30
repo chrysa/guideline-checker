@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from guideline_checker.distribution import Expectations
-from guideline_checker.gh_client import GhClient, GhResult
-from guideline_checker.manifest import RepoTarget
-from guideline_checker.origin_audit import run_origin_audit
+from guideline_checker.fleet.distribution import Expectations
+from guideline_checker.fleet.gh_client import GhClient, GhResult
+from guideline_checker.fleet.manifest import RepoTarget
+from guideline_checker.fleet.origin_audit import run_origin_audit
 
 _CANON = "# chrysa — Transverse Standards\nbody\n"
 _EXP = Expectations(canonical_standards=_CANON, license_text="MIT License\n")

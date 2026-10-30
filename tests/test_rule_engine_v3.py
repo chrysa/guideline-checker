@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from guideline_checker.checker import (
-    DISABLE_COMMENT,
-    _build_checks,
-    _check_length_rules,
+from guideline_checker.core.derive.seed import (
     _python_strict_checks,
     _security_checks,
     _typescript_checks,
-    run_checks,
+    derive_seed_rules,
 )
+from guideline_checker.core.detection import run_checks
+from guideline_checker.core.detection.numeric import _check_length_rules
+from guideline_checker.core.detection.pattern import DISABLE_COMMENT
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -69,7 +69,7 @@ class TestTypeScriptChecks:
 
     def test_typescript_checks_no_match(self) -> None:
         checks = _typescript_checks("no print calls")
-        assert checks == []
+        assert checks == ()
 
     def test_avoid_any_variant(self) -> None:
         checks = _typescript_checks("avoid any usage")
@@ -107,7 +107,7 @@ class TestPythonStrictChecks:
 
     def test_python_strict_no_match(self) -> None:
         checks = _python_strict_checks("no print calls")
-        assert checks == []
+        assert checks == ()
 
 
 # ─── Security checks ──────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ class TestSecurityChecks:
 
     def test_security_checks_no_match(self) -> None:
         checks = _security_checks("no eval calls")
-        assert checks == []
+        assert checks == ()
 
     def test_detects_zero_zero_ip(self, tmp_path: Path) -> None:
         root, inst = _make_project(tmp_path, "app.py", 'HOST = "0.0.0.0"\n', "No hardcoded IP addresses")
@@ -208,20 +208,18 @@ class TestInlineDisable:
         assert "bad" in violations[0].line_content
 
 
-# ─── build_checks aggregation ─────────────────────────────────────────────────
+# ─── derive_seed_rules aggregation ────────────────────────────────────────────
 
 
-class TestBuildChecksAggregation:
-    def test_build_checks_returns_list(self) -> None:
-        checks = _build_checks("no print calls and no eval and no any")
-        assert isinstance(checks, (list, tuple))
-        patterns = [c.pattern for c in checks]
-        assert "print(" in patterns
-        assert "eval(" in patterns
+class TestDeriveSeedRulesAggregation:
+    def test_derive_seed_rules_merges_across_families(self) -> None:
+        detector = derive_seed_rules("no print calls and no eval and no any")
+        assert detector is not None
+        assert "print(" in detector.forbid
+        assert "eval(" in detector.forbid
 
-    def test_build_checks_empty_for_unknown_rule(self) -> None:
-        checks = _build_checks("use proper naming conventions")
-        assert len(checks) == 0
+    def test_derive_seed_rules_none_for_unknown_rule(self) -> None:
+        assert derive_seed_rules("use proper naming conventions") is None
 
 
 class TestPhraseWordBoundaries:
@@ -229,15 +227,17 @@ class TestPhraseWordBoundaries:
 
     def test_no_executable_runtime_does_not_arm_exec_detector(self) -> None:
         prose = "exempt:config — no executable runtime (config, knowledge base). nothing to run."
-        assert _build_checks(prose) == ()
+        assert derive_seed_rules(prose) is None
 
     def test_no_evaluation_does_not_arm_eval_detector(self) -> None:
-        assert _build_checks("no evaluation of user input happens here") == ()
+        assert derive_seed_rules("no evaluation of user input happens here") is None
 
     def test_real_exec_rule_still_arms_the_detector(self) -> None:
-        patterns = [check.pattern for check in _build_checks("no exec calls in application code")]
-        assert "exec(" in patterns
+        detector = derive_seed_rules("no exec calls in application code")
+        assert detector is not None
+        assert "exec(" in detector.forbid
 
     def test_real_eval_rule_still_arms_the_detector(self) -> None:
-        patterns = [check.pattern for check in _build_checks("no eval on runtime data")]
-        assert "eval(" in patterns
+        detector = derive_seed_rules("no eval on runtime data")
+        assert detector is not None
+        assert "eval(" in detector.forbid

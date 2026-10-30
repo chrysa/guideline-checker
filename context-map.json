@@ -1,0 +1,49 @@
+{
+  "adrs": [],
+  "contracts": [
+    "standards"
+  ],
+  "ddd_level": "(not available)",
+  "dependencies": {
+    "python": [
+      "PyJWT",
+      "PyYAML",
+      "fastapi",
+      "httpx",
+      "httpx2",
+      "ldap3",
+      "mypy",
+      "pip-audit",
+      "playwright",
+      "pytest",
+      "pytest-cov",
+      "pytest-mock",
+      "pytest-playwright",
+      "ruff",
+      "tree-sitter",
+      "tree-sitter-javascript",
+      "tree-sitter-typescript",
+      "types-PyYAML",
+      "uvicorn"
+    ]
+  },
+  "depends_on_shared_standards": true,
+  "description": "Check project compliance against GitHub Copilot instruction rules and generate HTML reports",
+  "entry_points": [
+    "guideline-checker"
+  ],
+  "key_directories": [
+    ".claude",
+    ".github",
+    "docs",
+    "guideline_checker",
+    "guidelines",
+    "legal",
+    "scripts",
+    "standards",
+    "tests"
+  ],
+  "name": "guideline-checker",
+  "profiles": [],
+  "schema": "chrysa.context-map/1"
+}

@@ -12,7 +12,7 @@ from guideline_checker.baseline import (
     load_baseline,
     write_baseline,
 )
-from guideline_checker.checker import RuleResult, Violation
+from guideline_checker.core.detection import RuleResult, Violation
 from guideline_checker.loader import InstructionFile
 
 

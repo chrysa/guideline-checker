@@ -1,0 +1,16 @@
+language_target: python
+apply_to_glob: '**/*.py'
+rules:
+- category: correctness
+  detect:
+    ast:
+    - unbounded-queue
+  id: EV-010
+  standard: EV-010
+  rationale: "EV-010 (annexe EVENTING.md) — a real-time stream decouples subscription\
+    \ from processing with a BOUNDED buffer, so a slow consumer cannot stall the\
+    \ transport and an in-memory queue cannot grow under load until the process dies.\
+    \ An asyncio/queue Queue() created with no maxsize is unbounded by default — the\
+    \ finding. Lands at info under GV-020. CheckKind: python-ast (unbounded-queue)."
+  rule: A stream buffer (queue) declares an explicit bound
+  severity: info

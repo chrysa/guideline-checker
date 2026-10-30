@@ -9,7 +9,7 @@ running Ollama and stay deterministic.
 from __future__ import annotations
 
 from guideline_checker.loader import RuleDetector
-from guideline_checker.proposer import OllamaProposer, Proposal, Proposer
+from guideline_checker.workshop.proposer import OllamaProposer, Proposal, Proposer
 
 
 def _fake(reply: str):

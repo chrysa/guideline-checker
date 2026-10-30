@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.ast_javascript import (
+from guideline_checker.core.detection import run_checks
+from guideline_checker.core.detection.ast_javascript import (
     VALID_JS_AST_CHECKS,
     run_js_ast_checks,
     unknown_js_checks,
 )
-from guideline_checker.ast_python import VALID_AST_CHECKS
-from guideline_checker.checker import run_checks
+from guideline_checker.core.detection.ast_python import VALID_AST_CHECKS
 from guideline_checker.guidelines import GuidelineError, load_yaml_guidelines
 
 # ─── ts-any-type ──────────────────────────────────────────────────────────────
@@ -202,6 +202,7 @@ def test_unknown_js_checks_helper() -> None:
         "react-index-key",
         "react-inline-component",
         "react-missing-effect-deps",
+        "mutation-without-feedback",
     }
 
 
@@ -276,3 +277,23 @@ def test_shipped_js_rules_use_ast(tmp_path: Path) -> None:
     assert ast_by_rule.get(
         "Pass a dependency array to useEffect, useLayoutEffect, useMemo, and useCallback",
     ) == ("react-missing-effect-deps",)
+
+
+def test_mutation_without_feedback_flags_bare_options() -> None:
+    src = "const m = useMutation({ mutationFn: save });\n"
+    assert len(run_js_ast_checks(["mutation-without-feedback"], src, ".tsx")) == 1
+
+
+def test_mutation_without_feedback_passes_onerror() -> None:
+    src = "const m = useMutation({ mutationFn: save, onError: notify });\n"
+    assert run_js_ast_checks(["mutation-without-feedback"], src, ".tsx") == []
+
+
+def test_mutation_without_feedback_passes_onsettled() -> None:
+    src = "const m = useMutation({ mutationFn: save, onSettled: done });\n"
+    assert run_js_ast_checks(["mutation-without-feedback"], src, ".tsx") == []
+
+
+def test_mutation_without_feedback_ignores_off_object_options() -> None:
+    src = "const m = useMutation(opts);\n"
+    assert run_js_ast_checks(["mutation-without-feedback"], src, ".tsx") == []

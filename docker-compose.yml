@@ -9,23 +9,46 @@ services:
     - PYTHONDONTWRITEBYTECODE=1
     - PYTHONUNBUFFERED=1
     - SCAN_ROOT=/workspace
+    # Full read-write workshop posture (propose → prove → persist available).
+    - GC_MODE=workshop
+    # Bound the folder browser to the mounted repo, not the container root (which is
+    # what the default workspace=/ would give here). See app._BROWSE_ROOT.
+    - GC_BROWSE_ROOT=/workspace
     - HOME=/tmp
     - PYTHONPYCACHEPREFIX=/tmp/.toolcache/pycache
     - RUFF_CACHE_DIR=/tmp/.toolcache/ruff
     - MYPY_CACHE_DIR=/tmp/.toolcache/mypy
     - PYTEST_ADDOPTS=-p no:cacheprovider
-    healthcheck:
-      interval: 30s
-      retries: 3
-      start_period: 15s
-      test:
-      - CMD
-      - curl
-      - -f
-      - http://localhost:8080/health
-      timeout: 10s
     ports:
     - ${GC_WEB_PORT:-8080}:8080
+    restart: unless-stopped
+    user: ${UID:-1000}:${GID:-1000}
+    volumes:
+    - .:/workspace:ro
+
+  # Read-only viewer posture: identical image, but GC_MODE=viewer refuses every
+  # mutation route (scan / propose / interpret / persist / resolve) at the API
+  # layer, not just via the read-only mount. Opt-in via `--profile viewer`.
+  viewer:
+    profiles:
+    - viewer
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    environment:
+    - PYTHONDONTWRITEBYTECODE=1
+    - PYTHONUNBUFFERED=1
+    - SCAN_ROOT=/workspace
+    - GC_MODE=viewer
+    - GC_BROWSE_ROOT=/workspace
+    - HOME=/tmp
+    - PYTHONPYCACHEPREFIX=/tmp/.toolcache/pycache
+    - RUFF_CACHE_DIR=/tmp/.toolcache/ruff
+    - MYPY_CACHE_DIR=/tmp/.toolcache/mypy
+    - PYTEST_ADDOPTS=-p no:cacheprovider
+    ports:
+    - ${GC_VIEWER_PORT:-8081}:8080
     restart: unless-stopped
     user: ${UID:-1000}:${GID:-1000}
     volumes:
@@ -55,3 +78,39 @@ services:
     user: ${UID:-1000}:${GID:-1000}
     volumes:
     - ./coverage.xml:/app/coverage.xml
+
+  # fleet-scan (opt-in profile: `docker compose up` never starts it). GITHUB_TOKEN is
+  # passed through from the host environment, never written to a file; config is
+  # mounted read-only; runs and the HTTP cache land on the host (git-ignored).
+  scan:
+    profiles:
+    - fleet-scan
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: scan
+    environment:
+    - GITHUB_TOKEN
+    - PYTHONDONTWRITEBYTECODE=1
+    - PYTHONUNBUFFERED=1
+    user: ${UID:-1000}:${GID:-1000}
+    read_only: true
+    tmpfs:
+    - /tmp
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    volumes:
+    - ./config/fleet-scan:/work/config/fleet-scan:ro
+    - ./.fleet-scan:/work/.fleet-scan
+    - ./.cache/fleet-scan:/work/.cache/fleet-scan
+  scan-test:
+    profiles:
+    - fleet-scan
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: scan-test
+    user: ${UID:-1000}:${GID:-1000}
+    network_mode: none
