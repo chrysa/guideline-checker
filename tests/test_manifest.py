@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.manifest import RepoTarget, load_manifest
+from guideline_checker.fleet.manifest import RepoTarget, load_manifest
 
 _YAML = """
 repos:

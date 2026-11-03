@@ -1,26 +1,28 @@
+# GitVersion 6: main releases are plain SemVer (vX.Y.Z), published to PyPI and Docker Hub.
+next-version: 1.32.0
 branches:
   chore:
     increment: Patch
     mode: ContinuousDeployment
     regex: ^chore/
-    tag: alpha
+    label: alpha
   feature:
     increment: Minor
     mode: ContinuousDeployment
     regex: ^feat/
-    tag: alpha
+    label: alpha
   fix:
     increment: Patch
     mode: ContinuousDeployment
     regex: ^fix/
-    tag: beta
+    label: beta
   main:
     increment: Patch
-    mode: ContinuousDelivery
+    mode: ContinuousDeployment
     regex: ^main$
-    tag: ''
+    label: ''
 increment: Inherit
 major-version-bump-message: ^(feat|fix|refactor)(\(.+\))?!:.+
 minor-version-bump-message: ^feat(\(.+\))?:.+
-mode: ContinuousDelivery
+mode: ContinuousDeployment
 patch-version-bump-message: ^(fix|refactor|perf|docs|chore)(\(.+\))?:.+

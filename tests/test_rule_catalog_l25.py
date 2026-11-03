@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.checker import run_checks
+from guideline_checker.core.detection import run_checks
 from guideline_checker.guidelines import load_yaml_guidelines
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]

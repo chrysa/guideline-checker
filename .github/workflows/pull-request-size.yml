@@ -1,4 +1,12 @@
 "on": pull_request_target
+
+# size-label-action sets a size/* label on the PR; the default read-only
+# GITHUB_TOKEN cannot write labels ("Resource not accessible by integration").
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   size-label:
     runs-on: ubuntu-latest
