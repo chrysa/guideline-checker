@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 
 _BADGE_STATUS_OK = '<span class="badge badge-ok">PASS</span>'
 
+# Files listed under one nav entry before the rest collapse into "…N more files".
+_NAV_MAX_FILES = 8
+
 # ─── Templates ────────────────────────────────────────────────────────────────
 
 _HTML_TEMPLATE = """\
@@ -515,7 +518,7 @@ class HtmlReporter:
 
     @staticmethod
     def _nav_sub_items(violations: list[Violation], root: Path, idx: int) -> list[str]:
-        """Build the sub-item file list for a nav entry (max 8 files shown)."""
+        """Build the sub-item file list for a nav entry (at most ``_NAV_MAX_FILES`` files shown)."""
         files_seen: dict[str, int] = {}
         for v in violations:
             try:
@@ -525,7 +528,7 @@ class HtmlReporter:
             files_seen[rel] = files_seen.get(rel, 0) + 1
 
         sub_items: list[str] = []
-        for i, (fpath, cnt) in enumerate(list(files_seen.items())[:8]):
+        for i, (fpath, cnt) in enumerate(list(files_seen.items())[:_NAV_MAX_FILES]):
             fname = fpath.split("/")[-1]
             file_id = f"file-{idx}-{i}"
             sub_items.append(
@@ -535,10 +538,10 @@ class HtmlReporter:
                 f'<span class="nav-count">{cnt}</span>'
                 f"</div>"
             )
-        if len(files_seen) > 8:
+        if len(files_seen) > _NAV_MAX_FILES:
             sub_items.append(
                 f'<div class="nav-item" style="padding-left:1.75rem;font-size:.73rem;color:var(--clr-muted)">'
-                f'<span class="nav-label">…{len(files_seen) - 8} more files</span>'
+                f'<span class="nav-label">…{len(files_seen) - _NAV_MAX_FILES} more files</span>'
                 f"</div>"
             )
         return sub_items

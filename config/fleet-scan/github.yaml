@@ -1,0 +1,31 @@
+# fleet-scan — GitHub REST client settings (see docs/fleet-scan/SPEC.md).
+# The token VALUE is never stored here: only the name of the env var that holds it.
+api_url: https://api.github.com
+auth:
+  token_env: GITHUB_TOKEN
+  required: false            # unauthenticated = 60 req/h, public repos only
+timeouts:
+  connect_s: 10
+  read_s: 30
+concurrency: 4
+pagination:
+  per_page: 100
+  max_pages: 10
+retries:
+  max_attempts: 4            # 5xx / network failures; exponential backoff + jitter
+  backoff_base_s: 1.0
+  backoff_max_s: 30
+rate_limit:
+  min_remaining: 50          # below this, wait for x-ratelimit-reset if <= max_wait_s, else stop
+  honor_retry_after: true
+  secondary_backoff_s: 60
+  max_wait_s: 900
+cache:
+  enabled: true
+  dir: .cache/fleet-scan/http   # may hold private-repo content: keep out of git (see .gitignore)
+  ttl_s: 3600
+  use_etag: true
+content:
+  max_file_bytes: 524288     # files above this are not inspected (rule -> unknown)
+logging:
+  level: INFO

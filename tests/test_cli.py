@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from pytest_mock import MockerFixture
 
+from guideline_checker import __version__
 from guideline_checker.cli import _scan, build_parser, main
 from guideline_checker.core.derive.seed import derive_seed_rules
 
@@ -34,6 +35,13 @@ def test_build_parser_has_check_subcommand() -> None:
     parser = build_parser()
     args = parser.parse_args(["check"])
     assert args.command == "check"
+
+
+def test_version_flag_prints_installed_version(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out.strip() == f"guideline-checker {__version__}"
 
 
 def test_build_parser_default_values() -> None:

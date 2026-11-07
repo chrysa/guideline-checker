@@ -13,6 +13,8 @@ _DESCRIPTION_RE = re.compile(r"^description:\s*[\"']?(.+?)[\"']?\s*$", re.MULTIL
 _NUMBERED_RE = re.compile(r"^\d+\.\s+")
 _TABLE_SEP_RE = re.compile(r"^[-:]+$")
 _CONSTRAINT_KEYWORDS = frozenset(("must", "never", "always", "forbidden", "required", "non-negotiable", "mandatory"))
+# A list item this short or shorter is a label, not a rule.
+_MIN_RULE_LENGTH = 10
 # A definition entry: a short code-or-bold *term*, a dash, then its meaning
 # ("- `exempt:config` — no executable runtime"). Two or more in one list is a
 # glossary — the bullets define the allowed *values* of a field, they impose
@@ -381,7 +383,7 @@ def _extract_rules(content: str) -> list[str]:
             continue
         for rule_text in block:
             clean = _strip_markdown(rule_text)
-            if len(clean) > 10 and clean not in seen:
+            if len(clean) > _MIN_RULE_LENGTH and clean not in seen:
                 seen.add(clean)
                 rules.append(clean)
 

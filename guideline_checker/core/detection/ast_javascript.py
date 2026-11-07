@@ -58,6 +58,8 @@ _CONDITIONAL_TYPES = frozenset(
 _JSX_TYPES = frozenset({"jsx_element", "jsx_self_closing_element", "jsx_fragment"})
 
 _HOOK_NAME = re.compile(r"^use([A-Z]\w*)?$")
+# ``.map((item, index) => …)``: the index is the callback's second parameter.
+_MAP_INDEX_PARAM = 1
 
 _languages: dict[str, Language] = {}
 
@@ -214,7 +216,7 @@ def _second_map_param(func: Node) -> str | None:
     if _text(callee.child_by_field_name("property")) != "map":
         return None
     names = _param_names(func)
-    return names[1] if len(names) >= 2 else None
+    return names[_MAP_INDEX_PARAM] if len(names) > _MAP_INDEX_PARAM else None
 
 
 def _attr_expression(attr: Node) -> Node | None:
@@ -334,6 +336,8 @@ def _check_non_null_assertion(root: Node) -> list[tuple[int, str]]:
 
 # Hooks whose second argument is the dependency array. Omitting it re-runs the effect
 # on every render (useEffect/useLayoutEffect) or defeats memoisation (useMemo/useCallback).
+# A dependency hook takes the callback, then the dependency array.
+_DEPS_HOOK_ARITY = 2
 _DEPS_HOOKS = frozenset({"useEffect", "useLayoutEffect", "useMemo", "useCallback"})
 
 
@@ -357,7 +361,7 @@ def _check_missing_effect_deps(root: Node) -> list[tuple[int, str]]:
         if callee is None or callee.type != "identifier":
             continue
         name = _text(callee)
-        if name in _DEPS_HOOKS and len(_arg_nodes(node)) < 2:
+        if name in _DEPS_HOOKS and len(_arg_nodes(node)) < _DEPS_HOOK_ARITY:
             out.append((_line(node), f"{name}() missing dependency array"))
     return out
 
