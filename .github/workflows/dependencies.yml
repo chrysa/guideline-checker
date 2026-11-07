@@ -5,10 +5,9 @@ on:
     pull_request_target:
         types: [closed, edited, opened, reopened]
 
-concurrency:
-    group: ${{ github.workflow }}-${{ github.ref }}
-    cancel-in-progress: true
-
 jobs:
     call:
+        permissions:
+            issues: write
+            pull-requests: write
         uses: chrysa/github-actions/.github/workflows/dependencies.yml@v1.10.0
