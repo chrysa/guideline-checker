@@ -11,16 +11,6 @@ Check project compliance against GitHub Copilot instruction rules and generate H
   agents/
     ast-detector-writer.md
     code-reviewer.md
-    general-backend-developer.md
-    general-code-quality-debugger.md
-    general-devops.md
-    general-frontend-developer.md
-    general-fullstack-developer.md
-    general-pm.md
-    general-qa.md
-    general-solution-architect.md
-    general-technical-project-lead.md
-    general-technical-writer.md
     infra-reviewer.md
     rule-engine-reviewer.md
     security-auditor.md
@@ -29,6 +19,14 @@ Check project compliance against GitHub Copilot instruction rules and generate H
     README.md
     ape-transform-v2.md
     ape_hook.py
+  commands/
+    adr-new.md
+    commit.md
+    custom-init.md
+    help-commands.md
+    issue.md
+    reviewpr.md
+    test.md
   hooks/
     check-no-env-files.cjs
     circuit-breaker.cjs
@@ -37,7 +35,10 @@ Check project compliance against GitHub Copilot instruction rules and generate H
     guideline-yaml-check.cjs
     memory-consolidation.cjs
     model-debt-inventory.cjs
+    pre-compact.sh
+    read_guard.py
     secret-scanner.cjs
+    session-context.sh
     test-on-edit.cjs
     verifiable-thresholds.cjs
   secret-scanner-allowlist.json
@@ -143,6 +144,7 @@ Check project compliance against GitHub Copilot instruction rules and generate H
     dependencies.yml
     deploy.yml
     detect-conflicts.yml
+    dockerhub.yml
     enforce-feature-branch.yml
     enforce-shortcut-link.yml
     labeler.yml
@@ -150,6 +152,7 @@ Check project compliance against GitHub Copilot instruction rules and generate H
     pr-dependencies.yml
     pre-commit.yml
     pull-request-size.yml
+    pypi.yml
     quality-gate-check.yml
     release.yml
     secret-scan.yml
@@ -172,6 +175,7 @@ CLAUDE.md
 CODEOWNERS
 CONTRIBUTING.md
 DECISIONS.md
+DESIGN.md
 Dockerfile
 GitVersion.yml
 LICENSE
@@ -179,8 +183,19 @@ Makefile
 README.md
 action.yml
 cliff.toml
+config/
+  fleet-scan/
+    conformance.yaml
+    github.yaml
+    reporters.yaml
+    repos.example.yaml
+    skills-mapping.yaml
+    standards-mapping.yaml
 docker-compose.yml
 docs/
+  fleet-scan/
+    IMPLEMENTATION.md
+    SPEC.md
   superpowers/
     plans/
       2026-06-27-fleet-origin-audit.md
@@ -223,6 +238,26 @@ guideline_checker/
     lifecycle.py
     manifest.py
     origin_audit.py
+    scan/
+      __init__.py
+      arguments.py
+      atomic_io.py
+      cli.py
+      collect.py
+      config.py
+      engine.py
+      errors.py
+      github.py
+      globbing.py
+      http_cache.py
+      models.py
+      profiles.py
+      redaction.py
+      reporters/
+      revival.py
+      rules.py
+      run_store.py
+      scoring.py
   guidelines.py
   hook.py
   init_cmd.py
@@ -315,11 +350,24 @@ tests/
       .github/
       frontend/
       src/
+  fleet_scan/
+    __init__.py
+    conftest.py
+    fixtures/
+      config/
+    test_cli.py
+    test_config.py
+    test_engine.py
+    test_github.py
+    test_rules.py
+    test_scoring.py
+    test_shipped_config.py
   test_ast_javascript.py
   test_ast_python.py
   test_autofix.py
   test_baseline.py
   test_checker.py
+  test_checker_compat.py
   test_cli.py
   test_config.py
   test_conformance_independence.py
@@ -395,10 +443,11 @@ requires-python: >=3.12
 
 .claude/ape/ape_hook.py
 .claude/hooks/format.py
+.claude/hooks/read_guard.py
 guideline_checker/__init__.py — guideline-checker: check project compliance against Copilot instruction rules.
 guideline_checker/autofix.py — Local, deterministic autofix for violations on rules carrying a ``fix:`` block.
 guideline_checker/baseline.py — Baseline support for incremental adoption (L2.2).
-guideline_checker/checker.py — Core checker: match files against instruction rules.
+guideline_checker/checker.py — Backward-compatible entry point: the engine lives in ``guideline_checker.core.detection``.
 guideline_checker/cli.py — CLI entry point for guideline-checker.
 guideline_checker/config.py — Project configuration file support (L2.3).
 guideline_checker/core/__init__.py
@@ -423,13 +472,12 @@ guideline_checker/fleet/gh_client.py — Thin wrapper over the ``gh`` CLI — th
 guideline_checker/fleet/lifecycle.py — Repository lifecycle checks — is this repo alive, and what does it drag along?
 guideline_checker/fleet/manifest.py — Load the chrysa fleet manifest (``repos.yml``) into audit targets.
 guideline_checker/fleet/origin_audit.py — Drive the distribution audit across a fleet manifest, origin-side.
-guideline_checker/guidelines.py — Load the structured multi-dimension YAML rule referential (``guidelines/``).
-guideline_checker/hook.py — Pre-commit hook entry point for guideline-checker.
-guideline_checker/init_cmd.py — Init command: scaffold default instruction files in a project.
-guideline_checker/linters.py — External linter integration: ruff, mypy, eslint/biome.
-guideline_checker/loader.py — Load and parse instruction/guideline files from multiple sources.
-guideline_checker/reporters/__init__.py
-guideline_checker/reporters/html.py — HTML report generator for guideline-checker results.
-guideline_checker/reporters/json_reporter.py — JSON report generator for guideline-checker results (CI artifact).
-guideline_checker/reporters/markdown.py — Markdown report generator for guideline-checker results.
-guideline_checker/reporters/sarif.py — SARIF 2.1.0 report generator for guideline-checker.
+guideline_checker/fleet/scan/__init__.py — fleet-scan — static, read-only conformance scanner over the GitHub REST API.
+guideline_checker/fleet/scan/arguments.py — argparse declaration of ``fleet-scan`` — standard library only, importable without the ``scan`` extra.
+guideline_checker/fleet/scan/atomic_io.py — Atomic file writes — a reader never sees a half-written checkpoint, cache entry or report.
+guideline_checker/fleet/scan/cli.py — ``guideline-checker fleet-scan {validate-config, run, report}`` handlers.
+guideline_checker/fleet/scan/collect.py — Per-repository evidence collection through the GitHub REST API — static inspection only.
+guideline_checker/fleet/scan/config.py — Load and cross-validate every ``config/fleet-scan/*.yaml`` file.
+guideline_checker/fleet/scan/engine.py — Scan orchestration: scope → collect (bounded concurrency) → evaluate → checkpoint → aggregate.
+guideline_checker/fleet/scan/errors.py — Typed errors raised by the fleet scanner.
+guideline_checker/fleet/scan/github.py — Async GitHub REST client: read-only GETs with bounded, header-driven resilience.
