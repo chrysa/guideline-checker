@@ -447,7 +447,7 @@ requires-python: >=3.12
 guideline_checker/__init__.py — guideline-checker: check project compliance against Copilot instruction rules.
 guideline_checker/autofix.py — Local, deterministic autofix for violations on rules carrying a ``fix:`` block.
 guideline_checker/baseline.py — Baseline support for incremental adoption (L2.2).
-guideline_checker/checker.py — Core checker: match files against instruction rules.
+guideline_checker/checker.py — Backward-compatible entry point: the engine lives in ``guideline_checker.core.detection``.
 guideline_checker/cli.py — CLI entry point for guideline-checker.
 guideline_checker/config.py — Project configuration file support (L2.3).
 guideline_checker/core/__init__.py
