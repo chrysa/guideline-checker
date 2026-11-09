@@ -35,6 +35,7 @@
   ],
   "key_directories": [
     ".claude",
+    ".codex",
     ".github",
     "config",
     "docs",

@@ -19,14 +19,6 @@ Check project compliance against GitHub Copilot instruction rules and generate H
     README.md
     ape-transform-v2.md
     ape_hook.py
-  commands/
-    adr-new.md
-    commit.md
-    custom-init.md
-    help-commands.md
-    issue.md
-    reviewpr.md
-    test.md
   hooks/
     check-no-env-files.cjs
     circuit-breaker.cjs
@@ -114,6 +106,9 @@ Check project compliance against GitHub Copilot instruction rules and generate H
       SKILL.md
     verification-loop/
       SKILL.md
+.codex/
+  rules/
+    prism-ai-lint.rules
 .dockerignore
 .editorconfig
 .env.example
