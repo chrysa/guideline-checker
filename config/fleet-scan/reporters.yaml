@@ -1,0 +1,8 @@
+# fleet-scan — report outputs (see docs/fleet-scan/SPEC.md).
+output_dir: .fleet-scan/runs
+cli: {enabled: true, max_rows: 50}
+json: {enabled: true, filename: report.json}
+markdown: {enabled: true, filename: report.md}
+history: {enabled: true, index: .fleet-scan/history.jsonl, retention_runs: 30}
+notion: {enabled: false, reason: "contract and writes not authorised"}
+revival: {enabled: true, top_n: 20}   # signals, not maturity verdict

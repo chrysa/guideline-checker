@@ -161,6 +161,10 @@ def _run_mypy(root: Path) -> LinterResult:
         return LinterResult(linter="mypy", available=True, error=str(exc))
 
 
+# eslint severity 2 is an error, 1 a warning.
+_ESLINT_SEVERITY_ERROR = 2
+
+
 def _parse_eslint_output(raw: str) -> LinterResult:
     """Turn ``eslint --format json`` stdout into a :class:`LinterResult`.
 
@@ -181,8 +185,7 @@ def _parse_eslint_output(raw: str) -> LinterResult:
             col=msg.get("column", 0),
             code=msg.get("ruleId") or "",
             message=msg.get("message", ""),
-            # eslint severity 2 is an error, 1 a warning.
-            severity="error" if msg.get("severity", 1) == 2 else "warning",
+            severity="error" if msg.get("severity", 1) == _ESLINT_SEVERITY_ERROR else "warning",
             linter="eslint",
         )
         for file_item in data

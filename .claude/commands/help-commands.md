@@ -23,6 +23,21 @@ List the chrysa custom slash commands and how to use them.
 | `/test <scope>` | Run/improve tests — **Docker / Makefile only** | qa, code-quality-debugger, backend, frontend |
 | `/help-commands` | This help | — |
 
+## Workflow Commands (`/wf-*`)
+
+Orchestrate the commands, skills and agents above. W1, W2, W4 and W6 run a deterministic
+Workflow script from `.claude/workflows/`; human gates stay in the command.
+
+| Command | Purpose | Script |
+|---|---|---|
+| `/wf-feature <slug>` | W1 · spec → plan → human gate → implement → verify → review | `feature.js` |
+| `/wf-bugfix <symptom>` | W2 · competing root-cause hunters → red repro → fix → verify → review | `bugfix.js` |
+| `/wf-issue <n>` | W3 · triage a GitHub issue and route to W1/W2 | — |
+| `/wf-pr-review <n>` | W4 · parallel specialists + adversarial verify → single verdict | `pr-review.js` |
+| `/wf-decision <question>` | W5 · council → ADR consistency → falsifiable ADR | — |
+| `/wf-fleet-sweep [repos]` | W6 · read-only deps / standards drift / open-PR sweep | `fleet-sweep.js` |
+| `/wf-release-lib <repo> <ver>` | W7 · consumer contract tests → bump → pin-update PRs | — |
+
 ## chrysa Conventions (apply to all commands)
 
 - **Tests/lint/typecheck**: Docker or pre-commit only — never host `pytest`/`ruff`/`tsc`.

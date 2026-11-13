@@ -1,7 +1,8 @@
 # guideline-checker
 
 [![CI](https://github.com/chrysa/guideline-checker/actions/workflows/ci.yml/badge.svg)](https://github.com/chrysa/guideline-checker/actions/workflows/ci.yml)
-[![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](https://github.com/chrysa/guideline-checker)
+[![PyPI](https://img.shields.io/pypi/v/guideline-checker.svg)](https://pypi.org/project/guideline-checker/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://github.com/chrysa/guideline-checker/blob/main/pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![SonarCloud](https://sonarcloud.io/api/project_badges/measure?project=chrysa_guideline-checker&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=chrysa_guideline-checker)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
@@ -31,25 +32,54 @@ Teams and solo developers who maintain AI-agent instruction files (`.github/inst
 
 ## Installation
 
-Not published on PyPI — distribution is the pre-commit hook (by git ref), the ghcr Docker image, and installing from source. Pick the channel that fits:
+Requires Python ≥ 3.12. Each release is published to PyPI and Docker Hub, and every tag is installable from git — none of them needs an account. Pick the channel that fits:
 
 ```bash
-# From the git repo (pipx keeps it isolated)
+# PyPI (pipx keeps the CLI isolated; `pip install guideline-checker` works too)
+pipx install guideline-checker
+
+# Docker Hub — the CLI image (non-root); --user keeps the reports owned by you
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo \
+  docker.io/chrysa/guideline-checker check
+
+# git — a branch or tag not yet released
 pipx install 'git+https://github.com/chrysa/guideline-checker.git'
-
-# Or as a pre-commit hook — see "As a pre-commit hook" below
-
-# Or the container image
-docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/chrysa/guideline-checker check
 ```
 
-From source (with dev tooling):
+It also runs as a pre-commit hook pinned by git tag (see [Pre-commit hook](#pre-commit-hook)) and as a GitHub Action (see [GitHub Action](#github-action)).
+
+`guideline-checker --version` prints the installed version. From source, with dev tooling:
 
 ```bash
 pip install -e '.[dev]'
 ```
 
-Requires Python ≥ 3.14. The core CLI has two runtime dependencies (`PyYAML` for the YAML rule referential, `tree-sitter` for JS/TS AST detection); the optional web dashboard needs the `web` extra (see below).
+The core CLI has two runtime dependencies (`PyYAML` for the YAML rule referential, `tree-sitter` for JS/TS AST detection); the optional web dashboard needs the `web` extra (see below).
+
+## Quick start
+
+A two-file project: one rule in `AGENTS.md`, one file that breaks it.
+
+```bash
+mkdir demo && cd demo
+printf '# Agent rules\n\n- No print() calls\n' > AGENTS.md
+printf 'def greet(name: str) -> str:\n    print("debug")\n    return f"hello {name}"\n' > app.py
+
+guideline-checker check --fail-on warning --markdown summary.md
+echo "exit code: $?"
+```
+
+Expected output:
+
+```text
+[guideline-checker] Multi-source mode: loading Copilot instructions, CLAUDE.md, AGENTS.md, and the guidelines/ YAML referential.
+[guideline-checker] Report written to: guideline-report.html
+[guideline-checker] Markdown report written to: summary.md
+[guideline-checker] 1 violation(s) found (0 error(s), 1 warning(s)).
+exit code: 1
+```
+
+`summary.md` points at `app.py` line 2 (`print("debug")`, rule `No print() calls`); `guideline-report.html` is the same report for a browser. The rule's phrasing gives it the `warning` severity, so the default `--fail-on error` would exit `0`. With the Docker image, replace `guideline-checker` with the `docker run …` prefix above.
 
 ## Usage
 
@@ -228,7 +258,7 @@ Pass extra args to scope it, e.g. `args: [check, --diff, --fail-on, warning]`.
 
 ### GitHub Action
 
-The repo ships a composite action (`action.yml`) that installs the tool, runs `check`, uploads SARIF to GitHub Code Scanning, attaches the Markdown + JSON reports as an artifact, and — when a central server is configured — pushes the JSON report to it.
+The repo ships a composite action (`action.yml`) that installs the tool, runs `check`, uploads SARIF to GitHub Code Scanning, and attaches the Markdown + JSON reports as an artifact.
 
 ```yaml
 - name: Guideline check
@@ -238,11 +268,7 @@ The repo ships a composite action (`action.yml`) that installs the tool, runs `c
     # exclude: 'tests, scripts/**'   # comma-separated globs to skip
     # instructions: ''      # defaults to <root>/.github/instructions
     # upload-sarif: 'true'
-    # central-server: ''     # e.g. https://guidelines.example.com — set to enable the push
-    # central-api-key: ''    # X-Api-Key for the central server (use a secret)
 ```
-
-When `central-server` is set, the action runs `guideline-checker push` after the check — even when the check failed on violations, so the server always gets the latest state. The push is best-effort (`continue-on-error`) so a flaky server never breaks your CI.
 
 Outputs: `violations` (count) and `sarif-path`.
 
@@ -269,30 +295,6 @@ uvicorn guideline_checker.web.app:app --host 0.0.0.0 --port 8000
 ```
 
 Configure via environment variables (see [`.env.example`](.env.example)): `SCAN_ROOT`, and `AUTH_MODE` = `disabled` | `api_key` (default) | `local` | `ldap` | `oidc`, with the matching credential vars (`API_KEY`, `LOCAL_USERNAME`/`LOCAL_PASSWORD`, `LDAP_*`, `OIDC_*`).
-
-## Central server (multi-repo)
-
-The single-repo dashboard above shows one project. The **central server** aggregates compliance across *every* repo: each repo runs `check --json` in CI and pushes the report; the server keeps the latest snapshot per repo and renders a combined view.
-
-Run the server (needs the `web` extra; reuses the same `AUTH_MODE` contract):
-
-```bash
-guideline-checker central --store ./central-store --host 0.0.0.0 --port 8090
-```
-
-It exposes `POST /api/ingest` (auth), `GET /api/repos` (latest snapshot + error trend per repo), `GET /api/repos/{repo}`, `GET /api/repos/{repo}/history?limit=N` (compliance over time), and an aggregated dashboard at `/` (with ▲/▼ trend arrows). Reports are stored as one JSON file per repo under `CENTRAL_STORE` (default `./central-store`), plus a bounded `history/<repo>.jsonl` log.
-
-Push a report from a repo's CI (or anywhere):
-
-```bash
-guideline-checker check --root . --json guideline-report.json
-guideline-checker push --server https://guidelines.example.com \
-                       --report guideline-report.json \
-                       --api-key "$GUIDELINE_API_KEY"
-# --repo / --commit / --branch default to the git remote name and current HEAD.
-```
-
-`push` uses only the standard library, so it works without the `web` extra. In a GitHub Actions step it is a single command after the check; the server URL and key live in repo/org secrets.
 
 ## How rules are extracted
 

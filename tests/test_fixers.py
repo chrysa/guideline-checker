@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from guideline_checker.checker import RuleResult, Violation
-from guideline_checker.distribution import Expectations
+from guideline_checker.core.detection import RuleResult, Violation
 from guideline_checker.fixers import ARTIFACT_PATH, FIX_CONTENT, apply_fix, plan_fixes
+from guideline_checker.fleet.distribution import Expectations
 from guideline_checker.loader import InstructionFile, SourceType
 
 _EXP = Expectations(canonical_standards="CANON\n", license_text="MIT\n")
@@ -43,7 +43,7 @@ def _full_result(rules: list[str]) -> RuleResult:
 
 
 def test_apply_fix_dry_run_returns_marker_without_calls() -> None:
-    from guideline_checker.gh_client import GhClient
+    from guideline_checker.fleet.gh_client import GhClient
 
     def runner(args):  # type: ignore[no-untyped-def]
         raise AssertionError("dry-run must not call gh")
@@ -53,7 +53,7 @@ def test_apply_fix_dry_run_returns_marker_without_calls() -> None:
 
 
 def test_apply_fix_no_fixable_returns_none() -> None:
-    from guideline_checker.gh_client import GhClient
+    from guideline_checker.fleet.gh_client import GhClient
 
     def runner(args):  # type: ignore[no-untyped-def]
         raise AssertionError("a non-fixable result must not call gh")
@@ -63,7 +63,7 @@ def test_apply_fix_no_fixable_returns_none() -> None:
 
 
 def test_apply_fix_idempotent_when_pr_exists() -> None:
-    from guideline_checker.gh_client import GhClient, GhResult
+    from guideline_checker.fleet.gh_client import GhClient, GhResult
 
     def runner(args):  # type: ignore[no-untyped-def]
         if " ".join(args).startswith("pr list"):
@@ -75,7 +75,7 @@ def test_apply_fix_idempotent_when_pr_exists() -> None:
 
 
 def test_apply_fix_happy_path_opens_pr() -> None:
-    from guideline_checker.gh_client import GhClient, GhResult
+    from guideline_checker.fleet.gh_client import GhClient, GhResult
 
     calls: list[str] = []
 
@@ -111,7 +111,7 @@ def test_apply_fix_happy_path_opens_pr() -> None:
 
 
 def test_apply_fix_returns_none_when_branch_creation_fails() -> None:
-    from guideline_checker.gh_client import GhClient, GhResult
+    from guideline_checker.fleet.gh_client import GhClient, GhResult
 
     def runner(args):  # type: ignore[no-untyped-def]
         joined = " ".join(args)

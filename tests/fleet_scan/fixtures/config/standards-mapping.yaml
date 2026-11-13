@@ -1,0 +1,9 @@
+schema_version: "1.0"
+requirements:
+  - requirement: "README at root"
+    source: {document: STANDARDS.md}
+    rule: DOC-001
+  - requirement: "No secrets committed"
+    rules: [SEC-001]
+  - requirement: "Not yet mechanised"
+    rule: null

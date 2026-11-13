@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from guideline_checker.distribution import Expectations, audit
-from guideline_checker.manifest import RepoTarget
+from guideline_checker.fleet.distribution import Expectations, audit
+from guideline_checker.fleet.manifest import RepoTarget
 
 _CANON = "# chrysa — Transverse Standards\nbody\n"
 _EXP = Expectations(canonical_standards=_CANON, license_text="MIT License\n")

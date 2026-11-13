@@ -85,8 +85,16 @@ def test_the_term_missing_total_row_is_read(gate: QualityGate) -> None:
     assert gate._parse_coverage(output) == 89.0
 
 
-def test_absent_coverage_is_reported_as_missing_not_zero(gate: QualityGate) -> None:
-    """-1.0 distinguishes "not measured" from "measured at 0%"."""
+def test_absent_coverage_is_reported_as_missing_not_zero(
+    gate: QualityGate, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """-1.0 distinguishes "not measured" from "measured at 0%".
+
+    Run in an empty cwd so the XML-report fallback (_parse_coverage_report reads
+    ./coverage.xml) finds nothing — otherwise a coverage.xml left in the repo
+    root by a prior test run leaks a real percentage and the test is flaky.
+    """
+    monkeypatch.chdir(tmp_path)
     assert gate._parse_coverage("nothing here\n") == -1.0
 
 

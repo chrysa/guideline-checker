@@ -7,7 +7,8 @@ from pathlib import Path
 
 from pytest_mock import MockerFixture
 
-from guideline_checker.checker import RuleResult, Violation
+from guideline_checker.core.detection import RuleResult, Violation
+from guideline_checker.core.health import HealthState, RuleHealth, summarize
 from guideline_checker.loader import InstructionFile
 from guideline_checker.reporters.sarif import SarifReporter, _sanitize_rule_id
 
@@ -31,6 +32,42 @@ def test_sarif_reporter_creates_file(tmp_path: Path) -> None:
     out = tmp_path / "report.sarif"
     reporter.write(results=[result], output_path=out, root=tmp_path)
     assert out.exists()
+
+
+def test_sarif_reporter_includes_health_in_run_properties(tmp_path: Path) -> None:
+    """A passed health list must appear in the run's "properties" bag — SARIF's
+    documented extension point (Task 6 fix round 1, Finding 3)."""
+    instr = _make_instruction(tmp_path)
+    result = RuleResult(instruction=instr, files_checked=1)
+    health = [
+        RuleHealth(
+            rule="No eval",
+            instruction="python.instructions",
+            state=HealthState.PROVEN,
+            has_declarative_detector=False,
+            has_phrase_detection=True,
+            fire_count=2,
+            reason="Fires on 2 line(s) via phrase-derived check.",
+        ),
+        RuleHealth(
+            rule="No bare except",
+            instruction="python.instructions",
+            state=HealthState.DEAD,
+            has_declarative_detector=False,
+            has_phrase_detection=False,
+            fire_count=0,
+            reason="YAML rule advertised as enforceable but carries no detector — fix or remove it.",
+        ),
+    ]
+    reporter = SarifReporter()
+    out = tmp_path / "report.sarif"
+    reporter.write(results=[result], output_path=out, root=tmp_path, health=health)
+    data = json.loads(out.read_text(encoding="utf-8"))
+
+    run_properties = data["runs"][0]["properties"]
+    assert run_properties["ruleHealth"] == summarize(health)
+    assert run_properties["ruleHealth"]["proven"] == 1
+    assert run_properties["ruleHealth"]["dead"] == 1
 
 
 def test_sarif_report_is_valid_json(tmp_path: Path) -> None:
