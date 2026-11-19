@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from guideline_checker.checker import RuleResult, Violation
+from guideline_checker.core.detection import RuleResult, Violation
 from guideline_checker.linters import LinterResult, LinterViolation
 from guideline_checker.loader import InstructionFile
 from guideline_checker.reporters.synthesis_html import SynthesisHtmlReporter

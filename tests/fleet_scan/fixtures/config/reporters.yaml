@@ -1,0 +1,7 @@
+output_dir: runs
+cli: {enabled: true, max_rows: 50}
+json: {enabled: true, filename: report.json}
+markdown: {enabled: true, filename: report.md}
+history: {enabled: true, index: history.jsonl, retention_runs: 2}
+notion: {enabled: false, reason: "not authorised"}
+revival: {enabled: true, top_n: 5}

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.checker import run_checks
+from guideline_checker.core.detection import run_checks
 
 REFERENTIAL = Path(__file__).resolve().parents[1] / "guidelines"
 

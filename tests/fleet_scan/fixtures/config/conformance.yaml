@@ -1,0 +1,73 @@
+schema_version: "1.0"
+rules_version: "test-1"
+profiles:
+  python: {detect: {any_file: ["pyproject.toml", "setup.py"]}}
+  node: {detect: {any_file: ["package.json"]}}
+  container: {detect: {any_file: ["Dockerfile", "docker-compose.yml"]}}
+  docs-only: {detect: {none_of_profiles: ["python", "node"]}}
+rules:
+  - id: DOC-001
+    title: README present
+    source: {document: "STANDARDS.md", locator: "docs"}
+    dimension: conformance
+    profiles: [all]
+    severity: medium
+    method: {type: file_exists, params: {any_of: ["README.md", "README.rst"]}}
+  - id: SEC-001
+    title: No committed env file
+    source: {document: "STANDARDS.md"}
+    dimension: conformance
+    severity: critical
+    blocking: true
+    method: {type: file_absent, params: {paths: [".env", "**/.env"]}}
+  - id: TST-001
+    title: Python tests present
+    source: {document: "STANDARDS.md"}
+    dimension: operational_readiness
+    profiles: [python]
+    severity: high
+    method: {type: tree_glob, params: {glob: "tests/**/test_*.py"}}
+  - id: PKG-001
+    title: pyproject declares ruff
+    source: {document: "STANDARDS.md"}
+    dimension: conformance
+    profiles: [python]
+    severity: low
+    method: {type: file_regex, params: {path: pyproject.toml, pattern: "\\[tool\\.ruff\\]"}}
+  - id: MK-001
+    title: Makefile targets
+    source: {document: "STANDARDS.md"}
+    dimension: operational_readiness
+    severity: medium
+    method: {type: makefile_targets, params: {targets: [help, test]}}
+  - id: REPO-001
+    title: Not archived
+    source: {document: "STANDARDS.md"}
+    dimension: operational_readiness
+    severity: info
+    method: {type: repo_field, params: {field: archived, op: eq, value: false}}
+  - id: CI-001
+    title: CI green
+    source: {document: "STANDARDS.md"}
+    dimension: operational_readiness
+    severity: high
+    method: {type: ci_last_run, params: {branch: default}}
+  - id: SCM-001
+    title: No WIP commits
+    source: {document: "STANDARDS.md"}
+    dimension: conformance
+    severity: low
+    method: {type: commit_messages_absent, params: {pattern: "(?i)^wip", last_n: 10}}
+  - id: ACT-001
+    title: Recently active
+    source: {document: "STANDARDS.md"}
+    dimension: functional_maturity
+    severity: info
+    method: {type: last_commit_age, params: {max_days: 365}}
+  - id: NODE-001
+    title: Node lockfile
+    source: {document: "STANDARDS.md"}
+    dimension: conformance
+    profiles: [node]
+    severity: medium
+    method: {type: file_exists, params: {any_of: ["pnpm-lock.yaml"]}}

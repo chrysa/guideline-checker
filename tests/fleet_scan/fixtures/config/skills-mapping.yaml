@@ -1,0 +1,5 @@
+schema_version: "1.0"
+skills:
+  - skill: python-testing
+    rule_ids: [TST-001]
+    profiles: [python]

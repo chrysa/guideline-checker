@@ -1,0 +1,8 @@
+api_url: https://api.github.test
+allow_custom_api_host: true
+auth: {token_env: FLEET_SCAN_TEST_TOKEN, required: false}
+concurrency: 2
+pagination: {per_page: 2, max_pages: 3}
+retries: {max_attempts: 3, backoff_base_s: 0.0, backoff_max_s: 0.0}
+rate_limit: {min_remaining: 5, honor_retry_after: true, secondary_backoff_s: 1, max_wait_s: 60}
+cache: {enabled: false, dir: .cache/http, ttl_s: 60, use_etag: true}

@@ -19,7 +19,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from guideline_checker.checker import RuleResult, Violation
+from guideline_checker.core.detection import RuleResult, Violation
 
 BASELINE_VERSION = 1
 

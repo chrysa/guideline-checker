@@ -14,7 +14,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from guideline_checker.checker import RuleResult
+from guideline_checker.core.detection import RuleResult
 from guideline_checker.loader import RuleFix
 
 

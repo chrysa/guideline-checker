@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from guideline_checker.guidelines import load_yaml_guidelines
-from guideline_checker.interpret import DerivedRule
 from guideline_checker.loader import RuleDetector
-from guideline_checker.persist import write_derived_ruleset
+from guideline_checker.workshop.interpret import DerivedRule
+from guideline_checker.workshop.persist import write_derived_ruleset
 
 _CATEGORIES = "categories:\n  - id: correctness\n    description: c\n  - id: security\n    description: s\n"
 

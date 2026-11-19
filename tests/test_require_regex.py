@@ -10,9 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from guideline_checker.checker import run_checks
+from guideline_checker.core.detection import CheckKind, kind_of_detector, run_checks
 from guideline_checker.guidelines import load_yaml_guidelines
-from guideline_checker.kinds import CheckKind, kind_of_detector
 from guideline_checker.loader import RuleDetector
 
 _CATEGORIES = "categories:\n  - id: correctness\n    description: x\n"

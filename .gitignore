@@ -264,6 +264,7 @@ playwright-report/
 graphify-out/
 .codegraph/
 .import_linter_cache/
+.guideline-cache/
 
 # Claude Code local state
 .claude/worktrees/
@@ -275,3 +276,18 @@ graphify-out/
 Thumbs.db
 
 # ---8<--- chrysa:canonical:end --->8---
+
+# prism-ai-lint: keep secrets and local config out of git
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+CLAUDE.local.md
+
+# fleet-scan run outputs and HTTP cache (may contain private-repo content)
+.fleet-scan/
+.cache/fleet-scan/
+
+# Fleet-scan catalog: private (names private projects and workspace pages)
+config/fleet-scan/repos.yaml

@@ -1,0 +1,72 @@
+<!-- GENERATED from standards/STANDARDS.chrysa.md by scripts/gen_agent_views.py — do not edit.
+Canonical source of truth is the canon; edit there, then run `make gen-agent-views` to regenerate every view.
+-->
+# SCM — branches, commits & pull requests
+
+> Detail for the slim core in `CLAUDE.md`. **Generated** from `standards/STANDARDS.chrysa.md` — do not edit here; edit the canon and regenerate.
+
+- **Commits**: Conventional Commits (`feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`).
+
+- **Branches**: `feature/`, `bugfix/`, `chore/`, `hotfix/`, `release/` · default branch `develop`.
+
+- **Branch model — `main` is production, `develop` is the workspace.** Every repo runs the
+  same two long-lived branches, and the mapping is literal, not decorative:
+  1. **`main` = the code deployed in production.** It is a **protected branch**: no direct
+     push, no force push, no branch deletion; every change arrives through a pull request.
+     Reading `main` answers "what is running in prod right now" — nothing else is on it.
+  2. **`develop` is the repository's default branch** (the GitHub default, what a clone
+     checks out) and the integration target for all work. A repo whose default branch is
+     `main` is a defect, not a variant. `develop` **is a protected branch too** (ADR D-0015):
+     it carries the same gate as `main` — every change arrives through a pull request, and
+     force-push and deletion are blocked. Direct pushes to `develop` are not allowed.
+  3. **Every feature/bugfix/chore PR targets `develop`.** `feature/x` → PR → `develop`.
+     A feature PR opened against `main` is closed and retargeted.
+  4. **The only way code reaches `main` is a pull request from `develop`** (or, for a
+     production emergency, a `hotfix/` branch — which is merged back into `develop` in the
+     same breath so the two never diverge). No other source branch may target `main`.
+     **The promotion PR is merged with a merge commit, never squashed** — squashing rewrites
+     it as a new commit, so `main` and `develop` diverge at every release and the next
+     promotion opens with conflicts. *Squash merge only* governs feature PRs into `develop`;
+     the release promotion is the documented exception.
+  5. **Production is triggered by a new release**, not by a merge: merging `develop` → `main`
+     lands the code, and the deployment is driven by the tagged release (the semantic-version
+     tool's tag + git-cliff changelog + the release workflow). No manual deploy from a laptop, no push
+     that silently ships.
+  Protection is configured, not assumed: **both `main` and `develop`** require a PR and
+  block force-push and deletion (ADR D-0015), applied by `scripts/apply-branch-policy.sh`
+  and machine-checked across the fleet by `scripts/audit-branch-policy.sh`. The gate is
+  "a PR exists" (0 required approvals) with `enforce_admins=false`, so the solo owner can
+  still admin-merge. On repos that run the canonical CI, the status checks **`Docker
+  tests`** and **`SonarCloud`** are additionally required (ADR D-0016) — required only
+  where those contexts actually report, so a repo with a different CI shape is never
+  gated on a check that cannot run; `enforce_admins=false` keeps admin-merge as the
+  escape hatch when CI is red for infra reasons (Actions billing, SonarCloud LOC cap).
+
+- **Merge**: squash merge only (exception: the `develop` → `main` release promotion, merged
+  with a merge commit) · force push forbidden · auto-merge requires CI + owner.
+
+- **One PR per issue**, scoped tight. Every PR references an issue (`Closes/Fixes/Refs #N`).
+  Exception: label `hotfix`. The `enforce-issue-link` workflow is a blocking status check.
+
+- **Every PR references a Shortcut story — except in public open-source repos (DEC-V3-006),
+  where a linked GitHub issue is enough; Shortcut stays the internal tracker.** The story is
+  the unit of work tracking; a PR with no story is invisible to the fleet's planning surface
+  and is a defect. Carry the reference as `sc-<id>` (or the `app.shortcut.com/.../story/<id>`
+  URL) in the branch name (`feat/sc-1234-short-desc`), the PR title, or the PR body — the PR
+  template has a required field for it. dependabot is exempt; a genuinely story-less PR must
+  carry the `no-story` label, which records the waiver. The `enforce-shortcut-link` workflow
+  is a blocking status check. A story beyond `In Progress` must itself link the branch/commit
+  (native VCS integration), so the thread reads both ways. On a public open-source repo the
+  caller is `templates/workflows-oss/enforce-shortcut-link.yml` (`@v1.11.0`,
+  `accept-github-issue: true`): a reference to an issue of that repository (`#123`,
+  `closes #123`, `.../issues/123`) satisfies the gate as well — a PR number does not — so an
+  external contributor only needs to open an issue first, or reference an existing one.
+
+- **Issues and PRs are type-driven.** Every issue declares exactly one **type** from a fixed
+  taxonomy (bug · feature · enhancement · chore · docs · ci · security · research · epic),
+  carried as a canonical label and backed by a committed per-type issue form; every PR's type is
+  its Conventional Commit type, and its body carries the fields that type needs (a `fix` shows the
+  root cause + a regression test, a `feat` its acceptance criteria + a UI proof, a `refactor` a
+  no-behaviour-change attestation, a `perf` a before/after measurement). Templates and labels are
+  socle-distributed, not per-repo inventions, and the shape is machine-checked (info-first). A
+  free-text issue or a one-line PR is a defect. Detail: annexe `SCM.md` (`SC-nnn`).

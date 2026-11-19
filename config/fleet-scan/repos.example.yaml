@@ -1,0 +1,42 @@
+# Example fleet catalog. The real catalog is private: it names private projects and
+# workspace pages, so it never lives in this public repository.
+#   cp config/fleet-scan/repos.example.yaml config/fleet-scan/repos.yaml   # then edit
+# config/fleet-scan/repos.yaml is git-ignored and docker-ignored.
+schema_version: "1.0"
+generated_at: 2026-10-24
+sources: [{kind: github, ref: "fixture"}]
+projects:
+  - id: alpha
+    canonical_name: alpha
+    aliases: [a]
+    owner: chrysa
+    perimeter: chrysa
+    component_kind: app
+    repos:
+      - {full_name: chrysa/alpha, role: primary}
+  - id: beta
+    canonical_name: beta
+    owner: chrysa
+    perimeter: chrysa
+    repos:
+      - {full_name: chrysa/beta}
+  - id: gamma
+    canonical_name: gamma
+    owner: chrysa
+    perimeter: other
+    repos:
+      - {full_name: chrysa/gamma, role: fork, include: false, exclusion_reason: third-party fork}
+  - id: delta
+    canonical_name: delta
+    owner: chrysa
+    perimeter: chrysa
+    repos:
+      - {full_name: chrysa/delta, scan_profile: [node]}
+  - id: empty-project
+    canonical_name: empty-project
+    owner: chrysa
+    perimeter: prive
+    repos: []
+subsets:
+  pilot: [chrysa/alpha, chrysa/beta, chrysa/gamma]
+  all-four: [chrysa/alpha, chrysa/beta, chrysa/gamma, chrysa/delta]

@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from guideline_checker.checker import _freshness_violations
+from guideline_checker.core.detection import CheckKind, kind_of_detector
+from guideline_checker.core.detection.presence import _freshness_violations
 from guideline_checker.guidelines import GuidelineError, load_yaml_guidelines
-from guideline_checker.kinds import CheckKind, kind_of_detector
 from guideline_checker.loader import RuleDetector
 
 _DAY = 86400

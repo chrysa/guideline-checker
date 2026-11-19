@@ -35,12 +35,12 @@ def discover_projects(workspace: Path) -> list[Project]:
     for child in children:
         if not child.is_dir() or child.name.startswith("."):
             continue
-        if not (child / ".git").exists() or not _has_rule_source(child):
+        if not (child / ".git").exists() or not has_rule_source(child):
             continue
         projects.append(Project(name=child.name, path=str(child.resolve())))
     return projects
 
 
-def _has_rule_source(root: Path) -> bool:
-    """True when the repo carries a markdown rule source or a rule directory."""
+def has_rule_source(root: Path) -> bool:
+    """True when the directory carries a markdown rule source or a rule directory."""
     return any((root / rel).is_file() for rel in _RULE_FILES) or any((root / rel).is_dir() for rel in _RULE_DIRS)
